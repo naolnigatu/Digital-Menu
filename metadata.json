@@ -1,0 +1,6 @@
+{
+  "name": "MenuFlow",
+  "description": "Multi-Tenant Food Service SaaS Progressive Web App (PWA) featuring interactive menus, QR code table ordering, kitchen preparation screens, waiter workflows, and analytics.",
+  "requestFramePermissions": ["camera", "notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
