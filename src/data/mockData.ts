@@ -25,17 +25,17 @@ export const mockTenants: Tenant[] = [
     slug: 'carlos-espresso',
     logoUrl: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=150&auto=format&fit=crop&q=80',
     description: 'A third-wave specialty coffee roaster and bakery in Nairobi, dedicated to single-origin beans and freshly baked sourdough pastries.',
-    currency: 'KES',
-    currencySymbol: 'KSh',
+    currency: 'USD',
+    currencySymbol: '$',
     baseTaxRate: 16,
     serviceCharge: 0,
     subscriptionPlan: 'enterprise',
     subscriptionStatus: 'active',
     ownerEmail: 'carlos@menuflow.com',
     createdAt: '2026-03-10T09:30:00Z',
-    loyaltyPointsRatio: 0.05, // 1 point per 20 KES
-    loyaltyMinRedeemPoints: 100,
-    loyaltyRedeemValue: 0.5, // 1 point = 0.5 KES
+    loyaltyPointsRatio: 0.05, // 1 point per 20 USD
+    loyaltyMinRedeemPoints: 10,
+    loyaltyRedeemValue: 1, // 1 point = 1 USD
   }
 ];
 
@@ -243,7 +243,7 @@ export const mockMenuItems: Record<string, MenuItem[]> = {
       tenantId: 't-02',
       name: 'Single-Origin Flat White',
       description: 'Double shot of single-origin beans sourced from Nyeri County, steamed with textured whole milk producing silky sweet micro-foam.',
-      price: 380,
+      price: 3.80,
       photoUrl: 'https://images.unsplash.com/photo-1577968897966-3d4325b36b61?w=500&auto=format&fit=crop&q=80',
       allergenTags: ['Dairy'],
       dietaryTags: ['Specialty Brew'],
@@ -257,8 +257,8 @@ export const mockMenuItems: Record<string, MenuItem[]> = {
           maxSelect: 1,
           options: [
             { id: 'opt-13', name: 'Standard Cow Milk', price: 0 },
-            { id: 'opt-14', name: 'Artisanal Oat Milk', price: 80 },
-            { id: 'opt-15', name: 'Organic Almond Milk', price: 70 }
+            { id: 'opt-14', name: 'Artisanal Oat Milk', price: 0.80 },
+            { id: 'opt-15', name: 'Organic Almond Milk', price: 0.70 }
           ]
         },
         {
@@ -267,7 +267,7 @@ export const mockMenuItems: Record<string, MenuItem[]> = {
           minSelect: 0,
           maxSelect: 1,
           options: [
-            { id: 'opt-16', name: 'Add Extra Shot (Triple)', price: 60 }
+            { id: 'opt-16', name: 'Add Extra Shot (Triple)', price: 0.60 }
           ]
         }
       ]
@@ -278,7 +278,7 @@ export const mockMenuItems: Record<string, MenuItem[]> = {
       tenantId: 't-02',
       name: 'Freshly Baked Almond Croissant',
       description: 'Double-baked, buttery sourdough croissant filled with frangipane (almond cream) and topped with roasted sliced almonds and icing sugar.',
-      price: 420,
+      price: 4.20,
       photoUrl: 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=500&auto=format&fit=crop&q=80',
       allergenTags: ['Gluten', 'Nuts', 'Dairy', 'Eggs'],
       dietaryTags: ['Vegetarian'],
@@ -303,7 +303,7 @@ export const mockMenuItems: Record<string, MenuItem[]> = {
       tenantId: 't-02',
       name: 'Avocado Sourdough Toast & Poached Egg',
       description: 'Crushed ripe avocados with fresh lime, red pepper flakes, micro-greens, and two organic soft-poached eggs on toasted house-made sourdough bread.',
-      price: 650,
+      price: 6.50,
       photoUrl: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?w=500&auto=format&fit=crop&q=80',
       allergenTags: ['Gluten', 'Eggs'],
       dietaryTags: ['Vegetarian', 'Healthy Option'],
@@ -316,9 +316,9 @@ export const mockMenuItems: Record<string, MenuItem[]> = {
           minSelect: 0,
           maxSelect: 2,
           options: [
-            { id: 'opt-19', name: 'Add Smoked Salmon', price: 250 },
-            { id: 'opt-20', name: 'Add Extra Poached Egg', price: 70 },
-            { id: 'opt-21', name: 'Add Sautéed Mushrooms', price: 100 }
+            { id: 'opt-19', name: 'Add Smoked Salmon', price: 2.50 },
+            { id: 'opt-20', name: 'Add Extra Poached Egg', price: 0.70 },
+            { id: 'opt-21', name: 'Add Sautéed Mushrooms', price: 1.00 }
           ]
         }
       ]
@@ -476,10 +476,10 @@ export const mockOrders: Order[] = [
         id: 'oi-05',
         menuItemId: 'item-05',
         name: 'Single-Origin Flat White',
-        price: 460, // 380 + 80 oat milk
+        price: 4.60, // 3.80 + 0.80 oat milk
         quantity: 1,
         selectedModifiers: [
-          { groupName: 'Milk Choice', optionName: 'Artisanal Oat Milk', price: 80 }
+          { groupName: 'Milk Choice', optionName: 'Artisanal Oat Milk', price: 0.80 }
         ],
         status: 'ready',
         assignedStationId: 'st-04'
@@ -488,7 +488,7 @@ export const mockOrders: Order[] = [
         id: 'oi-06',
         menuItemId: 'item-06',
         name: 'Freshly Baked Almond Croissant',
-        price: 420,
+        price: 4.20,
         quantity: 1,
         selectedModifiers: [
           { groupName: 'Serving Prep', optionName: 'Warmed Up in Oven', price: 0 }
@@ -500,10 +500,10 @@ export const mockOrders: Order[] = [
     status: 'ready',
     paymentStatus: 'unpaid',
     discount: 0,
-    tax: 140.8, // 16% of 880
+    tax: 1.41, // 16% of 8.80
     serviceCharge: 0,
-    subtotal: 880,
-    total: 1020.8,
+    subtotal: 8.80,
+    total: 10.21,
     createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
     notes: ''
   }

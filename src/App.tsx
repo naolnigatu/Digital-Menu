@@ -11,6 +11,7 @@ import WaiterView from './views/WaiterView';
 import KDSView from './views/KDSView';
 import CashierView from './views/CashierView';
 import CustomerView from './views/CustomerView';
+import OnboardingView from './views/OnboardingView';
 import { 
   Building, LayoutGrid, CheckCircle2, ShieldCheck, RefreshCw, AlertTriangle
 } from 'lucide-react';
@@ -19,27 +20,77 @@ function DashboardShell() {
   const { currentUser, tenants, activeTenantId } = useApp();
 
   const activeTenant = tenants.find(t => t.id === activeTenantId) || tenants[0];
-  const isSuspended = activeTenant.subscriptionStatus === 'suspended';
 
   // Render view depending on logged-in role
   const renderView = () => {
-    if (isSuspended && currentUser?.role !== 'super_admin') {
-      return (
-        <div className="rounded-2xl border border-rose-100 bg-rose-50/50 p-8 text-center max-w-md mx-auto my-12 space-y-4">
-          <AlertTriangle className="h-12 w-12 text-rose-600 mx-auto" />
-          <h2 className="font-sans font-extrabold text-lg text-slate-900">Tenant Account Suspended</h2>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Aisha's Traditional Kitchen or Carlos's Specialty Espresso subscription has been flagged as past-due or suspended by the platform administrator.
-          </p>
-          <p className="text-[11px] font-bold text-indigo-600">
-            Tip: Switch Role to "Super Admin" and reactivate this tenant license!
-          </p>
-        </div>
-      );
-    }
-
     if (!currentUser) {
       return <CustomerView />;
+    }
+
+    // 1. Check if they are an owner and haven't created a business profile yet
+    if (currentUser.role === 'owner' && !currentUser.tenantId) {
+      return <OnboardingView />;
+    }
+
+    // 2. Resolve the business of the logged-in user
+    const targetTenantId = currentUser.tenantId || activeTenantId;
+    const myTenant = tenants.find(t => t.id === targetTenantId) || activeTenant;
+
+    // 3. Apply subscription/approval state checks for non-super admins
+    if (currentUser.role !== 'super_admin' && myTenant) {
+      if (myTenant.subscriptionStatus === 'pending_approval') {
+        return (
+          <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-8 text-center max-w-md mx-auto my-12 space-y-4">
+            <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto animate-pulse" />
+            <h2 className="font-sans font-extrabold text-base text-slate-900">Registration Review Pending</h2>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Your business profile <strong>"{myTenant.name}"</strong> has been created successfully!
+            </p>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              It is currently undergoing rapid quality review by Platform Admin (<strong>naolnigatu2025@gmail.com</strong>). You will be notified instantly once approved.
+            </p>
+            <div className="pt-3 border-t border-amber-100/60 text-[11px] font-semibold text-indigo-600">
+              💡 Tip: Click "Switch Role" at the top right and select "Super Admin" to instantly review and approve this business request!
+            </div>
+          </div>
+        );
+      }
+
+      if (myTenant.subscriptionStatus === 'rejected') {
+        return (
+          <div className="rounded-2xl border border-rose-100 bg-rose-50/50 p-8 text-center max-w-md mx-auto my-12 space-y-4">
+            <AlertTriangle className="h-12 w-12 text-rose-600 mx-auto" />
+            <h2 className="font-sans font-extrabold text-base text-slate-900">Registration Rejected</h2>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Unfortunately, your business profile registration request for <strong>"{myTenant.name}"</strong> was rejected by the platform administrator.
+            </p>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              For queries or to re-apply, please contact <strong>naolnigatu2025@gmail.com</strong>.
+            </p>
+            <div className="pt-3 border-t border-rose-100/60 text-[11px] font-semibold text-indigo-600">
+              💡 Tip: Switch to "Super Admin" role to manage or reactivate this brand!
+            </div>
+          </div>
+        );
+      }
+
+      if (myTenant.subscriptionStatus === 'suspended') {
+        return (
+          <div className="rounded-2xl border border-rose-100 bg-rose-50/50 p-8 text-center max-w-md mx-auto my-12 space-y-4">
+            <AlertTriangle className="h-12 w-12 text-rose-600 mx-auto" />
+            <h2 className="font-sans font-extrabold text-base text-slate-900">Workspace Blocked</h2>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Your business account <strong>"{myTenant.name}"</strong> has been blocked or suspended by the platform administrator.
+            </p>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Please contact <strong>naolnigatu2025@gmail.com</strong> for compliance or reactivation support.
+            </p>
+            <div className="pt-3 border-t border-rose-100/60 text-[11px] font-semibold text-indigo-600">
+              💡 Tip: Switch to "Super Admin" role and unlock this workspace instantly!
+            </div>
+          </div>
+        );
+      }
     }
 
     switch (currentUser.role) {

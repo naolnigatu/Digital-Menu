@@ -29,7 +29,8 @@ export default function BusinessOwnerView() {
     addTable,
     addStaffMember, 
     toggleStaffStatus,
-    updateTenantPlan
+    updateTenantPlan,
+    updateTenantCurrency
   } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'menu' | 'tables' | 'staff' | 'settings'>('dashboard');
@@ -44,6 +45,60 @@ export default function BusinessOwnerView() {
   const tenantBranchTables = tables.filter(t => t.branchId === activeBranchId);
   const tenantStaff = staff.filter(s => s.tenantId === activeTenantId);
   const branchOrders = orders.filter(o => o.branchId === activeBranchId);
+
+  const renderPaywall = (featureName: string, description: string) => {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50/20 p-8 text-center max-w-lg mx-auto my-12 space-y-6">
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 mx-auto">
+          <Award className="h-6 w-6 animate-bounce" />
+        </div>
+        <div className="space-y-2">
+          <span className="inline-block rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-extrabold text-amber-600 border border-amber-500/20 uppercase tracking-wider">
+            Premium Operations Feature
+          </span>
+          <h2 className="font-sans font-extrabold text-lg text-slate-900">Unlock {featureName}</h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            {description}
+          </p>
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 p-4 text-left space-y-3 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+            <span className="text-xs font-bold text-slate-700">Multi-branch and waiter terminals integration</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+            <span className="text-xs font-bold text-slate-700">Detailed sales reports and financial analysis charts</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+            <span className="text-xs font-bold text-slate-700">Invite waitstaff, kitchen chefs, and cashiers to collaborate</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button
+            onClick={() => {
+              updateTenantPlan(tenant.id, 'growth');
+              alert(`🎉 Success! Your restaurant "${tenant.name}" has been upgraded to the Growth Plan. All features are now fully unlocked!`);
+            }}
+            className="w-full sm:w-auto rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-indigo-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <CreditCard className="h-4 w-4" />
+            Upgrade to Growth Plan ($29/mo)
+          </button>
+          
+          <button
+            onClick={() => setActiveSubTab('menu')}
+            className="w-full sm:w-auto rounded-xl bg-slate-100 text-slate-700 px-5 py-2.5 text-xs font-bold hover:bg-slate-200 transition-all cursor-pointer"
+          >
+            Continue with Free Menu Service
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   // --- Menu Forms State ---
   const [showCatModal, setShowCatModal] = useState(false);
@@ -230,7 +285,7 @@ export default function BusinessOwnerView() {
       <div className="flex border-b border-slate-100 overflow-x-auto gap-2">
         <button
           onClick={() => setActiveSubTab('dashboard')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all ${
+          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
             activeSubTab === 'dashboard' 
               ? 'border-slate-900 text-slate-900' 
               : 'border-transparent text-slate-400 hover:text-slate-600'
@@ -238,11 +293,16 @@ export default function BusinessOwnerView() {
         >
           <LayoutDashboard className="h-4 w-4" />
           <span>Analytics</span>
+          {tenant.subscriptionPlan === 'free' && (
+            <span className="ml-1 rounded-full bg-amber-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-amber-600 border border-amber-500/20 uppercase tracking-tight">
+              Upgrade
+            </span>
+          )}
         </button>
 
         <button
           onClick={() => setActiveSubTab('menu')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all ${
+          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
             activeSubTab === 'menu' 
               ? 'border-slate-900 text-slate-900' 
               : 'border-transparent text-slate-400 hover:text-slate-600'
@@ -250,11 +310,14 @@ export default function BusinessOwnerView() {
         >
           <Utensils className="h-4 w-4" />
           <span>Menu Designer</span>
+          <span className="ml-1 rounded-full bg-emerald-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-emerald-600 border border-emerald-500/20 uppercase tracking-tight">
+            Free
+          </span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('tables')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all ${
+          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
             activeSubTab === 'tables' 
               ? 'border-slate-900 text-slate-900' 
               : 'border-transparent text-slate-400 hover:text-slate-600'
@@ -262,11 +325,16 @@ export default function BusinessOwnerView() {
         >
           <QrCode className="h-4 w-4" />
           <span>QR Tables</span>
+          {tenant.subscriptionPlan === 'free' && (
+            <span className="ml-1 rounded-full bg-amber-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-amber-600 border border-amber-500/20 uppercase tracking-tight">
+              Upgrade
+            </span>
+          )}
         </button>
 
         <button
           onClick={() => setActiveSubTab('staff')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all ${
+          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
             activeSubTab === 'staff' 
               ? 'border-slate-900 text-slate-900' 
               : 'border-transparent text-slate-400 hover:text-slate-600'
@@ -274,11 +342,16 @@ export default function BusinessOwnerView() {
         >
           <Users className="h-4 w-4" />
           <span>Team Invites</span>
+          {tenant.subscriptionPlan === 'free' && (
+            <span className="ml-1 rounded-full bg-amber-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-amber-600 border border-amber-500/20 uppercase tracking-tight">
+              Upgrade
+            </span>
+          )}
         </button>
 
         <button
           onClick={() => setActiveSubTab('settings')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all ${
+          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
             activeSubTab === 'settings' 
               ? 'border-slate-900 text-slate-900' 
               : 'border-transparent text-slate-400 hover:text-slate-600'
@@ -291,8 +364,19 @@ export default function BusinessOwnerView() {
 
       {/* SUBTAB CONTENTS */}
       
-      {/* 1. DASHBOARD ANALYTICS */}
-      {activeSubTab === 'dashboard' && (
+      {tenant.subscriptionPlan === 'free' && (activeSubTab === 'dashboard' || activeSubTab === 'tables' || activeSubTab === 'staff') ? (
+        renderPaywall(
+          activeSubTab === 'dashboard' ? 'Analytics' : activeSubTab === 'tables' ? 'QR Tables' : 'Team Invites',
+          activeSubTab === 'dashboard' 
+            ? 'Access detailed transaction volume, average customer ticket values, sales charts, and top popular dishes analytics.'
+            : activeSubTab === 'tables'
+            ? 'Generate QR codes for specific dining tables, manage service orders, and configure virtual table layouts.'
+            : 'Invite waitstaff, kitchen chefs, managers, and cashiers to run your restaurant operations collaboratively.'
+        )
+      ) : (
+        <>
+          {/* 1. DASHBOARD ANALYTICS */}
+          {activeSubTab === 'dashboard' && (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -1040,6 +1124,32 @@ export default function BusinessOwnerView() {
             </div>
           </div>
 
+          {/* Regional Settings */}
+          <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm space-y-4">
+            <h3 className="font-sans font-bold text-sm text-slate-800 flex items-center gap-1.5">
+              <Languages className="h-4.5 w-4.5 text-indigo-500" />
+              <span>Regional & Currency Settings</span>
+            </h3>
+            
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Base Currency</label>
+                <select 
+                  value={tenant.currency}
+                  onChange={(e) => {
+                    const currency = e.target.value;
+                    const symbol = currency === 'USD' ? '$' : 'Br';
+                    updateTenantCurrency(activeTenantId, currency, symbol);
+                  }}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none"
+                >
+                  <option value="ETB">ETB (Br)</option>
+                  <option value="USD">USD ($)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           {/* Loyalty Rules & Loyalty settings */}
           <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm space-y-4">
             <h3 className="font-sans font-bold text-sm text-slate-800 flex items-center gap-2">
@@ -1072,6 +1182,8 @@ export default function BusinessOwnerView() {
           </div>
 
         </div>
+      )}
+      </>
       )}
 
     </div>

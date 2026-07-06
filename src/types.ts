@@ -13,7 +13,7 @@ export interface Tenant {
   baseTaxRate: number; // percentage, e.g., 15 for Ethiopia
   serviceCharge: number; // percentage, e.g., 5
   subscriptionPlan: SubscriptionPlan;
-  subscriptionStatus: 'active' | 'suspended' | 'past_due';
+  subscriptionStatus: 'active' | 'suspended' | 'past_due' | 'pending_approval' | 'rejected';
   ownerEmail: string;
   createdAt: string;
   loyaltyPointsRatio: number; // e.g., 1 point per 10 currency spent
@@ -156,3 +156,15 @@ export interface PlatformStats {
   totalRevenue: number;
   monthlyGrowthRate: number;
 }
+
+export interface PlatformAd {
+  id: string;
+  tenantId?: string; // empty/undefined means global platform-wide ad, otherwise target a specific restaurant
+  title: string;
+  subtitle: string;
+  imageUrl: string;
+  actionUrl?: string;
+  active: boolean;
+  createdAt: string;
+}
+

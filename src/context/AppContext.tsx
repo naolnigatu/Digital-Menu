@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
-  Tenant, Branch, PreparationStation, Category, MenuItem, Table, Order, Staff, SystemLog, UserRole, OrderStatus, OrderItem
+  Tenant, Branch, PreparationStation, Category, MenuItem, Table, Order, Staff, SystemLog, UserRole, OrderStatus, OrderItem, SubscriptionPlan, PlatformAd
 } from '../types';
 import { 
   mockTenants, mockBranches, mockStations, mockCategories, mockMenuItems, mockTables, mockStaff, mockOrders, mockSystemLogs 
@@ -68,6 +68,27 @@ interface AppContextType {
   // Super Admin Actions
   toggleTenantStatus: (tenantId: string) => void;
   updateTenantPlan: (tenantId: string, plan: Tenant['subscriptionPlan']) => void;
+  updateTenantCurrency: (tenantId: string, currency: string, currencySymbol: string) => void;
+  approveTenantStatus: (tenantId: string) => void;
+  rejectTenantStatus: (tenantId: string) => void;
+  
+  // Platform Ads Actions
+  ads: PlatformAd[];
+  addAd: (adData: Omit<PlatformAd, 'id' | 'createdAt' | 'active'>) => void;
+  toggleAdStatus: (id: string) => void;
+  deleteAd: (id: string) => void;
+  
+  // Register Tenant Action
+  registerTenant: (tenantData: {
+    name: string;
+    slug: string;
+    description: string;
+    currency: string;
+    subscriptionPlan: SubscriptionPlan;
+    ownerEmail: string;
+    ownerName: string;
+  }) => void;
+  signUpOwnerOnly: (name: string, email: string) => void;
   
   // General helper
   addLog: (action: string, details: string) => void;
@@ -75,7 +96,29 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const CACHE_VERSION = 'v4';
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  // Clear cache if version mismatch to purge old KSh mock data
+  useEffect(() => {
+    const ver = localStorage.getItem('mf_version');
+    if (ver !== CACHE_VERSION) {
+      localStorage.removeItem('mf_tenants');
+      localStorage.removeItem('mf_branches');
+      localStorage.removeItem('mf_stations');
+      localStorage.removeItem('mf_categories');
+      localStorage.removeItem('mf_menu_items');
+      localStorage.removeItem('mf_tables');
+      localStorage.removeItem('mf_orders');
+      localStorage.removeItem('mf_staff');
+      localStorage.removeItem('mf_logs');
+      localStorage.removeItem('mf_ads');
+      localStorage.setItem('mf_version', CACHE_VERSION);
+      // Reload the page to grab fresh mockData
+      window.location.reload();
+    }
+  }, []);
+
   // Load state from local storage or fallback to mock data
   const [tenants, setTenants] = useState<Tenant[]>(() => {
     const local = localStorage.getItem('mf_tenants');
@@ -121,6 +164,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const local = localStorage.getItem('mf_logs');
     return local ? JSON.parse(local) : mockSystemLogs;
   });
+
+  const [ads, setAds] = useState<PlatformAd[]>(() => {
+    const local = localStorage.getItem('mf_ads');
+    if (local) return JSON.parse(local);
+    return [
+      {
+        id: 'ad-01',
+        tenantId: 't-01',
+        title: 'Weekend 20% Off Espresso Specials!',
+        subtitle: 'Get Carlos Specialty Brews with a 20% discount this Saturday and Sunday only.',
+        imageUrl: 'https://images.unsplash.com/photo-1511920170033-f8396924c348?w=800&auto=format&fit=crop&q=80',
+        active: true,
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'ad-02',
+        title: 'Discover Premium Dining',
+        subtitle: 'Order directly from any registered brand on MenuFlow. Scan or pre-order instantly!',
+        imageUrl: 'https://images.unsplash.com/photo-1526367790999-015078648c7e?w=800&auto=format&fit=crop&q=80',
+        active: true,
+        createdAt: new Date().toISOString()
+      }
+    ];
+  });
+
+  // Sync to local storage on state changes
+  useEffect(() => {
+    localStorage.setItem('mf_ads', JSON.stringify(ads));
+  }, [ads]);
 
   // Active configurations
   const [activeTenantId, setActiveTenantId] = useState<string>(() => {
@@ -200,7 +272,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Actions implementation
   const addLog = (action: string, details: string) => {
     const newLog: SystemLog = {
-      id: `log-${Date.now()}`,
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       tenantId: currentUser?.tenantId,
       userEmail: currentUser?.email || 'guest@menuflow.com',
       role: currentUser?.role || 'customer',
@@ -213,7 +285,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const login = (email: string): boolean => {
     // 1. Check Super Admin
-    const cleanEmail = email.toLowerCase();
+    const cleanEmail = email.toLowerCase().trim();
     if (cleanEmail === 'admin@menuflow.com' || cleanEmail === 'naolnigatu2025@gmail.com') {
       const name = cleanEmail === 'naolnigatu2025@gmail.com' ? 'Naol Nigatu (Platform Admin)' : 'Super Administrator';
       const user = { email: cleanEmail, role: 'super_admin' as const, name };
@@ -223,7 +295,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     // 2. Check Staff list
-    const foundStaff = staff.find(s => s.email.toLowerCase() === email.toLowerCase() && s.active);
+    const foundStaff = staff.find(s => s.email.toLowerCase().trim() === cleanEmail && s.active);
     if (foundStaff) {
       const tenantObj = tenants.find(t => t.id === foundStaff.tenantId);
       const user = {
@@ -243,7 +315,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     // 3. Check Owner signups from tenants list (fallback)
-    const foundTenant = tenants.find(t => t.ownerEmail.toLowerCase() === email.toLowerCase());
+    const foundTenant = tenants.find(t => t.ownerEmail.toLowerCase().trim() === cleanEmail);
     if (foundTenant) {
       const tenantBranch = branches.find(b => b.tenantId === foundTenant.id);
       const user = {
@@ -576,6 +648,213 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
+  const updateTenantCurrency = (tenantId: string, currency: string, currencySymbol: string) => {
+    setTenants(prev => prev.map(t => {
+      if (t.id !== tenantId) return t;
+      addLog('Settings Override', `Tenant ${t.name} currency updated to: ${currency} (${currencySymbol})`);
+      return { ...t, currency, currencySymbol };
+    }));
+  };
+
+  const approveTenantStatus = (tenantId: string) => {
+    setTenants(prev => prev.map(t => {
+      if (t.id !== tenantId) return t;
+      addLog('Platform Admin Approval', `Business "${t.name}" registration request has been APPROVED.`);
+      return { ...t, subscriptionStatus: 'active' };
+    }));
+  };
+
+  const rejectTenantStatus = (tenantId: string) => {
+    setTenants(prev => prev.map(t => {
+      if (t.id !== tenantId) return t;
+      addLog('Platform Admin Approval', `Business "${t.name}" registration request has been REJECTED.`);
+      return { ...t, subscriptionStatus: 'rejected' };
+    }));
+  };
+
+  const addAd = (adData: Omit<PlatformAd, 'id' | 'createdAt' | 'active'>) => {
+    const newAd: PlatformAd = {
+      ...adData,
+      id: `ad-${Date.now()}`,
+      active: true,
+      createdAt: new Date().toISOString()
+    };
+    setAds(prev => [newAd, ...prev]);
+    addLog('Ad Operations', `Published platform ad: ${adData.title}`);
+  };
+
+  const toggleAdStatus = (id: string) => {
+    setAds(prev => prev.map(ad => {
+      if (ad.id !== id) return ad;
+      const nextActive = !ad.active;
+      addLog('Ad Operations', `Ad "${ad.title}" is now ${nextActive ? 'Active' : 'Paused'}`);
+      return { ...ad, active: nextActive };
+    }));
+  };
+
+  const deleteAd = (id: string) => {
+    setAds(prev => {
+      const ad = prev.find(a => a.id === id);
+      if (ad) addLog('Ad Operations', `Deleted ad: ${ad.title}`);
+      return prev.filter(a => a.id !== id);
+    });
+  };
+
+  const registerTenant = (data: {
+    name: string;
+    slug: string;
+    description: string;
+    currency: string;
+    subscriptionPlan: SubscriptionPlan;
+    ownerEmail: string;
+    ownerName: string;
+  }) => {
+    const tenantId = `t-${Date.now()}`;
+    const branchId = `b-${Date.now()}`;
+    const ownerId = `s-${Date.now()}`;
+
+    const newTenant: Tenant = {
+      id: tenantId,
+      name: data.name,
+      slug: data.slug || data.name.toLowerCase().replace(/\s+/g, '-'),
+      logoUrl: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80',
+      description: data.description || `Welcome to ${data.name}!`,
+      currency: data.currency,
+      currencySymbol: data.currency === 'USD' ? '$' : 'Br',
+      baseTaxRate: 15,
+      serviceCharge: 0,
+      subscriptionPlan: data.subscriptionPlan,
+      subscriptionStatus: 'pending_approval',
+      ownerEmail: data.ownerEmail.toLowerCase().trim(),
+      createdAt: new Date().toISOString(),
+      loyaltyPointsRatio: 0.05,
+      loyaltyMinRedeemPoints: 10,
+      loyaltyRedeemValue: 1,
+    };
+
+    const newBranch: Branch = {
+      id: branchId,
+      tenantId,
+      name: 'Main Branch',
+      address: 'Addis Ababa, Ethiopia',
+      phone: '+251 911 000 000',
+    };
+
+    const newStaff: Staff = {
+      id: ownerId,
+      name: data.ownerName,
+      email: data.ownerEmail.toLowerCase().trim(),
+      role: 'owner',
+      tenantId,
+      branchId,
+      active: true,
+    };
+
+    const catId1 = `cat-1-${Date.now()}`;
+    const catId2 = `cat-2-${Date.now()}`;
+
+    // Default categories
+    const newCategories = [
+      { id: catId1, tenantId, name: 'Specialties', orderNum: 1, icon: 'Utensils' },
+      { id: catId2, tenantId, name: 'Beverages', orderNum: 2, icon: 'Coffee' },
+    ];
+
+    // Default menu items
+    const newMenuItemsList = [
+      {
+        id: `item-1-${Date.now()}`,
+        tenantId,
+        categoryId: catId1,
+        name: 'House Special Dish',
+        description: 'A delicious chef specialty signature dish crafted with premium locally sourced ingredients.',
+        price: data.currency === 'USD' ? 12.99 : 450,
+        photoUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=80',
+        allergenTags: [],
+        dietaryTags: ['Popular'],
+        status: 'available' as const,
+        modifierGroups: [],
+        estimatedPrepTime: 15
+      },
+      {
+        id: `item-2-${Date.now()}`,
+        tenantId,
+        categoryId: catId2,
+        name: 'Ethio-Macchiato / Coffee',
+        description: 'Authentic rich espresso topped with beautifully textured milk micro-foam.',
+        price: data.currency === 'USD' ? 2.50 : 80,
+        photoUrl: 'https://images.unsplash.com/photo-1577968897966-3d4325b36b61?w=500&auto=format&fit=crop&q=80',
+        allergenTags: ['Dairy'],
+        dietaryTags: ['Vegetarian'],
+        status: 'available' as const,
+        modifierGroups: [],
+        estimatedPrepTime: 5
+      }
+    ];
+
+    setTenants(prev => [...prev, newTenant]);
+    setBranches(prev => [...prev, newBranch]);
+    setStaff(prev => [...prev, newStaff]);
+    setCategories(prev => ({
+      ...prev,
+      [tenantId]: newCategories
+    }));
+    setMenuItems(prev => ({
+      ...prev,
+      [tenantId]: newMenuItemsList
+    }));
+
+    addLog('Tenant Registration', `Registered new tenant: ${data.name} owned by ${data.ownerName}`);
+
+    // Set active values
+    setActiveTenantId(tenantId);
+    setActiveBranchId(branchId);
+
+    // Login as the registered owner
+    const loggedUser = {
+      id: ownerId,
+      email: data.ownerEmail.toLowerCase().trim(),
+      role: 'owner' as const,
+      name: data.ownerName,
+      tenantId,
+      branchId,
+    };
+    setCurrentUser(loggedUser);
+  };
+
+  const signUpOwnerOnly = (name: string, email: string) => {
+    const cleanEmail = email.toLowerCase().trim();
+    // Check if they are already in the system
+    const exists = staff.find(s => s.email.toLowerCase().trim() === cleanEmail);
+    if (exists) {
+      login(cleanEmail);
+      return;
+    }
+
+    const ownerId = `s-${Date.now()}`;
+    const newStaff: Staff = {
+      id: ownerId,
+      name,
+      email: cleanEmail,
+      role: 'owner',
+      tenantId: '', // No business profile created yet!
+      branchId: '',
+      active: true,
+    };
+
+    setStaff(prev => [...prev, newStaff]);
+    addLog('Platform Owner Sign Up', `Owner signed up: ${name} (${cleanEmail}). Business profile pending creation.`);
+
+    const loggedUser = {
+      id: ownerId,
+      email: cleanEmail,
+      role: 'owner' as const,
+      name,
+      tenantId: '',
+      branchId: '',
+    };
+    setCurrentUser(loggedUser);
+  };
+
   return (
     <AppContext.Provider value={{
       tenants,
@@ -615,6 +894,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleStaffStatus,
       toggleTenantStatus,
       updateTenantPlan,
+      updateTenantCurrency,
+      approveTenantStatus,
+      rejectTenantStatus,
+      ads,
+      addAd,
+      toggleAdStatus,
+      deleteAd,
+      registerTenant,
+      signUpOwnerOnly,
       addLog
     }}>
       {children}

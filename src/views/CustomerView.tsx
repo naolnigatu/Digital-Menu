@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { MenuItem, OrderItem, Order, Category } from '../types';
 import { 
   Search, ShoppingBag, Languages, Flame, Award, Clock, ArrowRight, Star, 
-  Smile, ClipboardList, CheckCircle2, ShoppingCart, User, Smartphone, MapPin
+  Smile, ClipboardList, CheckCircle2, ShoppingCart, User, Smartphone, MapPin, Megaphone
 } from 'lucide-react';
 
 export default function CustomerView() {
@@ -19,7 +19,8 @@ export default function CustomerView() {
     placeOrder, 
     currentLanguage, 
     setLanguage,
-    rateAndFeedback 
+    rateAndFeedback,
+    ads
   } = useApp();
 
   const activeTenant = tenants.find(t => t.id === activeTenantId) || tenants[0];
@@ -191,68 +192,102 @@ export default function CustomerView() {
       
       {/* 1. CUSTOMER PORTAL HEADER CONFIGS */}
       {!currentLiveOrder ? (
-        <div className="bg-slate-900 text-white p-5 space-y-4 shadow-md rounded-b-2xl">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <img 
-                src={activeTenant.logoUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=80'} 
-                alt={activeTenant.name} 
-                className="h-8 w-8 rounded-full border border-white/20 object-cover"
-                referrerPolicy="no-referrer"
-              />
-              <span className="font-sans font-extrabold text-sm">{activeTenant.name}</span>
-            </div>
+        <>
+          <div className="bg-slate-900 text-white p-5 space-y-4 shadow-md rounded-b-2xl">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <img 
+                  src={activeTenant.logoUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=80'} 
+                  alt={activeTenant.name} 
+                  className="h-8 w-8 rounded-full border border-white/20 object-cover"
+                  referrerPolicy="no-referrer"
+                />
+                <span className="font-sans font-extrabold text-sm">{activeTenant.name}</span>
+              </div>
 
-            {/* Tenant switcher for testing */}
-            <select
-              value={activeTenantId}
-              onChange={(e) => {
-                setActiveTenantId(e.target.value);
-                setCart([]);
-              }}
-              className="bg-white/10 text-white border-none rounded px-2 py-1 text-[11px] font-bold"
-              title="Simulation: Switch digital menus"
-            >
-              {tenants.map(t => (
-                <option key={t.id} value={t.id} className="text-slate-900">{t.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <p className="text-[11px] text-slate-300 leading-relaxed">{activeTenant.description}</p>
-
-          <div className="grid gap-2 grid-cols-2">
-            <div>
-              <label className="text-[9px] font-bold text-slate-400 uppercase">Self-Serve Table</label>
+              {/* Tenant switcher for testing */}
               <select
-                value={activeTableId}
-                onChange={(e) => setActiveTableId(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2.5 py-1 text-xs font-semibold mt-1"
+                value={activeTenantId}
+                onChange={(e) => {
+                  setActiveTenantId(e.target.value);
+                  setCart([]);
+                }}
+                className="bg-white/10 text-white border-none rounded px-2 py-1 text-[11px] font-bold"
+                title="Simulation: Switch digital menus"
               >
-                {activeTables.map(t => (
-                  <option key={t.id} value={t.id} className="text-slate-900">{t.number} ({t.section})</option>
+                {tenants.map(t => (
+                  <option key={t.id} value={t.id} className="text-slate-900">{t.name}</option>
                 ))}
               </select>
             </div>
-            <div>
-              <label className="text-[9px] font-bold text-slate-400 uppercase">Meal Option</label>
-              <div className="flex bg-white/10 rounded-lg p-0.5 mt-1">
-                <button
-                  onClick={() => setOrderType('dine_in')}
-                  className={`flex-1 py-0.5 text-[10px] font-bold rounded-md ${orderType === 'dine_in' ? 'bg-white text-slate-900' : 'text-slate-300'}`}
+
+            <p className="text-[11px] text-slate-300 leading-relaxed">{activeTenant.description}</p>
+
+            <div className="grid gap-2 grid-cols-2">
+              <div>
+                <label className="text-[9px] font-bold text-slate-400 uppercase">Self-Serve Table</label>
+                <select
+                  value={activeTableId}
+                  onChange={(e) => setActiveTableId(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2.5 py-1 text-xs font-semibold mt-1"
                 >
-                  Dine In
-                </button>
-                <button
-                  onClick={() => setOrderType('pickup')}
-                  className={`flex-1 py-0.5 text-[10px] font-bold rounded-md ${orderType === 'pickup' ? 'bg-white text-slate-900' : 'text-slate-300'}`}
-                >
-                  Pickup
-                </button>
+                  {activeTables.map(t => (
+                    <option key={t.id} value={t.id} className="text-slate-900">{t.number} ({t.section})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-slate-400 uppercase">Meal Option</label>
+                <div className="flex bg-white/10 rounded-lg p-0.5 mt-1">
+                  <button
+                    onClick={() => setOrderType('dine_in')}
+                    className={`flex-1 py-0.5 text-[10px] font-bold rounded-md ${orderType === 'dine_in' ? 'bg-white text-slate-900' : 'text-slate-300'}`}
+                  >
+                    Dine In
+                  </button>
+                  <button
+                    onClick={() => setOrderType('pickup')}
+                    className={`flex-1 py-0.5 text-[10px] font-bold rounded-md ${orderType === 'pickup' ? 'bg-white text-slate-900' : 'text-slate-300'}`}
+                  >
+                    Pickup
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+
+          {/* DYNAMIC CAMPAIGN ADS BANNER */}
+          {(() => {
+            const activeAds = (ads || []).filter(a => a.active && (!a.tenantId || a.tenantId === activeTenantId));
+            if (activeAds.length === 0) return null;
+            return (
+              <div className="px-4 pt-1">
+                <div className="overflow-hidden rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50/85 to-purple-50/85 p-3 shadow-sm relative flex items-center gap-3 animate-in slide-in-from-top duration-300">
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-1">
+                      <span className="bg-indigo-600 text-white font-extrabold text-[7px] uppercase tracking-wider px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shrink-0">
+                        <Megaphone className="h-2 w-2 animate-pulse" /> Ad
+                      </span>
+                      <span className="text-[9px] font-bold text-indigo-800">Sponsor Promotion</span>
+                    </div>
+                    <h4 className="font-sans font-extrabold text-[11px] text-slate-900 leading-tight">
+                      {activeAds[0].title}
+                    </h4>
+                    <p className="text-[9px] text-slate-500 leading-snug">
+                      {activeAds[0].subtitle}
+                    </p>
+                  </div>
+                  <img 
+                    src={activeAds[0].imageUrl} 
+                    alt={activeAds[0].title} 
+                    className="h-12 w-16 rounded-xl object-cover border border-slate-100 shadow-sm shrink-0" 
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              </div>
+            );
+          })()}
+        </>
       ) : (
         /* Live tracker banner when order placed */
         <div className="bg-slate-900 text-white p-4 flex items-center justify-between rounded-b-2xl">
