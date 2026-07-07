@@ -31,14 +31,49 @@ export default function BusinessOwnerView() {
     toggleStaffStatus,
     updateTenantPlan,
     requestTenantUpgrade,
-    updateTenantCurrency
+    updateTenantCurrency,
+    updateTenantProfile,
+    pricingPlans
   } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'menu' | 'tables' | 'staff' | 'settings'>('dashboard');
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          updateTenantProfile(activeTenantId, event.target.result as string, tenant.bankAccount || '');
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   // Tenant reference
-  const tenant = tenants.find(t => t.id === activeTenantId) || tenants[0];
-  const activeBranch = branches.find(b => b.id === activeBranchId) || branches[0];
+  const tenant = tenants.find(t => t.id === activeTenantId) || tenants[0] || {
+    id: activeTenantId || 't-01',
+    name: 'My Restaurant',
+    slug: 'my-restaurant',
+    logoUrl: '',
+    description: '',
+    currency: 'ETB',
+    currencySymbol: 'Br',
+    baseTaxRate: 15,
+    serviceCharge: 0,
+    subscriptionPlan: 'free',
+    subscriptionStatus: 'pending_approval',
+    ownerEmail: '',
+    createdAt: new Date().toISOString()
+  };
+  const activeBranch = branches.find(b => b.id === activeBranchId) || branches[0] || {
+    id: activeBranchId || 'b-01',
+    tenantId: tenant.id,
+    name: 'Main Branch',
+    address: 'Addis Ababa, Ethiopia',
+    phone: ''
+  };
 
   // Filters
   const tenantCategories = categories[activeTenantId] || [];
@@ -48,6 +83,10 @@ export default function BusinessOwnerView() {
   const branchOrders = orders.filter(o => o.branchId === activeBranchId);
 
   const renderPaywall = (featureName: string, description: string) => {
+    const growthPlan = pricingPlans.find(p => p.id === 'growth');
+    const displayPrice = tenant.currency === 'ETB' ? `${growthPlan?.priceETB} ETB` : `$${growthPlan?.priceUSD}`;
+    const isPending = tenant.subscriptionStatus === 'pending_approval';
+
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50/20 p-8 text-center max-w-lg mx-auto my-12 space-y-6">
         <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 mx-auto">
@@ -79,17 +118,24 @@ export default function BusinessOwnerView() {
         </div>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button
-            onClick={() => {
-              requestTenantUpgrade(tenant.id, 'growth');
-              // The status must also change so the Admin can approve it
-              alert(`Your request to upgrade to the Growth Plan has been submitted to the platform admin. The features will be unlocked as soon as your payment is approved!`);
-            }}
-            className="w-full sm:w-auto rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-indigo-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <CreditCard className="h-4 w-4" />
-            Request Upgrade to Growth ($29/mo)
-          </button>
+          {isPending ? (
+            <div className="w-full sm:w-auto rounded-xl bg-amber-100 text-amber-800 px-5 py-2.5 text-xs font-bold border border-amber-200 flex items-center justify-center gap-1.5 shadow-sm">
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping"></span>
+              <span>Upgrade Pending Admin Approval</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                requestTenantUpgrade(tenant.id, 'growth');
+                // The status must also change so the Admin can approve it
+                alert(`Your request to upgrade to the Growth Plan has been submitted to the platform admin. The features will be unlocked as soon as your payment is approved!`);
+              }}
+              className="w-full sm:w-auto rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-indigo-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <CreditCard className="h-4 w-4" />
+              Request Upgrade to Growth ({displayPrice}/mo)
+            </button>
+          )}
           
           <button
             onClick={() => setActiveSubTab('menu')}
@@ -539,9 +585,9 @@ export default function BusinessOwnerView() {
                           </div>
                           <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">{item.description}</p>
                           
-                          {item.modifiers.length > 0 && (
+                          {(item.modifiers || []).length > 0 && (
                             <div className="flex flex-wrap gap-1 pt-1">
-                              {item.modifiers.map(mod => (
+                              {(item.modifiers || []).map(mod => (
                                 <span key={mod.id} className="rounded-md bg-amber-50 border border-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800">
                                   + {mod.name}
                                 </span>
@@ -1082,53 +1128,101 @@ export default function BusinessOwnerView() {
             </h3>
             
             <div className="grid gap-3 sm:grid-cols-3">
-              <button
-                type="button"
-                onClick={() => updateTenantPlan(activeTenantId, 'free')}
-                className={`rounded-xl border p-3.5 text-left transition-all ${
-                  tenant.subscriptionPlan === 'free'
-                    ? 'border-slate-900 bg-slate-50 ring-1 ring-slate-900'
-                    : 'border-slate-100 hover:bg-slate-50'
-                }`}
-              >
-                <h4 className="text-xs font-bold text-slate-900">Free Tier</h4>
-                <p className="text-[10px] text-slate-400 mt-1">1 branch, digital menus & QR scans.</p>
-                <p className="text-xs font-bold text-slate-800 mt-3">$0 / free</p>
-              </button>
+              {pricingPlans.map(plan => {
+                const isCurrent = tenant.subscriptionPlan === plan.id;
+                const isPending = tenant.subscriptionStatus === 'pending_approval' && isCurrent;
+                const displayPrice = tenant.currency === 'ETB' ? `${plan.priceETB} ETB` : `$${plan.priceUSD}`;
+                
+                return (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    disabled={isCurrent}
+                    onClick={() => {
+                      if (plan.id === 'free') {
+                        updateTenantPlan(activeTenantId, 'free');
+                      } else {
+                        requestTenantUpgrade(activeTenantId, plan.id);
+                        alert(`Upgrade request submitted! Awaiting admin approval.`);
+                      }
+                    }}
+                    className={`relative rounded-xl border p-3.5 text-left transition-all ${
+                      isCurrent
+                        ? isPending
+                          ? 'border-amber-400 bg-amber-50/20 ring-1 ring-amber-400'
+                          : 'border-slate-900 bg-slate-50 ring-1 ring-slate-900'
+                        : 'border-slate-100 hover:bg-slate-50 cursor-pointer'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center gap-1.5 flex-wrap">
+                      <h4 className="text-xs font-bold text-slate-900">{plan.name}</h4>
+                      {isPending && (
+                        <span className="bg-amber-100 text-amber-800 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded border border-amber-200 animate-pulse">
+                          Pending
+                        </span>
+                      )}
+                      {isCurrent && !isPending && (
+                        <span className="bg-slate-900 text-white text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">{plan.features.join(', ')}</p>
+                    <p className="text-xs font-bold text-slate-800 mt-3">{displayPrice} / mo</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  requestTenantUpgrade(activeTenantId, 'growth');
-                  alert(`Upgrade request submitted! Awaiting admin approval.`);
-                }}
-                className={`rounded-xl border p-3.5 text-left transition-all ${
-                  tenant.subscriptionPlan === 'growth'
-                    ? 'border-slate-900 bg-slate-50 ring-1 ring-slate-900'
-                    : 'border-slate-100 hover:bg-slate-50'
-                }`}
-              >
-                <h4 className="text-xs font-bold text-slate-900">Growth Plan</h4>
-                <p className="text-[10px] text-slate-400 mt-1">Multi-branch, full KDS, automated metrics.</p>
-                <p className="text-xs font-bold text-slate-800 mt-3">$29 / mo</p>
-              </button>
+          {/* Business Profile Identity & Payments */}
+          <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm space-y-4">
+            <h3 className="font-sans font-bold text-sm text-slate-800 flex items-center gap-1.5">
+              <Upload className="h-4.5 w-4.5 text-indigo-600" />
+              <span>Business Profile & Bank Details</span>
+            </h3>
 
-              <button
-                type="button"
-                onClick={() => {
-                  requestTenantUpgrade(activeTenantId, 'enterprise');
-                  alert(`Upgrade request submitted! Awaiting admin approval.`);
-                }}
-                className={`rounded-xl border p-3.5 text-left transition-all ${
-                  tenant.subscriptionPlan === 'enterprise'
-                    ? 'border-slate-900 bg-slate-50 ring-1 ring-slate-900'
-                    : 'border-slate-100 hover:bg-slate-50'
-                }`}
-              >
-                <h4 className="text-xs font-bold text-slate-900">Enterprise</h4>
-                <p className="text-[10px] text-slate-400 mt-1">SLA guarantee, central controls, custom branding.</p>
-                <p className="text-xs font-bold text-slate-800 mt-3">$99 / mo</p>
-              </button>
+            <div className="space-y-4">
+              {/* Profile image upload */}
+              <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <div className="relative shrink-0">
+                  <img 
+                    src={tenant.logoUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=120'} 
+                    alt={tenant.name}
+                    className="h-16 w-16 rounded-full object-cover border-2 border-indigo-100 bg-white shadow-sm"
+                  />
+                  <label className="absolute bottom-0 right-0 rounded-full bg-indigo-600 p-1.5 text-white hover:bg-indigo-700 shadow-md cursor-pointer flex items-center justify-center">
+                    <Upload className="h-3 w-3" />
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleLogoUpload} 
+                      className="hidden" 
+                    />
+                  </label>
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800">Business Profile Logo</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                    Upload your official branding banner or storefront image from your device. Recommended: 1:1 ratio square image.
+                  </p>
+                </div>
+              </div>
+
+              {/* CBE Bank account number */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Pre-arrival Advance Payment Bank Account (CBE)</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. 1000123456789"
+                  value={tenant.bankAccount || ''} 
+                  onChange={(e) => updateTenantProfile(activeTenantId, tenant.logoUrl || '', e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+                <span className="text-[9px] text-slate-400 block mt-1">
+                  Customers who place pickup pre-orders will see this Commercial Bank of Ethiopia (CBE) account number to transfer funds in advance.
+                </span>
+              </div>
             </div>
           </div>
 

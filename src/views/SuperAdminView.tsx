@@ -22,10 +22,12 @@ export default function SuperAdminView() {
     addAd,
     toggleAdStatus,
     deleteAd,
+    pricingPlans,
+    updatePlanPrice,
     login
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'businesses' | 'ads' | 'telemetry'>('businesses');
+  const [activeTab, setActiveTab] = useState<'businesses' | 'ads' | 'telemetry' | 'pricing'>('businesses');
 
   // Ad Form States
   const [adTitle, setAdTitle] = useState('');
@@ -114,6 +116,17 @@ export default function SuperAdminView() {
             Campaign Ads
           </button>
           <button
+            onClick={() => setActiveTab('pricing')}
+            className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 ${
+              activeTab === 'pricing'
+                ? 'bg-white text-indigo-600 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <TrendingUp className="h-3.5 w-3.5" />
+            Pricing Plans
+          </button>
+          <button
             onClick={() => setActiveTab('telemetry')}
             className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 ${
               activeTab === 'telemetry'
@@ -200,7 +213,7 @@ export default function SuperAdminView() {
               <div className="border-b border-amber-200 bg-amber-100/40 px-4 py-3 flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 text-amber-600 animate-bounce" />
                 <h3 className="font-sans font-extrabold text-sm text-slate-800">
-                  Pending Business Registration Approvals ({pendingRequests.length})
+                  Pending Business Registration & Upgrade Approvals ({pendingRequests.length})
                 </h3>
               </div>
               
@@ -212,10 +225,13 @@ export default function SuperAdminView() {
                         {request.name.slice(0, 2).toUpperCase()}
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="text-xs font-bold text-slate-900">{request.name}</h4>
-                          <span className="bg-amber-100 text-amber-800 rounded-full px-2 py-0.5 text-[8px] font-bold uppercase border border-amber-200">
-                            Pending Review
+                          <span className="bg-amber-100 text-amber-800 rounded-full px-2 py-0.5 text-[8px] font-extrabold uppercase border border-amber-200">
+                            Awaiting Approval
+                          </span>
+                          <span className="bg-indigo-100 text-indigo-800 rounded-full px-2.5 py-0.5 text-[8px] font-extrabold uppercase border border-indigo-200 tracking-wide animate-pulse">
+                            Requested Tier: {request.subscriptionPlan.toUpperCase()}
                           </span>
                         </div>
                         <p className="text-[10px] text-slate-500 mt-1">
@@ -507,7 +523,54 @@ export default function SuperAdminView() {
         </div>
       )}
 
-      {/* TAB 3: AUDIT & TELEMETRY */}
+      {activeTab === 'pricing' && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-2 mb-4">
+            <h3 className="font-sans font-bold text-sm text-slate-800">Platform Pricing Configurations</h3>
+            <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500 uppercase">Live Sync</span>
+          </div>
+          
+          <div className="grid gap-6 lg:grid-cols-3">
+            {pricingPlans.map(plan => (
+              <div key={plan.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+                <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+                  <div>
+                    <h4 className="font-sans font-bold text-sm text-slate-900">{plan.name}</h4>
+                    <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest">{plan.id}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Price (USD)</label>
+                    <input
+                      type="number"
+                      value={plan.priceUSD}
+                      onChange={(e) => updatePlanPrice(plan.id, Number(e.target.value), plan.priceETB)}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Price (ETB)</label>
+                    <input
+                      type="number"
+                      value={plan.priceETB}
+                      onChange={(e) => updatePlanPrice(plan.id, plan.priceUSD, Number(e.target.value))}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100">
+                  <p className="text-xs text-slate-500 leading-relaxed">{plan.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: AUDIT & TELEMETRY */}
       {activeTab === 'telemetry' && (
         <div className="grid gap-6 lg:grid-cols-3">
           
@@ -524,7 +587,7 @@ export default function SuperAdminView() {
               </div>
               <div className="flex justify-between border-b border-slate-50 pb-1.5">
                 <span className="text-slate-400">Growth Plan Charge</span>
-                <span className="font-semibold text-slate-800">$29 / month</span>
+                <span className="font-semibold text-slate-800">${pricingPlans.find(p => p.id === 'growth')?.priceUSD} / month</span>
               </div>
               <div className="flex justify-between border-b border-slate-50 pb-1.5">
                 <span className="text-slate-400">Enterprise SLA</span>

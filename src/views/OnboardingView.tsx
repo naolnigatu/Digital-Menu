@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 export default function OnboardingView() {
-  const { registerTenant, currentUser } = useApp();
+  const { registerTenant, currentUser, pricingPlans } = useApp();
   const [businessName, setBusinessName] = useState('');
   const [currency, setCurrency] = useState<'USD' | 'ETB'>('ETB');
   const [description, setDescription] = useState('');
@@ -39,32 +39,14 @@ export default function OnboardingView() {
     }, 1200);
   };
 
-  const plans = [
-    {
-      id: 'free' as SubscriptionPlan,
-      name: 'Free Menu Plan',
-      price: 'Free',
-      description: 'Get menu service for free! Basic digital menu, QR scanning, and self-serve dine-in ordering.',
-      badge: 'Active & Free',
-      badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    },
-    {
-      id: 'growth' as SubscriptionPlan,
-      name: 'Growth Plan',
-      price: '$29/mo',
-      description: 'Unlock multi-branch sync, interactive kitchen/waiter stations, detailed reporting & CRM.',
-      badge: 'Select to Upgrade',
-      badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    },
-    {
-      id: 'enterprise' as SubscriptionPlan,
-      name: 'Enterprise Plan',
-      price: '$99/mo',
-      description: 'Unlimited branches, customized branding, high-frequency Live API, and 24/7 dedicated account manager.',
-      badge: 'Select to Upgrade',
-      badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    }
-  ];
+  const plans = pricingPlans.map(plan => ({
+    id: plan.id,
+    name: plan.name,
+    price: currency === 'ETB' ? `${plan.priceETB} ETB/mo` : `$${plan.priceUSD}/mo`,
+    description: plan.description,
+    badge: plan.id === 'free' ? 'Active & Free' : 'Select to Upgrade',
+    badgeColor: plan.id === 'free' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  }));
 
   return (
     <div className="max-w-4xl mx-auto py-6">

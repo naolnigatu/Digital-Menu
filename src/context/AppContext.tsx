@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
-  Tenant, Branch, PreparationStation, Category, MenuItem, Table, Order, Staff, SystemLog, UserRole, OrderStatus, OrderItem, SubscriptionPlan, PlatformAd
+  Tenant, Branch, PreparationStation, Category, MenuItem, Table, Order, Staff, SystemLog, UserRole, OrderStatus, OrderItem, SubscriptionPlan, PlatformAd, PlanPricing
 } from '../types';
 import { 
   mockTenants, mockBranches, mockStations, mockCategories, mockMenuItems, mockTables, mockStaff, mockOrders, mockSystemLogs 
@@ -45,6 +45,7 @@ interface AppContextType {
   addMenuItem: (item: Omit<MenuItem, 'id'>) => void;
   updateMenuItem: (item: MenuItem) => void;
   deleteMenuItem: (tenantId: string, itemId: string) => void;
+  toggleMenuItemAvailability: (tenantId: string, itemId: string) => void;
   
   // Table Actions
   addTable: (table: Omit<Table, 'id' | 'qrUrl'>) => void;
@@ -60,6 +61,7 @@ interface AppContextType {
   processPayment: (orderId: string, paymentMethod: Order['paymentMethod'], discountPercentage: number, redeemPoints?: number) => void;
   rateAndFeedback: (orderId: string, rating: number, feedback: string) => void;
   cancelOrder: (orderId: string, reason: string) => void;
+  verifyAdvancePayment: (orderId: string, approve: boolean, rejectionReason?: string) => void;
   
   // Staff Actions
   addStaffMember: (member: Omit<Staff, 'id' | 'active'>) => void;
@@ -70,6 +72,7 @@ interface AppContextType {
   updateTenantPlan: (tenantId: string, plan: Tenant['subscriptionPlan']) => void;
   requestTenantUpgrade: (tenantId: string, plan: Tenant['subscriptionPlan']) => void;
   updateTenantCurrency: (tenantId: string, currency: string, currencySymbol: string) => void;
+  updateTenantProfile: (tenantId: string, logoUrl: string, bankAccount: string) => void;
   approveTenantStatus: (tenantId: string) => void;
   rejectTenantStatus: (tenantId: string) => void;
   
@@ -79,6 +82,10 @@ interface AppContextType {
   toggleAdStatus: (id: string) => void;
   deleteAd: (id: string) => void;
   
+  // Pricing Actions
+  pricingPlans: PlanPricing[];
+  updatePlanPrice: (planId: SubscriptionPlan, newPriceUSD: number, newPriceETB: number) => void;
+
   // Register Tenant Action
   registerTenant: (tenantData: {
     name: string;
@@ -166,6 +173,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return local ? JSON.parse(local) : mockSystemLogs;
   });
 
+  const [pricingPlans, setPricingPlans] = useState<PlanPricing[]>(() => {
+    const local = localStorage.getItem('mf_pricing');
+    if (local) return JSON.parse(local);
+    return [
+      {
+        id: 'free',
+        name: 'Free Tier',
+        priceUSD: 0,
+        priceETB: 0,
+        description: 'Get menu service for free! Basic digital menu, QR scanning, and self-serve dine-in ordering.',
+        features: ['1 branch', 'digital menus & QR scans']
+      },
+      {
+        id: 'growth',
+        name: 'Growth Plan',
+        priceUSD: 29,
+        priceETB: 1500,
+        description: 'Unlock multi-branch sync, interactive kitchen/waiter stations, detailed reporting & CRM.',
+        features: ['Multi-branch', 'full KDS', 'automated metrics']
+      },
+      {
+        id: 'enterprise',
+        name: 'Enterprise Plan',
+        priceUSD: 99,
+        priceETB: 5000,
+        description: 'Unlimited branches, customized branding, high-frequency Live API, and 24/7 dedicated account manager.',
+        features: ['SLA guarantee', 'central controls', 'custom branding']
+      }
+    ];
+  });
+
   const [ads, setAds] = useState<PlatformAd[]>(() => {
     const local = localStorage.getItem('mf_ads');
     if (local) return JSON.parse(local);
@@ -191,6 +229,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
 
   // Sync to local storage on state changes
+  useEffect(() => {
+    localStorage.setItem('mf_pricing', JSON.stringify(pricingPlans));
+  }, [pricingPlans]);
+
   useEffect(() => {
     localStorage.setItem('mf_ads', JSON.stringify(ads));
   }, [ads]);
@@ -420,6 +462,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addLog('Delete Menu Item', `Deleted menu item: ${itemName}`);
   };
 
+  const toggleMenuItemAvailability = (tenantId: string, itemId: string) => {
+    const itemName = menuItems[tenantId]?.find(i => i.id === itemId)?.name || '';
+    setMenuItems(prev => {
+      const list = prev[tenantId] || [];
+      return {
+        ...prev,
+        [tenantId]: list.map(i => i.id === itemId ? { ...i, isAvailable: !i.isAvailable } : i)
+      };
+    });
+    const currentItem = menuItems[tenantId]?.find(i => i.id === itemId);
+    if (currentItem) {
+      addLog('Toggle Availability', `Toggled availability for menu item ${itemName} to ${!currentItem.isAvailable ? 'available' : 'unavailable'}`);
+    }
+  };
+
   // Tables
   const addTable = (tableData: Omit<Table, 'id' | 'qrUrl'>) => {
     const id = `tab-${Date.now()}`;
@@ -611,6 +668,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addLog('Cancel Order', `Order ${orderId} was cancelled. Reason: ${reason}`);
   };
 
+  const verifyAdvancePayment = (orderId: string, approve: boolean, rejectionReason?: string) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      if (approve) {
+        return {
+          ...o,
+          paymentVerificationStatus: 'approved' as const,
+          paymentStatus: 'paid' as const,
+          status: 'submitted' as const // Now ready to reach kitchen (submitted status)
+        };
+      } else {
+        return {
+          ...o,
+          paymentVerificationStatus: 'rejected' as const,
+          status: 'cancelled' as const,
+          notes: rejectionReason ? `${o.notes || ''} [Rejected: ${rejectionReason}]` : o.notes
+        };
+      }
+    }));
+    addLog('Verify Advance Payment', `Advance payment for order ${orderId} was ${approve ? 'approved' : 'rejected'}.`);
+  };
+
   // Staff
   const addStaffMember = (memberData: Omit<Staff, 'id' | 'active'>) => {
     const newStaff: Staff = {
@@ -665,6 +744,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
+  const updateTenantProfile = (tenantId: string, logoUrl: string, bankAccount: string) => {
+    setTenants(prev => prev.map(t => {
+      if (t.id !== tenantId) return t;
+      addLog('Settings Override', `Tenant ${t.name} logo and bank details updated.`);
+      return { ...t, logoUrl, bankAccount };
+    }));
+  };
+
   const approveTenantStatus = (tenantId: string) => {
     setTenants(prev => prev.map(t => {
       if (t.id !== tenantId) return t;
@@ -707,6 +794,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (ad) addLog('Ad Operations', `Deleted ad: ${ad.title}`);
       return prev.filter(a => a.id !== id);
     });
+  };
+
+  const updatePlanPrice = (planId: SubscriptionPlan, newPriceUSD: number, newPriceETB: number) => {
+    setPricingPlans(prev => prev.map(p => {
+      if (p.id !== planId) return p;
+      addLog('Pricing Operations', `Updated ${p.name} price to USD ${newPriceUSD} / ETB ${newPriceETB}`);
+      return { ...p, priceUSD: newPriceUSD, priceETB: newPriceETB };
+    }));
   };
 
   const registerTenant = (data: {
@@ -780,9 +875,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         photoUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=80',
         allergenTags: [],
         dietaryTags: ['Popular'],
-        status: 'available' as const,
-        modifierGroups: [],
-        estimatedPrepTime: 15
+        isAvailable: true,
+        modifiers: [],
+        preparationStationId: ''
       },
       {
         id: `item-2-${Date.now()}`,
@@ -794,9 +889,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         photoUrl: 'https://images.unsplash.com/photo-1577968897966-3d4325b36b61?w=500&auto=format&fit=crop&q=80',
         allergenTags: ['Dairy'],
         dietaryTags: ['Vegetarian'],
-        status: 'available' as const,
-        modifierGroups: [],
-        estimatedPrepTime: 5
+        isAvailable: true,
+        modifiers: [],
+        preparationStationId: ''
       }
     ];
 
@@ -890,6 +985,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addMenuItem,
       updateMenuItem,
       deleteMenuItem,
+      toggleMenuItemAvailability,
       addTable,
       updateTableStatus,
       addStation,
@@ -899,18 +995,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       processPayment,
       rateAndFeedback,
       cancelOrder,
+      verifyAdvancePayment,
       addStaffMember,
       toggleStaffStatus,
       toggleTenantStatus,
       updateTenantPlan,
       requestTenantUpgrade,
       updateTenantCurrency,
+      updateTenantProfile,
       approveTenantStatus,
       rejectTenantStatus,
       ads,
       addAd,
       toggleAdStatus,
       deleteAd,
+      pricingPlans,
+      updatePlanPrice,
       registerTenant,
       signUpOwnerOnly,
       addLog

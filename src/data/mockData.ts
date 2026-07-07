@@ -18,6 +18,7 @@ export const mockTenants: Tenant[] = [
     loyaltyPointsRatio: 0.1, // 1 point per 10 ETB
     loyaltyMinRedeemPoints: 50,
     loyaltyRedeemValue: 1, // 1 point = 1 ETB
+    bankAccount: 'Commercial Bank of Ethiopia (CBE) - 1000123456789',
   },
   {
     id: 't-02',
@@ -36,6 +37,7 @@ export const mockTenants: Tenant[] = [
     loyaltyPointsRatio: 0.05, // 1 point per 20 USD
     loyaltyMinRedeemPoints: 10,
     loyaltyRedeemValue: 1, // 1 point = 1 USD
+    bankAccount: 'Nairobi Equity Bank - 5502938475',
   }
 ];
 

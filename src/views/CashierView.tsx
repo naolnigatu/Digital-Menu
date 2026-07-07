@@ -13,14 +13,23 @@ export default function CashierView() {
     tenants, 
     branches,
     tables,
-    processPayment 
+    processPayment,
+    verifyAdvancePayment
   } = useApp();
 
   const tenant = tenants.find(t => t.id === activeTenantId) || tenants[0];
   const branchObj = branches.find(b => b.id === activeBranchId) || branches[0];
 
   const activeUnpaidOrders = orders.filter(
-    o => o.branchId === activeBranchId && o.paymentStatus === 'unpaid' && o.status !== 'cancelled'
+    o => o.branchId === activeBranchId && 
+         o.paymentStatus === 'unpaid' && 
+         o.status !== 'cancelled' && 
+         o.paymentVerificationStatus !== 'pending' && 
+         o.paymentVerificationStatus !== 'rejected'
+  );
+
+  const pendingAdvancePayments = orders.filter(
+    o => o.branchId === activeBranchId && o.paymentVerificationStatus === 'pending'
   );
 
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -74,6 +83,83 @@ export default function CashierView() {
         
         {/* Unpaid active tickets list */}
         <div className="lg:col-span-2 space-y-4">
+          
+          {/* PRE-ARRIVAL ADVANCE BANK PAYMENTS QUEUE */}
+          {pendingAdvancePayments.length > 0 && (
+            <div className="bg-amber-50/45 rounded-2xl border border-amber-200 p-4 space-y-3 shadow-sm">
+              <h3 className="font-sans font-bold text-xs text-amber-800 uppercase tracking-wider flex items-center gap-1.5 animate-pulse">
+                <span>⚠️ Awaiting Bank Transfer Audit ({pendingAdvancePayments.length})</span>
+              </h3>
+              
+              <div className="grid gap-3 sm:grid-cols-2">
+                {pendingAdvancePayments.map((ord) => (
+                  <div key={ord.id} className="bg-white rounded-xl border border-amber-200/60 p-3.5 space-y-3 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-[9px] font-extrabold bg-amber-105 text-amber-800 rounded px-1.5 py-0.5 uppercase tracking-wider">
+                            Pickup Pre-order
+                          </span>
+                          <h4 className="font-sans font-extrabold text-xs text-slate-900 mt-1.5 leading-tight">{ord.customerName}</h4>
+                          <p className="text-[9px] text-slate-500">{ord.customerPhone}</p>
+                        </div>
+                        <span className="font-mono text-xs font-extrabold text-slate-800">{tenant.currencySymbol} {ord.total.toLocaleString()}</span>
+                      </div>
+
+                      {/* Payment Screenshot & Ref details */}
+                      <div className="mt-2.5 bg-slate-50 rounded-lg p-2 text-[10px] space-y-1 border border-slate-100">
+                        {ord.advancePaymentRef && (
+                          <p className="font-semibold text-slate-700">Ref ID: <span className="font-mono text-indigo-700">{ord.advancePaymentRef}</span></p>
+                        )}
+                        {ord.paymentScreenshotUrl ? (
+                          <div className="space-y-1">
+                            <p className="text-[9px] text-slate-400 font-bold uppercase">Receipt Screenshot:</p>
+                            <img 
+                              src={ord.paymentScreenshotUrl} 
+                              alt="Bank Transfer Receipt" 
+                              className="rounded-lg max-h-32 object-contain bg-slate-100 border border-slate-200 max-w-full"
+                            />
+                          </div>
+                        ) : (
+                          <p className="text-slate-400 italic">No payment screenshot attached.</p>
+                        )}
+                      </div>
+
+                      <div className="mt-2 text-[9px] text-slate-600 line-clamp-2 bg-slate-50/50 p-1 rounded">
+                        <strong>Items:</strong> {ord.items.map(it => `${it.quantity}x ${it.name}`).join(', ')}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-slate-100 mt-2">
+                      <button
+                        onClick={() => {
+                          const confirmApprove = window.confirm(`Approve payment and send Order ${ord.orderNum} to the kitchen?`);
+                          if (confirmApprove) {
+                            verifyAdvancePayment(ord.id, true);
+                          }
+                        }}
+                        className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 text-[10px] text-center cursor-pointer shadow-sm"
+                      >
+                        ✓ Approve
+                      </button>
+                      <button
+                        onClick={() => {
+                          const reason = window.prompt("Enter rejection reason (this will be shown to the customer):", "Transaction not found on bank statement.");
+                          if (reason !== null) {
+                            verifyAdvancePayment(ord.id, false, reason);
+                          }
+                        }}
+                        className="rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold py-1.5 text-[10px] text-center cursor-pointer"
+                      >
+                        ✗ Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <h3 className="font-sans font-bold text-xs text-slate-400 uppercase tracking-wider">Unresolved checks ({activeUnpaidOrders.length})</h3>
           
           {activeUnpaidOrders.length === 0 ? (

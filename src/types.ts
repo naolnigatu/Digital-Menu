@@ -19,6 +19,7 @@ export interface Tenant {
   loyaltyPointsRatio: number; // e.g., 1 point per 10 currency spent
   loyaltyMinRedeemPoints: number; // minimum points to start redeeming
   loyaltyRedeemValue: number; // value of 1 point in currency
+  bankAccount?: string; // Bank details for advance payment
 }
 
 export interface Branch {
@@ -113,7 +114,7 @@ export interface Order {
   items: OrderItem[];
   status: OrderStatus;
   paymentStatus: 'unpaid' | 'paid';
-  paymentMethod?: 'cash' | 'card' | 'mobile_money';
+  paymentMethod?: 'cash' | 'card' | 'mobile_money' | 'bank_transfer';
   discount: number; // Absolute value
   tax: number; // Absolute value
   serviceCharge: number; // Absolute value
@@ -126,6 +127,9 @@ export interface Order {
   loyaltyPointsRedeemed?: number;
   rating?: number;
   feedback?: string;
+  paymentScreenshotUrl?: string; // payment screenshot uploaded by customer
+  paymentVerificationStatus?: 'pending' | 'approved' | 'rejected'; // For advance payments
+  advancePaymentRef?: string;
 }
 
 export interface Staff {
@@ -155,6 +159,15 @@ export interface PlatformStats {
   totalOrders: number;
   totalRevenue: number;
   monthlyGrowthRate: number;
+}
+
+export interface PlanPricing {
+  id: SubscriptionPlan;
+  name: string;
+  priceUSD: number;
+  priceETB: number;
+  description: string;
+  features: string[];
 }
 
 export interface PlatformAd {

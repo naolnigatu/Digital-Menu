@@ -10,6 +10,9 @@ export default function KDSView() {
     orders, 
     stations, 
     activeBranchId, 
+    activeTenantId,
+    menuItems,
+    toggleMenuItemAvailability,
     currentUser, 
     updateOrderItemStatus 
   } = useApp();
@@ -23,6 +26,8 @@ export default function KDSView() {
 
   // Force trigger state reload for timers
   const [, setTick] = useState(0);
+  const [showAvailabilityPanel, setShowAvailabilityPanel] = useState(false);
+  const [menuSearchQuery, setMenuSearchQuery] = useState('');
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -76,6 +81,7 @@ export default function KDSView() {
 
   orders.forEach(o => {
     if (o.status === 'completed' || o.status === 'cancelled') return;
+    if (o.paymentVerificationStatus === 'pending' || o.paymentVerificationStatus === 'rejected') return;
 
     o.items.forEach(it => {
       if (it.assignedStationId === activeStationId) {
@@ -128,7 +134,19 @@ export default function KDSView() {
         </div>
 
         {/* Station Select Toggle */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowAvailabilityPanel(!showAvailabilityPanel)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
+              showAvailabilityPanel 
+                ? 'bg-slate-900 border-slate-900 text-white' 
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <Settings className="h-3.5 w-3.5" />
+            <span>Manage Stock Availability</span>
+          </button>
+
           <label className="text-xs font-bold text-slate-400 uppercase">Station Grid:</label>
           <select 
             value={activeStationId}
@@ -141,6 +159,75 @@ export default function KDSView() {
           </select>
         </div>
       </div>
+
+      {/* Availability Control Panel */}
+      {showAvailabilityPanel && (
+        <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-4 animate-in slide-in-from-top duration-200 shadow-sm">
+          <div className="flex items-center justify-between gap-4 border-b border-slate-150 pb-2.5 flex-wrap">
+            <div>
+              <h3 className="font-sans font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                <Settings className="h-4 w-4 text-indigo-600" />
+                <span>Cook Item Stock Controller ({activeStationName})</span>
+              </h3>
+              <p className="text-[11px] text-slate-400">Mark dishes as Out of Stock (Sold Out) to automatically grey them out and prevent customer orders.</p>
+            </div>
+            
+            <input
+              type="text"
+              placeholder="Filter dishes/drinks..."
+              value={menuSearchQuery}
+              onChange={(e) => setMenuSearchQuery(e.target.value)}
+              className="bg-white rounded-lg border border-slate-200 px-3 py-1 text-xs w-full sm:w-64 focus:outline-none focus:border-slate-400 font-semibold"
+            />
+          </div>
+
+          {(() => {
+            const activeTenantMenuItems = menuItems[activeTenantId] || [];
+            const stationMenuItems = activeTenantMenuItems.filter(item => item.preparationStationId === activeStationId);
+            const filteredMenu = stationMenuItems.filter(item => item.name.toLowerCase().includes(menuSearchQuery.toLowerCase()));
+
+            if (stationMenuItems.length === 0) {
+              return <p className="text-xs text-slate-400 text-center py-4">No menu items mapped to the "{activeStationName}" station.</p>;
+            }
+
+            return (
+              <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                {filteredMenu.map(item => (
+                  <div 
+                    key={item.id} 
+                    className={`p-2.5 rounded-xl border flex items-center justify-between gap-3 bg-white shadow-sm transition-all ${
+                      item.isAvailable !== false 
+                        ? 'border-slate-150' 
+                        : 'border-rose-200 bg-rose-50/25'
+                    }`}
+                  >
+                    <div className="space-y-0.5 min-w-0">
+                      <p className={`text-xs font-bold truncate ${item.isAvailable !== false ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
+                        {item.name}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-semibold">
+                        {item.isAvailable !== false ? '🟢 Available' : '🔴 Sold Out'}
+                      </p>
+                    </div>
+                    
+                    <button
+                      type="button"
+                      onClick={() => toggleMenuItemAvailability(activeTenantId, item.id)}
+                      className={`px-2 py-0.5 text-[9px] font-extrabold rounded-md border cursor-pointer transition-all ${
+                        item.isAvailable !== false 
+                          ? 'bg-slate-900 border-slate-900 text-white hover:bg-slate-800' 
+                          : 'bg-rose-600 border-rose-600 text-white hover:bg-rose-700'
+                      }`}
+                    >
+                      {item.isAvailable !== false ? 'OOS' : 'In Stock'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Stats of tickets at this station */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center bg-white border border-slate-200 rounded-xl p-4 text-xs text-slate-600 shadow-sm">

@@ -35,8 +35,8 @@ export default function CustomerView() {
   const [orderType, setOrderType] = useState<'dine_in' | 'pickup'>('dine_in');
 
   // Customer Profile & Cart State
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerName, setCustomerName] = useState(() => localStorage.getItem('mf_cust_name') || '');
+  const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('mf_cust_phone') || '');
   const [pickupTime, setPickupTime] = useState('ASAP');
   const [cart, setCart] = useState<{ 
     item: MenuItem; 
@@ -45,12 +45,56 @@ export default function CustomerView() {
     selectedMods: { groupName: string; optionName: string; price: number }[] 
   }[]>([]);
 
+  React.useEffect(() => {
+    localStorage.setItem('mf_cust_name', customerName);
+  }, [customerName]);
+
+  React.useEffect(() => {
+    localStorage.setItem('mf_cust_phone', customerPhone);
+  }, [customerPhone]);
+
   // Modals & Tracking
   const [activeItemDetails, setActiveItemDetails] = useState<MenuItem | null>(null);
   const [selectedMods, setSelectedMods] = useState<{ groupName: string; optionName: string; price: number }[]>([]);
   const [itemNote, setItemNote] = useState('');
+  const [itemQty, setItemQty] = useState<number>(1);
+  const [paymentScreenshot, setPaymentScreenshot] = useState<string>('');
+  const [paymentScreenshotName, setPaymentScreenshotName] = useState<string>('');
+  const [paymentRef, setPaymentRef] = useState<string>('');
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [activeCustomerOrder, setActiveCustomerOrder] = useState<Order | null>(null);
+  const [isTrackModalOpen, setIsTrackModalOpen] = useState(false);
+  const [trackSearchQuery, setTrackSearchQuery] = useState('');
+  const [trackError, setTrackError] = useState('');
+  const [myOrderIds, setMyOrderIds] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('mf_my_orders') || '[]');
+    } catch {
+      return [];
+    }
+  });
+
+  const saveOrderId = (id: string) => {
+    setMyOrderIds(prev => {
+      const next = [...new Set([...prev, id])];
+      localStorage.setItem('mf_my_orders', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  // Loyalty Badge calculations
+  const currentPhone = customerPhone.trim();
+  const currentName = customerName.trim();
+  const customerCompletedCount = orders.filter(o => 
+    o.tenantId === activeTenantId && 
+    o.status === 'completed' && 
+    (
+      (currentPhone && o.customerPhone === currentPhone) || 
+      (currentName && o.customerName === currentName)
+    )
+  ).length;
+
+  const hasLoyaltyBadge = customerCompletedCount >= 10;
 
   // Review state
   const [rating, setRating] = useState(5);
@@ -89,18 +133,26 @@ export default function CustomerView() {
   const handleOpenItemDetails = (item: MenuItem) => {
     setActiveItemDetails(item);
     setItemNote('');
-    // Default select first option of each modifier group
-    const defaults = item.modifiers.map(g => ({
-      groupName: g.name,
-      optionName: g.options[0].name,
-      price: g.options[0].price
-    }));
+    setItemQty(1); // Reset quantity to 1
+    // Default select first option of each modifier group EXCEPT if it contains "injera"
+    const defaults = item.modifiers
+      .filter(g => !g.name.toLowerCase().includes('injera'))
+      .map(g => ({
+        groupName: g.name,
+        optionName: g.options[0].name,
+        price: g.options[0].price
+      }));
     setSelectedMods(defaults);
   };
 
   const handleModifierToggle = (groupName: string, optionName: string, price: number) => {
     setSelectedMods(prev => {
+      const alreadySelected = prev.some(m => m.groupName === groupName && m.optionName === optionName);
       const filtered = prev.filter(m => m.groupName !== groupName);
+      if (alreadySelected) {
+        // Toggle off if already selected
+        return filtered;
+      }
       return [...filtered, { groupName, optionName, price }];
     });
   };
@@ -115,13 +167,13 @@ export default function CustomerView() {
 
       if (existingIdx > -1) {
         const copy = [...prev];
-        copy[existingIdx].qty += 1;
+        copy[existingIdx].qty += itemQty; // Respect itemQty instead of defaulting to 1
         return copy;
       }
 
       return [...prev, { 
         item: activeItemDetails, 
-        qty: 1, 
+        qty: itemQty, // Respect itemQty instead of defaulting to 1
         notes: itemNote, 
         selectedMods 
       }];
@@ -137,8 +189,34 @@ export default function CustomerView() {
     }, 0);
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setPaymentScreenshotName(file.name);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setPaymentScreenshot(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handlePlaceOrder = () => {
     if (cart.length === 0) return;
+
+    // Validate payment screenshot for pickup pre-orders
+    if (orderType === 'pickup') {
+      if (!customerName.trim() || !customerPhone.trim()) {
+        alert('Please provide your Name and Phone Number for your pickup order.');
+        return;
+      }
+      if (!paymentScreenshot) {
+        alert('Please pay in advance and upload your payment screenshot to place a pickup order.');
+        return;
+      }
+    }
 
     const orderItems: OrderItem[] = cart.map((cartItem, idx) => ({
       id: `oi-${Date.now()}-${idx}`,
@@ -163,11 +241,86 @@ export default function CustomerView() {
       discount: 0,
       subtotal: 0, // context auto-computes calculations
       total: 0,
-      pickupTime: orderType === 'pickup' ? pickupTime : undefined
+      pickupTime: orderType === 'pickup' ? pickupTime : undefined,
+      paymentScreenshotUrl: orderType === 'pickup' ? (paymentScreenshot || undefined) : undefined,
+      paymentVerificationStatus: orderType === 'pickup' ? 'pending' : undefined,
+      advancePaymentRef: orderType === 'pickup' ? (paymentRef || undefined) : undefined,
+      paymentMethod: orderType === 'pickup' ? 'bank_transfer' : undefined,
     });
+
+    saveOrderId(submitted.id);
+
+    // Reset payment upload states
+    setPaymentScreenshot('');
+    setPaymentScreenshotName('');
+    setPaymentRef('');
 
     // Set order for live tracking
     setActiveCustomerOrder(submitted);
+    setCart([]);
+    setIsCartOpen(false);
+    setReviewSubmitted(false);
+    setFeedback('');
+    setRating(5);
+  };
+
+  const handleDirectOrder = () => {
+    if (!activeItemDetails) return;
+
+    // Validate for pickup pre-orders
+    if (orderType === 'pickup') {
+      if (!customerName.trim() || !customerPhone.trim()) {
+        alert('Please enter your Name and Phone Number in the checkout fields first so the restaurant can contact you!');
+        setIsCartOpen(true); // Open cart to show profile inputs
+        return;
+      }
+      if (!paymentScreenshot) {
+        alert(`Aisha's Traditional Kitchen requires advance payment for pickup orders. Please upload a payment screenshot in the cart checkout panel first.`);
+        setIsCartOpen(true); // Open cart to show payment fields
+        return;
+      }
+    }
+
+    const orderItems: OrderItem[] = [{
+      id: `oi-${Date.now()}-direct`,
+      menuItemId: activeItemDetails.id,
+      name: activeItemDetails.name,
+      price: activeItemDetails.price,
+      quantity: itemQty,
+      selectedModifiers: selectedMods,
+      status: 'received',
+      notes: itemNote || undefined,
+      assignedStationId: activeItemDetails.preparationStationId
+    }];
+
+    const submitted = placeOrder({
+      tenantId: activeTenantId,
+      branchId: activeBranchId,
+      tableId: orderType === 'dine_in' ? activeTableId : undefined,
+      type: orderType,
+      customerName: customerName || 'Guest User',
+      customerPhone: customerPhone || undefined,
+      items: orderItems,
+      discount: 0,
+      subtotal: 0,
+      total: 0,
+      pickupTime: orderType === 'pickup' ? pickupTime : undefined,
+      paymentScreenshotUrl: orderType === 'pickup' ? (paymentScreenshot || undefined) : undefined,
+      paymentVerificationStatus: orderType === 'pickup' ? 'pending' : undefined,
+      advancePaymentRef: orderType === 'pickup' ? (paymentRef || undefined) : undefined,
+      paymentMethod: orderType === 'pickup' ? 'bank_transfer' : undefined,
+    });
+
+    saveOrderId(submitted.id);
+
+    // Reset payment states
+    setPaymentScreenshot('');
+    setPaymentScreenshotName('');
+    setPaymentRef('');
+
+    // Set order for live tracking
+    setActiveCustomerOrder(submitted);
+    setActiveItemDetails(null);
     setCart([]);
     setIsCartOpen(false);
     setReviewSubmitted(false);
@@ -326,16 +479,68 @@ export default function CustomerView() {
             </button>
           )}
 
-          {/* Search Input */}
-          <div className="relative">
-            <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder={currentLanguage === 'en' ? 'Search dishes or drinks...' : 'ምግብ ወይም መጠጥ ፈልግ...'}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-600"
-            />
+          {/* CUSTOMER LOYALTY CARD */}
+          {(customerName || customerPhone) && (
+            <div className="mx-0 mt-1 p-3 bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950 rounded-2xl text-white flex items-center justify-between gap-3 shadow-sm border border-indigo-500/20">
+              <div className="space-y-0.5">
+                <p className="text-[8px] font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1">
+                  <Award className="h-3.5 w-3.5 text-yellow-400" />
+                  <span>Patron Status Profile</span>
+                </p>
+                <h4 className="font-sans font-extrabold text-xs text-white flex items-center gap-1.5 flex-wrap">
+                  {customerName || 'Valued Guest'} 
+                  {hasLoyaltyBadge && (
+                    <span className="bg-amber-400 text-slate-950 font-extrabold text-[8px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                      👑 10x Loyalty Badge
+                    </span>
+                  )}
+                </h4>
+                <p className="text-[10px] text-slate-300 leading-normal">
+                  Completed orders at this branch: <strong>{customerCompletedCount}</strong>
+                </p>
+              </div>
+
+              {!hasLoyaltyBadge ? (
+                <div className="text-right space-y-1 shrink-0">
+                  <div className="w-20 bg-white/25 h-1.5 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-indigo-400 h-full rounded-full" 
+                      style={{ width: `${Math.min(100, (customerCompletedCount / 10) * 100)}%` }} 
+                    />
+                  </div>
+                  <span className="text-[8px] text-slate-300 font-semibold block">{customerCompletedCount}/10 for Loyalty Badge</span>
+                </div>
+              ) : (
+                <div className="bg-amber-400/20 border border-amber-400/30 p-1.5 rounded-xl text-center shrink-0">
+                  <span className="text-xs">👑 Gold</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Search Input & Track */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder={currentLanguage === 'en' ? 'Search dishes or drinks...' : 'ምግብ ወይም መጠጥ ፈልግ...'}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-600"
+              />
+            </div>
+            <button
+              onClick={() => {
+                setTrackSearchQuery(customerPhone || '');
+                setTrackError('');
+                setIsTrackModalOpen(true);
+              }}
+              className="bg-slate-900 text-white px-3 py-2 rounded-xl text-[10px] font-bold shadow-sm whitespace-nowrap hover:bg-slate-800 flex items-center gap-1.5"
+            >
+              <ClipboardList className="h-3.5 w-3.5" />
+              My Orders
+            </button>
           </div>
 
           {/* Category Badges scroll */}
@@ -371,18 +576,23 @@ export default function CustomerView() {
             {filteredItems.map(item => {
               const info = getTranslatedText(item);
               const hasAmharic = !!item.translations?.am;
+              const isAvailable = item.isAvailable !== false;
 
               return (
                 <div 
                   key={item.id} 
-                  onClick={() => handleOpenItemDetails(item)}
-                  className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm flex gap-3 cursor-pointer hover:border-indigo-500 hover:shadow-md transition-all duration-200"
+                  onClick={isAvailable ? () => handleOpenItemDetails(item) : undefined}
+                  className={`rounded-2xl border p-3 shadow-sm flex gap-3 transition-all duration-200 ${
+                    isAvailable
+                      ? 'border-slate-200 bg-white cursor-pointer hover:border-indigo-500 hover:shadow-md'
+                      : 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
+                  }`}
                 >
                   {item.photoUrl && (
                     <img 
                       src={item.photoUrl} 
                       alt={item.name} 
-                      className="h-20 w-20 rounded-xl object-cover shrink-0 border border-slate-50"
+                      className={`h-20 w-20 rounded-xl object-cover shrink-0 border border-slate-50 ${!isAvailable && 'grayscale'}`}
                       referrerPolicy="no-referrer"
                     />
                   )}
@@ -390,8 +600,12 @@ export default function CustomerView() {
                   <div className="flex-1 flex flex-col justify-between">
                     <div className="space-y-1">
                       <div className="flex justify-between items-start gap-1">
-                        <h4 className="text-xs font-extrabold text-slate-900">{info.name}</h4>
-                        <span className="font-mono text-xs font-bold text-slate-900 shrink-0">{activeTenant.currencySymbol} {item.price}</span>
+                        <h4 className={`text-xs font-extrabold ${isAvailable ? 'text-slate-900' : 'text-slate-500 line-through'}`}>{info.name}</h4>
+                        {isAvailable ? (
+                          <span className="font-mono text-xs font-bold text-slate-900 shrink-0">{activeTenant.currencySymbol} {item.price}</span>
+                        ) : (
+                          <span className="text-[9px] font-extrabold bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded uppercase shrink-0">Sold Out</span>
+                        )}
                       </div>
                       <p className="text-[10px] text-slate-400 leading-relaxed line-clamp-2">{info.description}</p>
                     </div>
@@ -402,7 +616,11 @@ export default function CustomerView() {
                           <span key={tag} className="rounded-md bg-emerald-50 px-1.5 py-0.25 text-[8px] font-bold text-emerald-700">{tag}</span>
                         ))}
                       </div>
-                      <span className="text-[9px] font-bold text-indigo-600 flex items-center gap-0.5">Customize <ArrowRight className="h-2.5 w-2.5" /></span>
+                      {isAvailable ? (
+                        <span className="text-[9px] font-bold text-indigo-600 flex items-center gap-0.5">Customize <ArrowRight className="h-2.5 w-2.5" /></span>
+                      ) : (
+                        <span className="text-[9px] font-extrabold text-slate-400">Unavailable</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -430,7 +648,7 @@ export default function CustomerView() {
 
                 {/* Modifiers selector list */}
                 <div className="space-y-4">
-                  {activeItemDetails.modifiers.map(group => (
+                  {activeItemDetails.modifiers.filter(g => !g.name.toLowerCase().includes('injera')).map(group => (
                     <div key={group.id} className="space-y-2">
                       <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                         <span>{group.name}</span>
@@ -460,6 +678,28 @@ export default function CustomerView() {
                     </div>
                   ))}
 
+                  {/* Item Quantity Selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">How many pieces / portions?</label>
+                    <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-1.5 max-w-[140px] border border-slate-150">
+                      <button
+                        type="button"
+                        onClick={() => setItemQty(prev => Math.max(1, prev - 1))}
+                        className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-100 cursor-pointer text-xs"
+                      >
+                        -
+                      </button>
+                      <span className="font-sans font-bold text-xs text-slate-800 text-center flex-1">{itemQty}</span>
+                      <button
+                        type="button"
+                        onClick={() => setItemQty(prev => prev + 1)}
+                        className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-600 hover:bg-slate-100 cursor-pointer text-xs"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Cooking Note field */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase">Preparation requests / Notes</label>
@@ -473,13 +713,140 @@ export default function CustomerView() {
                   </div>
                 </div>
 
-                <button
-                  onClick={handleAddToCart}
-                  className="w-full rounded-lg bg-slate-950 text-white font-bold py-2.5 text-xs hover:bg-slate-800 transition-colors cursor-pointer"
-                >
-                  Add to Cart
-                </button>
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-50">
+                  <button
+                    onClick={handleAddToCart}
+                    className="w-full rounded-lg bg-slate-100 text-slate-800 border border-slate-200 font-bold py-2.5 text-xs hover:bg-slate-200 transition-colors cursor-pointer"
+                  >
+                    Add to Cart
+                  </button>
+                  <button
+                    onClick={handleDirectOrder}
+                    className="w-full rounded-lg bg-slate-950 text-white font-bold py-2.5 text-xs hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    Order now
+                  </button>
+                </div>
 
+              </div>
+            </div>
+          )}
+
+          {/* TRACK ORDER / MY ORDERS MODAL */}
+          {isTrackModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
+              <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center border-b border-slate-50 pb-2">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <ClipboardList className="h-4 w-4" /> My Orders
+                  </span>
+                  <button 
+                    onClick={() => setIsTrackModalOpen(false)}
+                    className="text-xs text-slate-400 hover:text-slate-600 font-bold"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                
+                <div className="space-y-4">
+                  {/* Show recent orders if we have a phone number or saved orders */}
+                  {(customerPhone || myOrderIds.length > 0) && (
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase">Recent Orders</label>
+                      {(() => {
+                        const userOrders = orders.filter(o => 
+                          o.tenantId === activeTenantId && 
+                          (myOrderIds.includes(o.id) || (customerPhone && o.customerPhone === customerPhone))
+                        );
+
+                        if (userOrders.length > 0) {
+                          return (
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {userOrders
+                                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                                .map(order => (
+                                  <button
+                                    key={order.id}
+                                    onClick={() => {
+                                      setActiveCustomerOrder(order);
+                                      setIsTrackModalOpen(false);
+                                    }}
+                                    className="w-full text-left p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-colors flex justify-between items-center"
+                                  >
+                                    <div>
+                                      <p className="font-bold text-xs text-slate-800">{order.orderNum}</p>
+                                      <p className="text-[10px] text-slate-500">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {order.items.length} items</p>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
+                                        order.status === 'completed' || order.status === 'delivered' ? 'bg-emerald-100 text-emerald-700' :
+                                        order.status === 'cancelled' ? 'bg-rose-100 text-rose-700' :
+                                        'bg-indigo-100 text-indigo-700'
+                                      }`}>
+                                        {order.status.toUpperCase()}
+                                      </span>
+                                      <p className="text-[10px] font-mono text-slate-600 mt-1">{activeTenant.currencySymbol} {order.total}</p>
+                                    </div>
+                                  </button>
+                                ))}
+                            </div>
+                          );
+                        } else {
+                          return <p className="text-[10px] text-slate-400 italic">No recent orders found.</p>;
+                        }
+                      })()}
+                      
+                      <div className="relative flex items-center py-2">
+                        <div className="flex-grow border-t border-slate-100"></div>
+                        <span className="flex-shrink-0 mx-2 text-[9px] text-slate-400 font-semibold uppercase">Or Track Another</span>
+                        <div className="flex-grow border-t border-slate-100"></div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <p className="text-[10px] text-slate-500">
+                      Enter a phone number or exact Order ID to track progress.
+                    </p>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase">Phone or Order ID</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 0911... or ORD-1234"
+                        value={trackSearchQuery}
+                        onChange={(e) => setTrackSearchQuery(e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold mt-1"
+                      />
+                    </div>
+                    {trackError && (
+                      <p className="text-[10px] text-rose-600 font-bold bg-rose-50 p-1.5 rounded">{trackError}</p>
+                    )}
+                    <button
+                      onClick={() => {
+                        const query = trackSearchQuery.trim();
+                        if (!query) {
+                          setTrackError("Please enter a phone number or order ID.");
+                          return;
+                        }
+                        
+                        const foundOrder = orders.find(o => 
+                          o.tenantId === activeTenantId && 
+                          (o.customerPhone === query || o.id.includes(query) || o.orderNum.includes(query))
+                        );
+
+                        if (foundOrder) {
+                          setActiveCustomerOrder(foundOrder);
+                          setIsTrackModalOpen(false);
+                        } else {
+                          setTrackError("No orders found matching your query.");
+                        }
+                      }}
+                      className="w-full rounded-lg bg-indigo-600 text-white font-bold py-2 text-xs hover:bg-indigo-500 transition-colors"
+                    >
+                      Search & Track
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -539,13 +906,58 @@ export default function CustomerView() {
                       className="w-full rounded-lg border border-slate-200 px-3 py-1.5"
                     />
                     {orderType === 'pickup' && (
-                      <input
-                        type="text"
-                        placeholder="Pickup Time (e.g. 12:30 PM)"
-                        value={pickupTime}
-                        onChange={(e) => setPickupTime(e.target.value)}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-1.5"
-                      />
+                      <>
+                        <input
+                          type="text"
+                          placeholder="Pickup Time (e.g. 12:30 PM)"
+                          value={pickupTime}
+                          onChange={(e) => setPickupTime(e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                        />
+                        
+                        <div className="space-y-2 p-2.5 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 mt-1">
+                          <div className="space-y-1">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase">Pre-Arrival Advance Payment</p>
+                            <p className="text-[10px] text-slate-500">
+                              Please transfer the total of <strong className="font-mono text-slate-900">{activeTenant.currencySymbol} {calculateCartTotal()}</strong> to:
+                            </p>
+                            <div className="bg-white rounded-lg p-2 border border-slate-100 text-[10px] text-slate-800 space-y-1 shadow-sm">
+                              <p className="font-bold">🏦 Commercial Bank of Ethiopia (CBE)</p>
+                              <p>Account: <strong className="font-mono text-indigo-700">{activeTenant.bankAccount || '1000123456789'}</strong></p>
+                              <p>Name: <strong>{activeTenant.name} Kitchen</strong></p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase block">Upload Receipt/Screenshot</label>
+                            <label className="cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 rounded-lg py-1 px-2.5 flex items-center justify-center gap-1 text-[10px] text-slate-600 transition-all font-semibold shadow-sm">
+                              <span>📁 Choose Screenshot...</span>
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                onChange={handleFileChange} 
+                                className="hidden" 
+                              />
+                            </label>
+                            {paymentScreenshotName && (
+                              <p className="text-[9px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
+                                ✓ {paymentScreenshotName}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase block">Transaction Reference</label>
+                            <input
+                              type="text"
+                              placeholder="e.g., CBE-TXN987"
+                              value={paymentRef}
+                              onChange={(e) => setPaymentRef(e.target.value)}
+                              className="w-full bg-white rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold"
+                            />
+                          </div>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -585,39 +997,74 @@ export default function CustomerView() {
 
             {/* Step Timeline */}
             <div className="space-y-4 pt-2">
-              {[
-                { label: 'Order Submitted', status: 'submitted', desc: 'SaaS routed your ticket to kitchen stations.' },
-                { label: 'Chef Preparing Dishes', status: 'cooking', desc: 'Food is slow-cooking on stove grills.' },
-                { label: 'Plated & Ready for Pick', status: 'ready', desc: 'Ready at station counter for floor waiter.' },
-                { label: 'Meal Delivered to Table', status: 'delivered', desc: 'Tasty traditional food arrived. Enjoy!' }
-              ].map((step, idx) => {
-                const statuses = ['submitted', 'cooking', 'ready', 'delivered', 'completed'];
-                const stepIdx = statuses.indexOf(step.status);
-                const currentIdx = statuses.indexOf(currentLiveOrder.status);
-                const isFinished = currentIdx >= stepIdx;
-                const isCurrent = currentLiveOrder.status === step.status;
-
-                return (
-                  <div key={idx} className="flex gap-3">
-                    <div className="flex flex-col items-center shrink-0">
-                      <div className={`h-6 w-6 rounded-full flex items-center justify-center border text-xs font-bold ${
-                        isFinished 
-                          ? 'bg-emerald-600 text-white border-emerald-600' 
-                          : 'bg-white text-slate-300 border-slate-200'
-                      }`}>
-                        {isFinished ? '✓' : idx + 1}
-                      </div>
-                      {idx < 3 && <div className={`h-8 w-0.5 ${isFinished ? 'bg-emerald-500' : 'bg-slate-100'}`}></div>}
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className={`text-xs font-bold ${isCurrent ? 'text-indigo-600' : isFinished ? 'text-slate-800' : 'text-slate-400'}`}>
-                        {step.label}
-                      </p>
-                      <p className="text-[10px] text-slate-400">{step.desc}</p>
-                    </div>
+              {currentLiveOrder.paymentVerificationStatus === 'pending' ? (
+                <div className="text-center p-4 space-y-3 bg-amber-50/50 rounded-2xl border border-amber-100 animate-pulse">
+                  <span className="text-2xl">⏳</span>
+                  <h4 className="font-sans font-bold text-sm text-amber-800">Awaiting Bank Transfer Verification</h4>
+                  <p className="text-[11px] text-amber-700 leading-normal">
+                    Your advance payment details have reached the cashier. Once your CBE transfer is verified, your order will reach the kitchen cooks!
+                  </p>
+                  <div className="bg-white p-3 rounded-xl text-left border border-amber-200 text-[10px] space-y-1 mt-2 shadow-sm">
+                    <p className="text-slate-400 font-bold">YOUR TRANSFER INFORMATION:</p>
+                    <p className="font-semibold text-slate-700">Bank CBE Account: {activeTenant.bankAccount || '1000123456789'}</p>
+                    {currentLiveOrder.advancePaymentRef && <p className="font-semibold text-slate-700">Ref ID: {currentLiveOrder.advancePaymentRef}</p>}
+                    <p className="text-[9px] text-amber-600 font-bold italic mt-1">Cashier is auditing the receipt screenshot now.</p>
                   </div>
-                );
-              })}
+                </div>
+              ) : currentLiveOrder.paymentVerificationStatus === 'rejected' ? (
+                <div className="text-center p-4 space-y-3 bg-rose-50 rounded-2xl border border-rose-100">
+                  <span className="text-2xl">❌</span>
+                  <h4 className="font-sans font-bold text-sm text-rose-800">Payment Audit Rejected</h4>
+                  <p className="text-[11px] text-rose-700 leading-normal">
+                    The cashier rejected this bank transfer screenshot or transaction reference. Please place a new order.
+                  </p>
+                  {currentLiveOrder.notes && currentLiveOrder.notes.includes('[Rejected:') && (
+                    <div className="bg-white p-2 rounded-lg text-[10px] text-rose-800 border border-rose-100 italic text-left">
+                      <strong>Reason: </strong> {currentLiveOrder.notes.split('[Rejected:')[1].replace(']', '')}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setActiveCustomerOrder(null)}
+                    className="mt-2 w-full rounded-lg bg-rose-950 text-white font-bold py-2 text-xs hover:bg-rose-800 transition-colors"
+                  >
+                    Go Back & Order Again
+                  </button>
+                </div>
+              ) : (
+                [
+                  { label: 'Order Submitted', status: 'submitted', desc: 'SaaS routed your ticket to kitchen stations.' },
+                  { label: 'Chef Preparing Dishes', status: 'cooking', desc: 'Food is slow-cooking on stove grills.' },
+                  { label: 'Plated & Ready for Pick', status: 'ready', desc: 'Ready at station counter for floor waiter.' },
+                  { label: 'Meal Delivered to Table', status: 'delivered', desc: 'Tasty traditional food arrived. Enjoy!' }
+                ].map((step, idx) => {
+                  const statuses = ['submitted', 'cooking', 'ready', 'delivered', 'completed'];
+                  const stepIdx = statuses.indexOf(step.status);
+                  const currentIdx = statuses.indexOf(currentLiveOrder.status);
+                  const isFinished = currentIdx >= stepIdx;
+                  const isCurrent = currentLiveOrder.status === step.status;
+
+                  return (
+                    <div key={idx} className="flex gap-3">
+                      <div className="flex flex-col items-center shrink-0">
+                        <div className={`h-6 w-6 rounded-full flex items-center justify-center border text-xs font-bold ${
+                          isFinished 
+                            ? 'bg-emerald-600 text-white border-emerald-600' 
+                            : 'bg-white text-slate-300 border-slate-200'
+                        }`}>
+                          {isFinished ? '✓' : idx + 1}
+                        </div>
+                        {idx < 3 && <div className={`h-8 w-0.5 ${isFinished ? 'bg-emerald-500' : 'bg-slate-100'}`}></div>}
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className={`text-xs font-bold ${isCurrent ? 'text-indigo-600' : isFinished ? 'text-slate-800' : 'text-slate-400'}`}>
+                          {step.label}
+                        </p>
+                        <p className="text-[10px] text-slate-400">{step.desc}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
