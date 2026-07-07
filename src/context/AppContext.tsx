@@ -68,6 +68,7 @@ interface AppContextType {
   // Super Admin Actions
   toggleTenantStatus: (tenantId: string) => void;
   updateTenantPlan: (tenantId: string, plan: Tenant['subscriptionPlan']) => void;
+  requestTenantUpgrade: (tenantId: string, plan: Tenant['subscriptionPlan']) => void;
   updateTenantCurrency: (tenantId: string, currency: string, currencySymbol: string) => void;
   approveTenantStatus: (tenantId: string) => void;
   rejectTenantStatus: (tenantId: string) => void;
@@ -648,6 +649,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
+  const requestTenantUpgrade = (tenantId: string, plan: Tenant['subscriptionPlan']) => {
+    setTenants(prev => prev.map(t => {
+      if (t.id !== tenantId) return t;
+      addLog('Subscription', `Tenant ${t.name} requested upgrade to: ${plan}. Status changed to pending_approval.`);
+      return { ...t, subscriptionPlan: plan, subscriptionStatus: 'pending_approval' };
+    }));
+  };
+
   const updateTenantCurrency = (tenantId: string, currency: string, currencySymbol: string) => {
     setTenants(prev => prev.map(t => {
       if (t.id !== tenantId) return t;
@@ -894,6 +903,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleStaffStatus,
       toggleTenantStatus,
       updateTenantPlan,
+      requestTenantUpgrade,
       updateTenantCurrency,
       approveTenantStatus,
       rejectTenantStatus,

@@ -30,6 +30,7 @@ export default function BusinessOwnerView() {
     addStaffMember, 
     toggleStaffStatus,
     updateTenantPlan,
+    requestTenantUpgrade,
     updateTenantCurrency
   } = useApp();
 
@@ -80,13 +81,14 @@ export default function BusinessOwnerView() {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <button
             onClick={() => {
-              updateTenantPlan(tenant.id, 'growth');
-              alert(`🎉 Success! Your restaurant "${tenant.name}" has been upgraded to the Growth Plan. All features are now fully unlocked!`);
+              requestTenantUpgrade(tenant.id, 'growth');
+              // The status must also change so the Admin can approve it
+              alert(`Your request to upgrade to the Growth Plan has been submitted to the platform admin. The features will be unlocked as soon as your payment is approved!`);
             }}
             className="w-full sm:w-auto rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-indigo-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <CreditCard className="h-4 w-4" />
-            Upgrade to Growth Plan ($29/mo)
+            Request Upgrade to Growth ($29/mo)
           </button>
           
           <button
@@ -364,7 +366,7 @@ export default function BusinessOwnerView() {
 
       {/* SUBTAB CONTENTS */}
       
-      {tenant.subscriptionPlan === 'free' && (activeSubTab === 'dashboard' || activeSubTab === 'tables' || activeSubTab === 'staff') ? (
+      {(tenant.subscriptionPlan === 'free' || tenant.subscriptionStatus === 'pending_approval') && (activeSubTab === 'dashboard' || activeSubTab === 'tables' || activeSubTab === 'staff') ? (
         renderPaywall(
           activeSubTab === 'dashboard' ? 'Analytics' : activeSubTab === 'tables' ? 'QR Tables' : 'Team Invites',
           activeSubTab === 'dashboard' 
@@ -1096,7 +1098,10 @@ export default function BusinessOwnerView() {
 
               <button
                 type="button"
-                onClick={() => updateTenantPlan(activeTenantId, 'growth')}
+                onClick={() => {
+                  requestTenantUpgrade(activeTenantId, 'growth');
+                  alert(`Upgrade request submitted! Awaiting admin approval.`);
+                }}
                 className={`rounded-xl border p-3.5 text-left transition-all ${
                   tenant.subscriptionPlan === 'growth'
                     ? 'border-slate-900 bg-slate-50 ring-1 ring-slate-900'
@@ -1110,7 +1115,10 @@ export default function BusinessOwnerView() {
 
               <button
                 type="button"
-                onClick={() => updateTenantPlan(activeTenantId, 'enterprise')}
+                onClick={() => {
+                  requestTenantUpgrade(activeTenantId, 'enterprise');
+                  alert(`Upgrade request submitted! Awaiting admin approval.`);
+                }}
                 className={`rounded-xl border p-3.5 text-left transition-all ${
                   tenant.subscriptionPlan === 'enterprise'
                     ? 'border-slate-900 bg-slate-50 ring-1 ring-slate-900'

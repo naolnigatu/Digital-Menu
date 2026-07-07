@@ -47,25 +47,22 @@ export default function OnboardingView() {
       description: 'Get menu service for free! Basic digital menu, QR scanning, and self-serve dine-in ordering.',
       badge: 'Active & Free',
       badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      locked: false,
     },
     {
       id: 'growth' as SubscriptionPlan,
       name: 'Growth Plan',
       price: '$29/mo',
       description: 'Unlock multi-branch sync, interactive kitchen/waiter stations, detailed reporting & CRM.',
-      badge: 'Upgrade to Unlock',
-      badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
-      locked: true,
+      badge: 'Select to Upgrade',
+      badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
     },
     {
       id: 'enterprise' as SubscriptionPlan,
       name: 'Enterprise Plan',
       price: '$99/mo',
       description: 'Unlimited branches, customized branding, high-frequency Live API, and 24/7 dedicated account manager.',
-      badge: 'Upgrade to Unlock',
-      badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
-      locked: true,
+      badge: 'Select to Upgrade',
+      badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
     }
   ];
 
@@ -141,12 +138,10 @@ export default function OnboardingView() {
                   {plans.map((p) => (
                     <div
                       key={p.id}
-                      onClick={() => !p.locked && setSelectedPlan(p.id)}
+                      onClick={() => setSelectedPlan(p.id)}
                       className={`relative rounded-xl border p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 transition-all ${
-                        selectedPlan === p.id && !p.locked
+                        selectedPlan === p.id
                           ? 'border-indigo-600 bg-indigo-50/20 ring-1 ring-indigo-500'
-                          : p.locked
-                          ? 'border-slate-100 bg-slate-50/50 cursor-not-allowed opacity-80'
                           : 'border-slate-200 bg-white hover:border-slate-300 cursor-pointer'
                       }`}
                     >
@@ -162,12 +157,7 @@ export default function OnboardingView() {
 
                       <div className="text-right shrink-0">
                         <span className="block font-sans font-extrabold text-sm text-slate-900">{p.price}</span>
-                        {p.locked && (
-                          <span className="inline-block text-[9px] font-bold text-amber-600 uppercase tracking-tight mt-0.5">
-                            Unlocked on upgrade
-                          </span>
-                        )}
-                        {!p.locked && selectedPlan === p.id && (
+                        {selectedPlan === p.id && (
                           <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-indigo-600 text-white mt-1">
                             <Check className="h-2.5 w-2.5" />
                           </span>

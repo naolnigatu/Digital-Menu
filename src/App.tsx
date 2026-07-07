@@ -38,24 +38,6 @@ function DashboardShell() {
 
     // 3. Apply subscription/approval state checks for non-super admins
     if (currentUser.role !== 'super_admin' && myTenant) {
-      if (myTenant.subscriptionStatus === 'pending_approval') {
-        return (
-          <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-8 text-center max-w-md mx-auto my-12 space-y-4">
-            <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto animate-pulse" />
-            <h2 className="font-sans font-extrabold text-base text-slate-900">Registration Review Pending</h2>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Your business profile <strong>"{myTenant.name}"</strong> has been created successfully!
-            </p>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              It is currently undergoing rapid quality review by Platform Admin (<strong>naolnigatu2025@gmail.com</strong>). You will be notified instantly once approved.
-            </p>
-            <div className="pt-3 border-t border-amber-100/60 text-[11px] font-semibold text-indigo-600">
-              💡 Tip: Click "Switch Role" at the top right and select "Super Admin" to instantly review and approve this business request!
-            </div>
-          </div>
-        );
-      }
-
       if (myTenant.subscriptionStatus === 'rejected') {
         return (
           <div className="rounded-2xl border border-rose-100 bg-rose-50/50 p-8 text-center max-w-md mx-auto my-12 space-y-4">
