@@ -192,18 +192,7 @@ export const mockMenuItems: Record<string, MenuItem[]> = {
           description: 'በሸክላ ድስት የቀረበ የከብት ስጋ በሽንኩርት፣ ቃሪያ እና በቅቤ የተጠበሰ።'
         }
       },
-      modifiers: [
-        {
-          id: 'mod-05',
-          name: 'Spice Preference',
-          minSelect: 1,
-          maxSelect: 1,
-          options: [
-            { id: 'opt-08', name: 'Regular Traditional Spiced', price: 0 },
-            { id: 'opt-09', name: 'Mild (Non-spicy)', price: 0 }
-          ]
-        }
-      ]
+      modifiers: []
     },
     {
       id: 'item-04',
@@ -413,9 +402,7 @@ export const mockOrders: Order[] = [
         name: 'Shekla Tibs',
         price: 490,
         quantity: 2,
-        selectedModifiers: [
-          { groupName: 'Spice Preference', optionName: 'Regular Traditional Spiced', price: 0 }
-        ],
+        selectedModifiers: [],
         status: 'cooking',
         assignedStationId: 'st-02'
       }

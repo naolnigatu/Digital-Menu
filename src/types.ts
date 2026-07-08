@@ -111,6 +111,7 @@ export interface Order {
   type: 'dine_in' | 'pickup';
   customerName?: string;
   customerPhone?: string;
+  customerEmail?: string;
   items: OrderItem[];
   status: OrderStatus;
   paymentStatus: 'unpaid' | 'paid';

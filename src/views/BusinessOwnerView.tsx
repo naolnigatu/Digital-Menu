@@ -38,19 +38,6 @@ export default function BusinessOwnerView() {
 
   const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'menu' | 'tables' | 'staff' | 'settings'>('dashboard');
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          updateTenantProfile(activeTenantId, event.target.result as string, tenant.bankAccount || '');
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   // Tenant reference
   const tenant = tenants.find(t => t.id === activeTenantId) || tenants[0] || {
     id: activeTenantId || 't-01',
@@ -79,7 +66,7 @@ export default function BusinessOwnerView() {
   const tenantCategories = categories[activeTenantId] || [];
   const tenantItems = menuItems[activeTenantId] || [];
   const tenantBranchTables = tables.filter(t => t.branchId === activeBranchId);
-  const tenantStaff = staff.filter(s => s.tenantId === activeTenantId);
+  const branchStaff = staff.filter(s => s.branchId === activeBranchId);
   const branchOrders = orders.filter(o => o.branchId === activeBranchId);
 
   const renderPaywall = (featureName: string, description: string) => {
@@ -150,11 +137,13 @@ export default function BusinessOwnerView() {
 
   // --- Menu Forms State ---
   const [showCatModal, setShowCatModal] = useState(false);
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [catName, setCatName] = useState('');
   const [catAmharic, setCatAmharic] = useState('');
   const [catOrderNum, setCatOrderNum] = useState(1);
 
   const [showItemModal, setShowItemModal] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [itemName, setItemName] = useState('');
   const [itemDesc, setItemDesc] = useState('');
   const [itemPrice, setItemPrice] = useState(100);
@@ -189,13 +178,78 @@ export default function BusinessOwnerView() {
   const [staffRole, setStaffRole] = useState<'waiter' | 'cashier' | 'kitchen' | 'manager'>('waiter');
   const [staffStation, setStaffStation] = useState('');
 
+  const [analyticsTimeframe, setAnalyticsTimeframe] = useState<'Today' | 'This Week' | 'This Month' | '3Months' | '6Months' | 'This Year'>('Today');
+
+  const [localSettings, setLocalSettings] = useState({
+    bankAccount: tenant.bankAccount || '',
+    currency: tenant.currency || 'ETB',
+    logoUrl: tenant.logoUrl || ''
+  });
+
+  React.useEffect(() => {
+    setLocalSettings({
+      bankAccount: tenant.bankAccount || '',
+      currency: tenant.currency || 'ETB',
+      logoUrl: tenant.logoUrl || ''
+    });
+  }, [tenant]);
+
+  const handleSaveSettings = () => {
+    updateTenantProfile(activeTenantId, localSettings.logoUrl, localSettings.bankAccount);
+    const symbol = localSettings.currency === 'USD' ? '$' : 'Br';
+    updateTenantCurrency(activeTenantId, localSettings.currency, symbol);
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setLocalSettings(prev => ({ ...prev, logoUrl: event.target?.result as string }));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   // Computations
-  const totalSales = branchOrders
+  const now = new Date();
+  const filteredBranchOrders = branchOrders.filter(o => {
+    const orderDate = new Date(o.createdAt);
+    switch (analyticsTimeframe) {
+      case 'Today':
+        return orderDate.toDateString() === now.toDateString();
+      case 'This Week': {
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        return orderDate >= startOfWeek;
+      }
+      case 'This Month':
+        return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
+      case '3Months': {
+        const threeMonthsAgo = new Date(now);
+        threeMonthsAgo.setMonth(now.getMonth() - 3);
+        return orderDate >= threeMonthsAgo;
+      }
+      case '6Months': {
+        const sixMonthsAgo = new Date(now);
+        sixMonthsAgo.setMonth(now.getMonth() - 6);
+        return orderDate >= sixMonthsAgo;
+      }
+      case 'This Year':
+        return orderDate.getFullYear() === now.getFullYear();
+      default:
+        return true;
+    }
+  });
+
+  const totalSales = filteredBranchOrders
     .filter(o => o.paymentStatus === 'paid')
     .reduce((acc, curr) => acc + curr.total, 0);
 
   const bestSellingItemMap: Record<string, number> = {};
-  branchOrders.forEach(o => {
+  filteredBranchOrders.forEach(o => {
     o.items.forEach(it => {
       bestSellingItemMap[it.name] = (bestSellingItemMap[it.name] || 0) + it.quantity;
     });
@@ -208,13 +262,27 @@ export default function BusinessOwnerView() {
   const handleAddCategory = (e: React.FormEvent) => {
     e.preventDefault();
     if (!catName) return;
-    addCategory({
-      tenantId: activeTenantId,
-      name: catName,
-      orderNum: Number(catOrderNum),
-      icon: 'Utensils',
-      translations: catAmharic ? { am: catAmharic } : undefined
-    });
+
+    if (editingCatId) {
+      updateCategory({
+        id: editingCatId,
+        tenantId: activeTenantId,
+        name: catName,
+        orderNum: Number(catOrderNum),
+        icon: 'Utensils',
+        translations: catAmharic ? { am: catAmharic } : undefined
+      });
+    } else {
+      addCategory({
+        tenantId: activeTenantId,
+        name: catName,
+        orderNum: Number(catOrderNum),
+        icon: 'Utensils',
+        translations: catAmharic ? { am: catAmharic } : undefined
+      });
+    }
+    
+    setEditingCatId(null);
     setCatName('');
     setCatAmharic('');
     setShowCatModal(false);
@@ -248,26 +316,50 @@ export default function BusinessOwnerView() {
     e.preventDefault();
     if (!itemName || !itemCat) return;
 
-    addMenuItem({
-      categoryId: itemCat,
-      tenantId: activeTenantId,
-      name: itemName,
-      description: itemDesc,
-      price: Number(itemPrice),
-      isAvailable: true,
-      photoUrl: itemPhotoUrl || undefined,
-      preparationStationId: itemStation || stations.find(s => s.branchId === activeBranchId)?.id || '',
-      allergenTags: itemAllergens ? itemAllergens.split(',').map(a => a.trim()) : [],
-      dietaryTags: itemDietary ? itemDietary.split(',').map(d => d.trim()) : [],
-      modifiers: itemModifiers,
-      translations: itemAmName ? {
-        am: {
-          name: itemAmName,
-          description: itemAmDesc
-        }
-      } : undefined
-    });
+    if (editingItemId) {
+      updateMenuItem({
+        id: editingItemId,
+        categoryId: itemCat,
+        tenantId: activeTenantId,
+        name: itemName,
+        description: itemDesc,
+        price: Number(itemPrice),
+        isAvailable: true,
+        photoUrl: itemPhotoUrl || undefined,
+        preparationStationId: itemStation || stations.find(s => s.branchId === activeBranchId)?.id || '',
+        allergenTags: itemAllergens ? itemAllergens.split(',').map(a => a.trim()) : [],
+        dietaryTags: itemDietary ? itemDietary.split(',').map(d => d.trim()) : [],
+        modifiers: itemModifiers,
+        translations: itemAmName ? {
+          am: {
+            name: itemAmName,
+            description: itemAmDesc
+          }
+        } : undefined
+      });
+    } else {
+      addMenuItem({
+        categoryId: itemCat,
+        tenantId: activeTenantId,
+        name: itemName,
+        description: itemDesc,
+        price: Number(itemPrice),
+        isAvailable: true,
+        photoUrl: itemPhotoUrl || undefined,
+        preparationStationId: itemStation || stations.find(s => s.branchId === activeBranchId)?.id || '',
+        allergenTags: itemAllergens ? itemAllergens.split(',').map(a => a.trim()) : [],
+        dietaryTags: itemDietary ? itemDietary.split(',').map(d => d.trim()) : [],
+        modifiers: itemModifiers,
+        translations: itemAmName ? {
+          am: {
+            name: itemAmName,
+            description: itemAmDesc
+          }
+        } : undefined
+      });
+    }
 
+    setEditingItemId(null);
     setItemName('');
     setItemDesc('');
     setItemPrice(100);
@@ -426,6 +518,21 @@ export default function BusinessOwnerView() {
           {/* 1. DASHBOARD ANALYTICS */}
           {activeSubTab === 'dashboard' && (
         <div className="space-y-6">
+          <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-800">Analytics Overview</h3>
+            <select
+              value={analyticsTimeframe}
+              onChange={(e) => setAnalyticsTimeframe(e.target.value as any)}
+              className="text-xs font-bold text-slate-600 border border-slate-200 rounded-lg px-2 py-1 bg-slate-50"
+            >
+              <option value="Today">Today</option>
+              <option value="This Week">This Week</option>
+              <option value="This Month">This Month</option>
+              <option value="3Months">3 Months</option>
+              <option value="6Months">6 Months</option>
+              <option value="This Year">This Year</option>
+            </select>
+          </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Net Income ({tenant.currency})</p>
@@ -434,15 +541,15 @@ export default function BusinessOwnerView() {
             </div>
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Order Tickets</p>
-              <p className="text-2xl font-bold text-slate-900 mt-2 underline decoration-indigo-500 decoration-2 underline-offset-4">{branchOrders.length}</p>
+              <p className="text-2xl font-bold text-slate-900 mt-2 underline decoration-indigo-500 decoration-2 underline-offset-4">{filteredBranchOrders.length}</p>
               <span className="text-[10px] text-emerald-600 font-bold mt-1 block">
-                {branchOrders.filter(o => o.status === 'completed').length} completed
+                {filteredBranchOrders.filter(o => o.status === 'completed').length} completed
               </span>
             </div>
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Avg Ticket Spend</p>
               <p className="text-2xl font-bold text-slate-900 mt-2 underline decoration-indigo-500 decoration-2 underline-offset-4">
-                {tenant.currencySymbol} {branchOrders.length ? Math.floor(totalSales / branchOrders.length) : 0}
+                {tenant.currencySymbol} {filteredBranchOrders.length ? Math.floor(totalSales / filteredBranchOrders.length) : 0}
               </p>
               <span className="text-[10px] text-slate-400 mt-1 block">Per customer scan</span>
             </div>
@@ -545,6 +652,18 @@ export default function BusinessOwnerView() {
                     </div>
                     <div className="flex items-center gap-1">
                       <button 
+                        onClick={() => {
+                          setEditingCatId(cat.id);
+                          setCatName(cat.name);
+                          setCatAmharic(cat.translations?.am || '');
+                          setCatOrderNum(cat.orderNum);
+                          setShowCatModal(true);
+                        }}
+                        className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-indigo-600 transition-colors"
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                      </button>
+                      <button 
                         onClick={() => deleteCategory(activeTenantId, cat.id)}
                         className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-rose-600 transition-colors"
                       >
@@ -599,12 +718,34 @@ export default function BusinessOwnerView() {
 
                       <div className="border-t border-slate-100 mt-3 pt-2 flex items-center justify-between">
                         <span className="text-[10px] text-slate-400 font-medium">Station: {stations.find(s => s.id === item.preparationStationId)?.name || 'None'}</span>
-                        <button
-                          onClick={() => deleteMenuItem(activeTenantId, item.id)}
-                          className="rounded p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              setEditingItemId(item.id);
+                              setItemName(item.name);
+                              setItemDesc(item.description);
+                              setItemPrice(item.price);
+                              setItemCat(item.categoryId);
+                              setItemStation(item.preparationStationId);
+                              setItemAllergens(item.allergenTags.join(', '));
+                              setItemDietary(item.dietaryTags.join(', '));
+                              setItemAmName(item.translations?.am?.name || '');
+                              setItemAmDesc(item.translations?.am?.description || '');
+                              setItemModifiers(item.modifiers || []);
+                              setItemPhotoUrl(item.photoUrl || '');
+                              setShowItemModal(true);
+                            }}
+                            className="rounded p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => deleteMenuItem(activeTenantId, item.id)}
+                            className="rounded p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -614,11 +755,13 @@ export default function BusinessOwnerView() {
 
           </div>
 
-          {/* ADD CATEGORY MODAL */}
+          {/* ADD/EDIT CATEGORY MODAL */}
           {showCatModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
               <form onSubmit={handleAddCategory} className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl border border-slate-100 space-y-4">
-                <h4 className="font-sans font-bold text-sm text-slate-900 border-b border-slate-50 pb-2">Add Menu Category</h4>
+                <h4 className="font-sans font-bold text-sm text-slate-900 border-b border-slate-50 pb-2">
+                  {editingCatId ? 'Edit Menu Category' : 'Add Menu Category'}
+                </h4>
                 
                 <div className="space-y-3">
                   <div>
@@ -660,11 +803,13 @@ export default function BusinessOwnerView() {
             </div>
           )}
 
-          {/* ADD MENU ITEM MODAL */}
+          {/* ADD/EDIT MENU ITEM MODAL */}
           {showItemModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
               <form onSubmit={handleAddItem} className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl border border-slate-100 max-h-[85vh] overflow-y-auto space-y-4">
-                <h4 className="font-sans font-bold text-sm text-slate-900 border-b border-slate-50 pb-2">Create New Dish / Drink</h4>
+                <h4 className="font-sans font-bold text-sm text-slate-900 border-b border-slate-50 pb-2">
+                  {editingItemId ? 'Edit Dish / Drink' : 'Create New Dish / Drink'}
+                </h4>
                 
                 <div className="space-y-3">
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -1079,11 +1224,11 @@ export default function BusinessOwnerView() {
 
           {/* Invited Staff Table */}
           <div className="lg:col-span-2 space-y-4">
-            <h4 className="font-sans font-bold text-xs text-slate-400 uppercase tracking-wider">Branch Roster list ({tenantStaff.length})</h4>
+            <h4 className="font-sans font-bold text-xs text-slate-400 uppercase tracking-wider">Branch Roster list ({branchStaff.length})</h4>
             
             <div className="rounded-xl border border-slate-100 bg-white overflow-hidden shadow-sm">
               <div className="divide-y divide-slate-100">
-                {tenantStaff.map((member) => (
+                {branchStaff.map((member) => (
                   <div key={member.id} className="p-3.5 flex items-center justify-between gap-3 text-xs">
                     <div>
                       <div className="flex items-center gap-2">
@@ -1120,6 +1265,14 @@ export default function BusinessOwnerView() {
       {/* 5. BILLING & SAAS SETTINGS */}
       {activeSubTab === 'settings' && (
         <div className="max-w-2xl mx-auto space-y-6">
+          <div className="flex justify-end">
+             <button
+                onClick={handleSaveSettings}
+                className="bg-indigo-600 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+              >
+                Save All Settings
+              </button>
+          </div>
           
           <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm space-y-4">
             <h3 className="font-sans font-bold text-sm text-slate-800 flex items-center gap-1.5">
@@ -1187,7 +1340,7 @@ export default function BusinessOwnerView() {
               <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
                 <div className="relative shrink-0">
                   <img 
-                    src={tenant.logoUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=120'} 
+                    src={localSettings.logoUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=120'} 
                     alt={tenant.name}
                     className="h-16 w-16 rounded-full object-cover border-2 border-indigo-100 bg-white shadow-sm"
                   />
@@ -1215,8 +1368,8 @@ export default function BusinessOwnerView() {
                 <input 
                   type="text" 
                   placeholder="e.g. 1000123456789"
-                  value={tenant.bankAccount || ''} 
-                  onChange={(e) => updateTenantProfile(activeTenantId, tenant.logoUrl || '', e.target.value)}
+                  value={localSettings.bankAccount} 
+                  onChange={(e) => setLocalSettings(prev => ({ ...prev, bankAccount: e.target.value }))}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
                 <span className="text-[9px] text-slate-400 block mt-1">
@@ -1237,12 +1390,8 @@ export default function BusinessOwnerView() {
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-400 uppercase">Base Currency</label>
                 <select 
-                  value={tenant.currency}
-                  onChange={(e) => {
-                    const currency = e.target.value;
-                    const symbol = currency === 'USD' ? '$' : 'Br';
-                    updateTenantCurrency(activeTenantId, currency, symbol);
-                  }}
+                  value={localSettings.currency}
+                  onChange={(e) => setLocalSettings(prev => ({ ...prev, currency: e.target.value }))}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none"
                 >
                   <option value="ETB">ETB (Br)</option>

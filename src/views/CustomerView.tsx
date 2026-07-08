@@ -8,6 +8,7 @@ import {
 
 export default function CustomerView() {
   const { 
+    currentUser,
     tenants, 
     categories, 
     menuItems, 
@@ -237,6 +238,7 @@ export default function CustomerView() {
       type: orderType,
       customerName: customerName || 'Guest User',
       customerPhone: customerPhone || undefined,
+      customerEmail: currentUser?.email || undefined,
       items: orderItems,
       discount: 0,
       subtotal: 0, // context auto-computes calculations
@@ -300,6 +302,7 @@ export default function CustomerView() {
       type: orderType,
       customerName: customerName || 'Guest User',
       customerPhone: customerPhone || undefined,
+      customerEmail: currentUser?.email || undefined,
       items: orderItems,
       discount: 0,
       subtotal: 0,
@@ -358,20 +361,30 @@ export default function CustomerView() {
                 <span className="font-sans font-extrabold text-sm">{activeTenant.name}</span>
               </div>
 
-              {/* Tenant switcher for testing */}
-              <select
-                value={activeTenantId}
-                onChange={(e) => {
-                  setActiveTenantId(e.target.value);
-                  setCart([]);
-                }}
-                className="bg-white/10 text-white border-none rounded px-2 py-1 text-[11px] font-bold"
-                title="Simulation: Switch digital menus"
-              >
-                {tenants.map(t => (
-                  <option key={t.id} value={t.id} className="text-slate-900">{t.name}</option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setLanguage(currentLanguage === 'en' ? 'am' : 'en')}
+                  className="bg-white/10 text-white hover:bg-white/20 transition-colors border-none rounded px-2 py-1 text-[11px] font-bold flex items-center gap-1"
+                >
+                  <Languages className="h-3 w-3" />
+                  {currentLanguage === 'en' ? 'EN' : 'አማ'}
+                </button>
+
+                {/* Tenant switcher for testing */}
+                <select
+                  value={activeTenantId}
+                  onChange={(e) => {
+                    setActiveTenantId(e.target.value);
+                    setCart([]);
+                  }}
+                  className="bg-white/10 text-white border-none rounded px-2 py-1 text-[11px] font-bold"
+                  title="Simulation: Switch digital menus"
+                >
+                  {tenants.map(t => (
+                    <option key={t.id} value={t.id} className="text-slate-900">{t.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <p className="text-[11px] text-slate-300 leading-relaxed">{activeTenant.description}</p>
@@ -402,7 +415,7 @@ export default function CustomerView() {
                     onClick={() => setOrderType('pickup')}
                     className={`flex-1 py-0.5 text-[10px] font-bold rounded-md ${orderType === 'pickup' ? 'bg-white text-slate-900' : 'text-slate-300'}`}
                   >
-                    Pickup
+                    Take-away
                   </button>
                 </div>
               </div>
@@ -482,11 +495,13 @@ export default function CustomerView() {
           {/* CUSTOMER LOYALTY CARD */}
           {(customerName || customerPhone) && (
             <div className="mx-0 mt-1 p-3 bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950 rounded-2xl text-white flex items-center justify-between gap-3 shadow-sm border border-indigo-500/20">
-              <div className="space-y-0.5">
-                <p className="text-[8px] font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1">
-                  <Award className="h-3.5 w-3.5 text-yellow-400" />
-                  <span>Patron Status Profile</span>
-                </p>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-[8px] font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1">
+                    <Award className="h-3.5 w-3.5 text-yellow-400" />
+                    <span>Patron Status Profile</span>
+                  </p>
+                </div>
                 <h4 className="font-sans font-extrabold text-xs text-white flex items-center gap-1.5 flex-wrap">
                   {customerName || 'Valued Guest'} 
                   {hasLoyaltyBadge && (
@@ -495,9 +510,17 @@ export default function CustomerView() {
                     </span>
                   )}
                 </h4>
-                <p className="text-[10px] text-slate-300 leading-normal">
-                  Completed orders at this branch: <strong>{customerCompletedCount}</strong>
-                </p>
+                <div className="flex gap-2 items-center">
+                  <p className="text-[10px] text-slate-300 leading-normal">
+                    Completed orders: <strong>{customerCompletedCount}</strong>
+                  </p>
+                  <button 
+                    onClick={() => setIsTrackModalOpen(true)}
+                    className="text-[9px] font-bold bg-white/10 hover:bg-white/20 text-indigo-200 px-2 py-0.5 rounded-full transition-colors flex items-center gap-1 border border-white/5"
+                  >
+                    <ClipboardList className="h-3 w-3" /> My Order Stories
+                  </button>
+                </div>
               </div>
 
               {!hasLoyaltyBadge ? (
@@ -539,7 +562,7 @@ export default function CustomerView() {
               className="bg-slate-900 text-white px-3 py-2 rounded-xl text-[10px] font-bold shadow-sm whitespace-nowrap hover:bg-slate-800 flex items-center gap-1.5"
             >
               <ClipboardList className="h-3.5 w-3.5" />
-              My Orders
+              My Order Stories
             </button>
           </div>
 
@@ -575,7 +598,6 @@ export default function CustomerView() {
           <div className="space-y-3">
             {filteredItems.map(item => {
               const info = getTranslatedText(item);
-              const hasAmharic = !!item.translations?.am;
               const isAvailable = item.isAvailable !== false;
 
               return (
@@ -738,7 +760,7 @@ export default function CustomerView() {
               <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center border-b border-slate-50 pb-2">
                   <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <ClipboardList className="h-4 w-4" /> My Orders
+                    <ClipboardList className="h-4 w-4" /> My Order Stories
                   </span>
                   <button 
                     onClick={() => setIsTrackModalOpen(false)}
@@ -749,14 +771,18 @@ export default function CustomerView() {
                 </div>
                 
                 <div className="space-y-4">
-                  {/* Show recent orders if we have a phone number or saved orders */}
-                  {(customerPhone || myOrderIds.length > 0) && (
+                  {/* Show recent orders if we have a phone number, saved orders, or are signed in */}
+                  {(customerPhone || myOrderIds.length > 0 || currentUser) && (
                     <div className="space-y-2">
-                      <label className="text-[9px] font-bold text-slate-400 uppercase">Recent Orders</label>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase">Recent Order Stories</label>
                       {(() => {
                         const userOrders = orders.filter(o => 
                           o.tenantId === activeTenantId && 
-                          (myOrderIds.includes(o.id) || (customerPhone && o.customerPhone === customerPhone))
+                          (
+                            myOrderIds.includes(o.id) || 
+                            (customerPhone && o.customerPhone === customerPhone) ||
+                            (currentUser && o.customerEmail === currentUser.email)
+                          )
                         );
 
                         if (userOrders.length > 0) {
