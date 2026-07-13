@@ -64,6 +64,11 @@ export interface MenuItem {
   preparationStationId: string;
   modifiers: ModifierGroup[];
   translations?: Record<string, { name: string; description: string }>; // e.g., 'am' for Amharic
+  prepTime?: number; // prep time in minutes
+  availability?: 'Available' | 'Sold Out' | 'Hidden';
+  featured?: boolean;
+  recommended?: boolean;
+  taxEnabled?: boolean;
 }
 
 export interface Category {
@@ -100,7 +105,23 @@ export interface OrderItem {
   assignedStationId: string;
 }
 
-export type OrderStatus = 'draft' | 'submitted' | 'cooking' | 'ready' | 'delivered' | 'completed' | 'cancelled';
+export type OrderStatus = 'pending' | 'accepted' | 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled' | 'refunded';
+export type PaymentStatus = 'pending' | 'paid' | 'partially_paid' | 'refunded' | 'failed';
+
+export interface TimelineEvent {
+  id: string;
+  time: string;
+  label: string;
+  desc: string;
+  actor?: string;
+}
+
+export interface KitchenNote {
+  id: string;
+  text: string;
+  approved: boolean;
+  rejected?: boolean;
+}
 
 export interface Order {
   id: string;
@@ -108,20 +129,24 @@ export interface Order {
   tenantId: string;
   branchId: string;
   tableId?: string; // Empty if pre-order pickup
-  type: 'dine_in' | 'pickup';
+  type: 'dine_in' | 'takeaway' | 'delivery' | 'drive_through' | 'pickup' | 'meal_subscription' | string;
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
+  customerAccount?: boolean;
   items: OrderItem[];
   status: OrderStatus;
-  paymentStatus: 'unpaid' | 'paid';
-  paymentMethod?: 'cash' | 'card' | 'mobile_money' | 'bank_transfer';
+  paymentStatus: PaymentStatus;
+  paymentMethod?: 'cash' | 'card' | 'mobile_money' | 'bank_transfer' | string;
   discount: number; // Absolute value
+  tip: number; // tip amount recorded
+  tipStatus?: 'pending' | 'delivered' | 'accepted'; // status of tip
   tax: number; // Absolute value
   serviceCharge: number; // Absolute value
   subtotal: number;
   total: number;
   createdAt: string;
+  updatedAt?: string;
   notes?: string;
   pickupTime?: string; // Time string if pickup
   loyaltyPointsEarned?: number;
@@ -131,17 +156,23 @@ export interface Order {
   paymentScreenshotUrl?: string; // payment screenshot uploaded by customer
   paymentVerificationStatus?: 'pending' | 'approved' | 'rejected'; // For advance payments
   advancePaymentRef?: string;
+  waiterId?: string;
+  waiterName?: string;
+  timeline: TimelineEvent[];
+  kitchenNotes?: KitchenNote[];
+  refundDetails?: RefundDetails;
 }
 
 export interface Staff {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
+  role: UserRole | string;
   tenantId: string;
   branchId: string; // Scoped branch
   stationId?: string; // Scoped station for KDS
   active: boolean;
+  permissions?: string[];
 }
 
 export interface SystemLog {
@@ -181,4 +212,157 @@ export interface PlatformAd {
   active: boolean;
   createdAt: string;
 }
+
+export type BusinessType =
+  | 'Hotel'
+  | 'Ethiopian Restaurant'
+  | 'Cafe'
+  | 'Bakery'
+  | 'Pizza Restaurant'
+  | 'Burger House'
+  | 'Fast Food'
+  | 'Street Food'
+  | 'Juice Bar'
+  | 'Dessert Shop'
+  | 'Bar'
+  | 'Coffee House'
+  | 'Custom';
+
+export interface Business {
+  id: string;
+  name: string;
+  businessType: BusinessType;
+  logo?: string;
+  country: string;
+  city: string;
+  phone: string;
+  email: string;
+  currency: string;
+  language: string;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+  status: 'active' | 'suspended' | 'pending_approval' | 'rejected';
+}
+
+export interface Membership {
+  userId: string;
+  businessId: string;
+  role: 'Owner' | 'Manager' | 'Cashier' | 'Waiter' | 'Kitchen' | 'Customer' | string;
+  branchIds: string[];
+  permissions: string[];
+  status: 'active' | 'pending' | 'suspended';
+  createdAt: string;
+}
+
+export interface DinexBranch {
+  id: string;
+  businessId: string;
+  name: string;
+  location: string;
+  phone: string;
+  status: 'active' | 'inactive';
+  createdAt: string;
+}
+
+export interface BusinessSettings {
+  orderingEnabled: boolean;
+  tableManagementEnabled: boolean;
+  reservationEnabled: boolean;
+  loyaltyEnabled: boolean;
+  tipsEnabled: boolean;
+  customerAccountsEnabled: boolean;
+  kitchenEnabled: boolean;
+  takeawayEnabled: boolean;
+  deliveryEnabled: boolean;
+}
+
+export interface CustomRole {
+  id: string;
+  businessId: string;
+  name: string;
+  permissions: string[];
+  createdBy: string;
+}
+
+export interface PaymentMethodConfig {
+  id: string;
+  name: string;
+  enabled: boolean;
+  requiresProof: boolean;
+  details?: string;
+}
+
+export interface LoyaltyConfig {
+  enabled: boolean;
+  pointsPerPurchase: number;
+  minPointsToRedeem: number;
+  discountPercentage: number;
+  badgeLevels: { name: string; minPoints: number; discountBonus: number }[];
+}
+
+export interface LoyaltyHistoryEntry {
+  id: string;
+  date: string;
+  points: number;
+  type: 'earn' | 'redeem';
+  orderNum?: string;
+  description: string;
+}
+
+export interface MealSubscriptionPlan {
+  id: string;
+  tenantId: string;
+  name: string;
+  monthlyPrice: number;
+  discountPercentage: number;
+  durationDays: number;
+  mealsPerDay: number;
+  mealsPerWeek: number;
+  allowedOrderingTimes: string;
+  menuItemIds: string[];
+}
+
+export interface CustomerMealSubscription {
+  id: string;
+  customerId: string;
+  tenantId: string;
+  planId: string;
+  menuItemIds: string[];
+  mealsPerDay: number;
+  mealsPerWeek: number;
+  mealsUsedToday: number;
+  mealsUsedThisWeek: number;
+  mealsUsedTotal: number;
+  mealsRemainingTotal: number;
+  startDate: string;
+  endDate: string;
+  nextRenewalDate: string;
+  status: 'active' | 'expired' | 'cancelled';
+}
+
+export interface SavedAddress {
+  id: string;
+  name: string;
+  address: string;
+}
+
+export interface CustomerProfile {
+  id: string;
+  email: string;
+  name: string;
+  phone?: string;
+  savedAddresses: SavedAddress[];
+  savedFavorites: string[];
+  loyaltyPoints: number;
+  loyaltyHistory: LoyaltyHistoryEntry[];
+}
+
+export interface RefundDetails {
+  refundAmount: number;
+  refundReason: string;
+  refundDate: string;
+  refundedBy: string;
+}
+
 

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
-  Tenant, Branch, PreparationStation, Category, MenuItem, Table, Order, Staff, SystemLog, UserRole, OrderStatus, OrderItem, SubscriptionPlan, PlatformAd, PlanPricing
+  Tenant, Branch, PreparationStation, Category, MenuItem, Table, Order, Staff, SystemLog, UserRole, OrderStatus, OrderItem, SubscriptionPlan, PlatformAd, PlanPricing, TimelineEvent, KitchenNote,
+  PaymentMethodConfig, LoyaltyConfig, MealSubscriptionPlan, CustomerMealSubscription, CustomerProfile, RefundDetails, LoyaltyHistoryEntry
 } from '../types';
 import { 
   mockTenants, mockBranches, mockStations, mockCategories, mockMenuItems, mockTables, mockStaff, mockOrders, mockSystemLogs 
@@ -55,17 +56,22 @@ interface AppContextType {
   addStation: (station: Omit<PreparationStation, 'id'>) => void;
   
   // Order Actions
-  placeOrder: (order: Omit<Order, 'id' | 'orderNum' | 'createdAt' | 'status' | 'paymentStatus' | 'subtotal' | 'tax' | 'serviceCharge' | 'total'>) => Order;
-  updateOrderStatus: (orderId: string, status: OrderStatus) => void;
-  updateOrderItemStatus: (orderId: string, itemId: string, status: OrderItem['status']) => void;
-  processPayment: (orderId: string, paymentMethod: Order['paymentMethod'], discountPercentage: number, redeemPoints?: number) => void;
+  placeOrder: (order: Omit<Order, 'id' | 'orderNum' | 'createdAt' | 'status' | 'paymentStatus' | 'subtotal' | 'tax' | 'serviceCharge' | 'total' | 'timeline' | 'kitchenNotes'> & { tip?: number }) => Order;
+  updateOrderStatus: (orderId: string, status: OrderStatus, actor?: string) => void;
+  updateOrderItemStatus: (orderId: string, itemId: string, status: OrderItem['status'], actor?: string) => void;
+  processPayment: (orderId: string, paymentMethod: Order['paymentMethod'], discountPercentage: number, redeemPoints?: number, tipAmount?: number) => void;
   rateAndFeedback: (orderId: string, rating: number, feedback: string) => void;
   cancelOrder: (orderId: string, reason: string) => void;
   verifyAdvancePayment: (orderId: string, approve: boolean, rejectionReason?: string) => void;
+  addKitchenNote: (orderId: string, text: string) => void;
+  approveKitchenNote: (orderId: string, noteId: string, approve: boolean) => void;
+  addTip: (orderId: string, amount: number) => void;
+  deliverTip: (orderId: string) => void;
   
   // Staff Actions
   addStaffMember: (member: Omit<Staff, 'id' | 'active'>) => void;
   toggleStaffStatus: (staffId: string) => void;
+  updateStaffPermissions: (staffId: string, permissions: string[]) => void;
   
   // Super Admin Actions
   toggleTenantStatus: (tenantId: string) => void;
@@ -100,11 +106,42 @@ interface AppContextType {
   
   // General helper
   addLog: (action: string, details: string) => void;
+
+  // Payment configuration
+  paymentMethodsConfigs: Record<string, PaymentMethodConfig[]>;
+  updatePaymentMethodConfig: (tenantId: string, configs: PaymentMethodConfig[]) => void;
+
+  // Loyalty Program
+  loyaltyConfigs: Record<string, LoyaltyConfig>;
+  updateLoyaltyConfig: (tenantId: string, config: LoyaltyConfig) => void;
+
+  // Meal Subscription
+  mealSubscriptionPlans: Record<string, MealSubscriptionPlan[]>;
+  customerSubscriptions: CustomerMealSubscription[];
+  addMealSubscriptionPlan: (plan: Omit<MealSubscriptionPlan, 'id'>) => void;
+  updateMealSubscriptionPlan: (plan: MealSubscriptionPlan) => void;
+  deleteMealSubscriptionPlan: (tenantId: string, planId: string) => void;
+  subscribeToMealPlan: (subscription: Omit<CustomerMealSubscription, 'id'>) => void;
+  logMealService: (subscriptionId: string) => void;
+
+  // Refunds
+  refundOrder: (orderId: string, amount: number, reason: string, actor: string) => void;
+
+  // Customer Profile
+  customerProfiles: Record<string, CustomerProfile>;
+  updateCustomerProfile: (email: string, profile: Partial<CustomerProfile>) => void;
+  addFavoriteItem: (email: string, menuItemId: string) => void;
+  removeFavoriteItem: (email: string, menuItemId: string) => void;
+  addSavedAddress: (email: string, name: string, address: string) => void;
+  removeSavedAddress: (email: string, addressId: string) => void;
+
+  // Tips
+  updateTipStatus: (orderId: string, status: 'pending' | 'delivered' | 'accepted') => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5_order_engine';
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   // Clear cache if version mismatch to purge old KSh mock data
@@ -236,6 +273,136 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     localStorage.setItem('mf_ads', JSON.stringify(ads));
   }, [ads]);
+
+  // 1. Payment Methods Configs State
+  const [paymentMethodsConfigs, setPaymentMethodsConfigs] = useState<Record<string, PaymentMethodConfig[]>>(() => {
+    const local = localStorage.getItem('mf_payment_methods');
+    if (local) return JSON.parse(local);
+    
+    const defaultConfigs: PaymentMethodConfig[] = [
+      { id: 'cash', name: 'Cash', enabled: true, requiresProof: false },
+      { id: 'card', name: 'Card', enabled: true, requiresProof: false },
+      { id: 'stripe', name: 'Stripe', enabled: true, requiresProof: false },
+      { id: 'mobile_money', name: 'Mobile Money', enabled: true, requiresProof: true, details: 'Telebirr: 0911223344, CBE Birr: +251911223344' },
+      { id: 'bank_transfer', name: 'Bank Transfer', enabled: true, requiresProof: true, details: 'Commercial Bank of Ethiopia: 1000123456789 (Dinex PLC)' },
+      { id: 'binance_id', name: 'Binance Pay (ID)', enabled: true, requiresProof: true, details: 'Binance Pay ID: 88776655' },
+      { id: 'binance_wallet', name: 'Binance BEP20 Wallet', enabled: true, requiresProof: true, details: 'BEP20 Address: 0x71C7656EC7ab88b098defB751B7401B5f6d8976F' }
+    ];
+    return {
+      't-01': defaultConfigs,
+      't-02': defaultConfigs
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('mf_payment_methods', JSON.stringify(paymentMethodsConfigs));
+  }, [paymentMethodsConfigs]);
+
+  // 2. Loyalty Configurations State
+  const [loyaltyConfigs, setLoyaltyConfigs] = useState<Record<string, LoyaltyConfig>>(() => {
+    const local = localStorage.getItem('mf_loyalty_configs');
+    if (local) return JSON.parse(local);
+    
+    const defaultConfig: LoyaltyConfig = {
+      enabled: true,
+      pointsPerPurchase: 1,
+      minPointsToRedeem: 10,
+      discountPercentage: 10,
+      badgeLevels: [
+        { name: 'Bronze Patron', minPoints: 10, discountBonus: 1 },
+        { name: 'Silver Patron', minPoints: 50, discountBonus: 3 },
+        { name: 'Gold Patron', minPoints: 150, discountBonus: 5 },
+        { name: 'Platinum Patron', minPoints: 300, discountBonus: 10 }
+      ]
+    };
+    return {
+      't-01': defaultConfig,
+      't-02': defaultConfig
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('mf_loyalty_configs', JSON.stringify(loyaltyConfigs));
+  }, [loyaltyConfigs]);
+
+  // 3. Meal Subscription Plans State
+  const [mealSubscriptionPlans, setMealSubscriptionPlans] = useState<Record<string, MealSubscriptionPlan[]>>(() => {
+    const local = localStorage.getItem('mf_meal_subscription_plans');
+    if (local) return JSON.parse(local);
+    
+    return {
+      't-01': [
+        {
+          id: 'sub-plan-01',
+          tenantId: 't-01',
+          name: 'Daily Power Lunch Sub',
+          monthlyPrice: 150,
+          discountPercentage: 20,
+          durationDays: 30,
+          mealsPerDay: 1,
+          mealsPerWeek: 5,
+          allowedOrderingTimes: '11:30-14:30',
+          menuItemIds: ['item-1', 'item-1-t-01', 'item-2-t-01']
+        },
+        {
+          id: 'sub-plan-02',
+          tenantId: 't-01',
+          name: 'Traditional Coffee & Pastry Plan',
+          monthlyPrice: 50,
+          discountPercentage: 15,
+          durationDays: 30,
+          mealsPerDay: 1,
+          mealsPerWeek: 7,
+          allowedOrderingTimes: '07:00-11:00',
+          menuItemIds: ['item-2', 'item-2-t-01']
+        }
+      ]
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('mf_meal_subscription_plans', JSON.stringify(mealSubscriptionPlans));
+  }, [mealSubscriptionPlans]);
+
+  // 4. Customer Meal Subscriptions State
+  const [customerSubscriptions, setCustomerSubscriptions] = useState<CustomerMealSubscription[]>(() => {
+    const local = localStorage.getItem('mf_customer_subscriptions');
+    return local ? JSON.parse(local) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('mf_customer_subscriptions', JSON.stringify(customerSubscriptions));
+  }, [customerSubscriptions]);
+
+  // 5. Customer Profiles State
+  const [customerProfiles, setCustomerProfiles] = useState<Record<string, CustomerProfile>>(() => {
+    const local = localStorage.getItem('mf_customer_profiles');
+    if (local) return JSON.parse(local);
+
+    return {
+      'naolnigatu2025@gmail.com': {
+        id: 'cust-naol',
+        email: 'naolnigatu2025@gmail.com',
+        name: 'Naol Nigatu',
+        phone: '+251 912 345 678',
+        savedAddresses: [
+          { id: 'addr-1', name: 'Home', address: 'Bole, District 3, Addis Ababa' },
+          { id: 'addr-2', name: 'Office', address: 'Dinex Tech Hub, Level 4, Addis Ababa' }
+        ],
+        savedFavorites: ['item-1', 'item-2'],
+        loyaltyPoints: 340,
+        loyaltyHistory: [
+          { id: 'lh-1', date: '2026-07-10T12:00:00Z', points: 150, type: 'earn', orderNum: 'MF-4412', description: 'Earned on ordering House Special Dish' },
+          { id: 'lh-2', date: '2026-07-11T15:30:00Z', points: 200, type: 'earn', orderNum: 'MF-8821', description: 'Earned on ordering Ethio-Macchiato' },
+          { id: 'lh-3', date: '2026-07-12T09:00:00Z', points: -10, type: 'redeem', orderNum: 'MF-1102', description: 'Redeemed points for $10.00 discount' }
+        ]
+      }
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('mf_customer_profiles', JSON.stringify(customerProfiles));
+  }, [customerProfiles]);
 
   // Active configurations
   const [activeTenantId, setActiveTenantId] = useState<string>(() => {
@@ -385,9 +552,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Menu Categories
   const addCategory = (catData: Omit<Category, 'id'>) => {
+    const id = `cat-${Date.now()}`;
     const newCat: Category = {
       ...catData,
-      id: `cat-${Date.now()}`
+      id
     };
     setCategories(prev => {
       const list = prev[catData.tenantId] || [];
@@ -397,6 +565,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     });
     addLog('Create Category', `Created menu category: ${catData.name}`);
+    syncToFirestore('categories', id, newCat);
   };
 
   const updateCategory = (updatedCat: Category) => {
@@ -409,6 +578,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     });
     addLog('Update Category', `Updated menu category: ${updatedCat.name}`);
+    syncToFirestore('categories', updatedCat.id, updatedCat);
   };
 
   const deleteCategory = (tenantId: string, categoryId: string) => {
@@ -421,13 +591,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     });
     addLog('Delete Category', `Deleted menu category: ${catName}`);
+    deleteFromFirestore('categories', categoryId);
   };
 
   // Menu Items
   const addMenuItem = (itemData: Omit<MenuItem, 'id'>) => {
+    const id = `item-${Date.now()}`;
     const newItem: MenuItem = {
       ...itemData,
-      id: `item-${Date.now()}`
+      id
     };
     setMenuItems(prev => {
       const list = prev[itemData.tenantId] || [];
@@ -437,6 +609,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     });
     addLog('Create Menu Item', `Created menu item: ${itemData.name}`);
+    syncToFirestore('menu_items', id, newItem);
   };
 
   const updateMenuItem = (updatedItem: MenuItem) => {
@@ -448,6 +621,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     });
     addLog('Update Menu Item', `Updated menu item: ${updatedItem.name}`);
+    syncToFirestore('menu_items', updatedItem.id, updatedItem);
   };
 
   const deleteMenuItem = (tenantId: string, itemId: string) => {
@@ -460,6 +634,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     });
     addLog('Delete Menu Item', `Deleted menu item: ${itemName}`);
+    deleteFromFirestore('menu_items', itemId);
   };
 
   const toggleMenuItemAvailability = (tenantId: string, itemId: string) => {
@@ -474,6 +649,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const currentItem = menuItems[tenantId]?.find(i => i.id === itemId);
     if (currentItem) {
       addLog('Toggle Availability', `Toggled availability for menu item ${itemName} to ${!currentItem.isAvailable ? 'available' : 'unavailable'}`);
+      syncToFirestore('menu_items', itemId, { ...currentItem, isAvailable: !currentItem.isAvailable });
     }
   };
 
@@ -487,24 +663,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     setTables(prev => [...prev, newTable]);
     addLog('Create Table', `Created Table: ${tableData.number} in ${tableData.section}`);
+    syncToFirestore('tables', id, newTable);
   };
 
   const updateTableStatus = (tableId: string, status: Table['status']) => {
     setTables(prev => prev.map(t => t.id === tableId ? { ...t, status } : t));
+    const tbl = tables.find(t => t.id === tableId);
+    if (tbl) {
+      syncToFirestore('tables', tableId, { ...tbl, status });
+    }
   };
 
   // Stations
   const addStation = (stationData: Omit<PreparationStation, 'id'>) => {
+    const id = `st-${Date.now()}`;
     const newStation: PreparationStation = {
       ...stationData,
-      id: `st-${Date.now()}`
+      id
     };
     setStations(prev => [...prev, newStation]);
     addLog('Create Station', `Created preparation station: ${stationData.name}`);
+    syncToFirestore('stations', id, newStation);
   };
 
   // Orders
-  const placeOrder = (orderData: Omit<Order, 'id' | 'orderNum' | 'createdAt' | 'status' | 'paymentStatus' | 'subtotal' | 'tax' | 'serviceCharge' | 'total'>) => {
+  const placeOrder = (orderData: Omit<Order, 'id' | 'orderNum' | 'createdAt' | 'status' | 'paymentStatus' | 'subtotal' | 'tax' | 'serviceCharge' | 'total' | 'timeline' | 'kitchenNotes'> & { tip?: number }) => {
     const tenant = tenants.find(t => t.id === orderData.tenantId) || mockTenants[0];
     
     // Calculate financial subtotals
@@ -519,21 +702,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const taxAmount = parseFloat(((subtotal * tenant.baseTaxRate) / 100).toFixed(2));
     const serviceChargeAmount = parseFloat(((subtotal * tenant.serviceCharge) / 100).toFixed(2));
-    const totalAmount = parseFloat((subtotal + taxAmount + serviceChargeAmount - orderData.discount).toFixed(2));
+    const tipAmount = orderData.tip || 0;
+    const totalAmount = parseFloat((subtotal + taxAmount + serviceChargeAmount + tipAmount - orderData.discount).toFixed(2));
 
     const hrId = `MF-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const initialPaymentStatus = orderData.paymentVerificationStatus === 'approved' ? ('paid' as const) : ('pending' as const);
+    const initialStatus = orderData.paymentVerificationStatus === 'approved' ? ('accepted' as const) : ('pending' as const);
 
     const newOrder: Order = {
       ...orderData,
       id: `ord-${Date.now()}`,
       orderNum: hrId,
-      status: 'submitted',
-      paymentStatus: 'unpaid',
+      status: initialStatus,
+      paymentStatus: initialPaymentStatus,
       subtotal,
       tax: taxAmount,
       serviceCharge: serviceChargeAmount,
+      tip: tipAmount,
       total: totalAmount,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      timeline: [
+        { id: `ev-${Date.now()}-1`, time: new Date().toISOString(), label: 'Order Placed', desc: `New order registered. Payment via ${orderData.paymentMethod}`, actor: 'Customer' }
+      ],
+      kitchenNotes: []
     };
 
     setOrders(prev => [newOrder, ...prev]);
@@ -544,161 +737,368 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     addLog('Place Order', `New order ${hrId} placed. Total: ${tenant.currencySymbol} ${totalAmount}`);
+    syncToFirestore('orders', newOrder.id, newOrder);
     return newOrder;
   };
 
-  const updateOrderStatus = (orderId: string, status: OrderStatus) => {
-    setOrders(prev => prev.map(o => {
-      if (o.id !== orderId) return o;
-      
-      // Update items status recursively for quick overrides
-      let items = [...o.items];
-      if (status === 'cooking') {
-        items = items.map(it => it.status === 'received' ? { ...it, status: 'cooking' as const } : it);
-      } else if (status === 'ready') {
-        items = items.map(it => it.status === 'received' || it.status === 'cooking' ? { ...it, status: 'ready' as const } : it);
-      } else if (status === 'delivered') {
-        items = items.map(it => ({ ...it, status: 'delivered' as const }));
-      }
+  const updateOrderStatus = (orderId: string, status: OrderStatus, actor?: string) => {
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
 
-      return { ...o, status, items };
-    }));
+    let items = [...existing.items];
+    if (status === 'preparing') {
+      items = items.map(it => it.status === 'received' ? { ...it, status: 'cooking' as const } : it);
+    } else if (status === 'ready') {
+      items = items.map(it => it.status === 'received' || it.status === 'cooking' ? { ...it, status: 'ready' as const } : it);
+    } else if (status === 'served') {
+      items = items.map(it => ({ ...it, status: 'delivered' as const }));
+    }
 
-    // Trigger table update
-    const ord = orders.find(o => o.id === orderId);
-    if (ord && ord.tableId && ord.type === 'dine_in') {
-      if (status === 'cooking' || status === 'ready') {
-        updateTableStatus(ord.tableId, 'waiting');
-      } else if (status === 'delivered') {
-        updateTableStatus(ord.tableId, 'eating');
-      } else if (status === 'completed') {
-        updateTableStatus(ord.tableId, 'empty');
+    const statusLabels: Record<OrderStatus, string> = {
+      pending: 'Pending',
+      accepted: 'Accepted',
+      preparing: 'Preparing',
+      ready: 'Ready',
+      served: 'Served',
+      completed: 'Completed',
+      cancelled: 'Cancelled',
+      refunded: 'Refunded'
+    };
+
+    const newEvent: TimelineEvent = {
+      id: `ev-${Date.now()}`,
+      time: new Date().toISOString(),
+      label: `Status: ${statusLabels[status]}`,
+      desc: `Order status set to ${statusLabels[status]}`,
+      actor: actor || 'Staff'
+    };
+
+    const updated: Order = { 
+      ...existing, 
+      status, 
+      items,
+      updatedAt: new Date().toISOString(),
+      timeline: [...(existing.timeline || []), newEvent]
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+
+    if (updated.tableId && updated.type === 'dine_in') {
+      if (status === 'accepted' || status === 'preparing' || status === 'ready') {
+        updateTableStatus(updated.tableId, 'waiting');
+      } else if (status === 'served') {
+        updateTableStatus(updated.tableId, 'eating');
+      } else if (status === 'completed' || status === 'cancelled') {
+        updateTableStatus(updated.tableId, 'empty');
       }
     }
 
     addLog('Update Order Status', `Order ID ${orderId} status set to: ${status}`);
+    syncToFirestore('orders', orderId, updated);
   };
 
-  const updateOrderItemStatus = (orderId: string, itemId: string, itemStatus: OrderItem['status']) => {
-    setOrders(prev => prev.map(o => {
-      if (o.id !== orderId) return o;
+  const updateOrderItemStatus = (orderId: string, itemId: string, itemStatus: OrderItem['status'], actor?: string) => {
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
 
-      const updatedItems = o.items.map(it => it.id === itemId ? { ...it, status: itemStatus } : it);
-      
-      // Compute overarching order status based on item states
-      let overarchingStatus: OrderStatus = o.status;
-      const allDelivered = updatedItems.every(it => it.status === 'delivered');
-      const anyDelivered = updatedItems.some(it => it.status === 'delivered');
-      const allReady = updatedItems.every(it => it.status === 'ready' || it.status === 'delivered');
-      const anyCooking = updatedItems.some(it => it.status === 'cooking' || it.status === 'ready');
+    const updatedItems = existing.items.map(it => it.id === itemId ? { ...it, status: itemStatus } : it);
+    
+    // Compute overarching order status based on item states
+    let overarchingStatus: OrderStatus = existing.status;
+    const allDelivered = updatedItems.every(it => it.status === 'delivered');
+    const anyDelivered = updatedItems.some(it => it.status === 'delivered');
+    const allReady = updatedItems.every(it => it.status === 'ready' || it.status === 'delivered');
+    const anyCooking = updatedItems.some(it => it.status === 'cooking' || it.status === 'ready');
 
+    if (allDelivered) {
+      overarchingStatus = 'served';
+    } else if (allReady) {
+      overarchingStatus = 'ready';
+    } else if (anyCooking) {
+      overarchingStatus = 'preparing';
+    }
+
+    // Sync table state automatically
+    if (existing.tableId && existing.type === 'dine_in') {
       if (allDelivered) {
-        overarchingStatus = 'delivered';
-      } else if (allReady) {
-        overarchingStatus = 'ready';
-      } else if (anyCooking) {
-        overarchingStatus = 'cooking';
+        updateTableStatus(existing.tableId, 'eating');
+      } else if (anyDelivered || allReady || anyCooking) {
+        updateTableStatus(existing.tableId, 'waiting');
       }
+    }
 
-      // Sync table state automatically
-      if (o.tableId && o.type === 'dine_in') {
-        if (allDelivered) {
-          updateTableStatus(o.tableId, 'eating');
-        } else if (anyDelivered || allReady || anyCooking) {
-          updateTableStatus(o.tableId, 'waiting');
-        }
-      }
+    const itemObj = existing.items.find(it => it.id === itemId);
+    const newEvent: TimelineEvent = {
+      id: `ev-${Date.now()}`,
+      time: new Date().toISOString(),
+      label: `Item: ${itemObj?.name || 'Item'} status is ${itemStatus}`,
+      desc: `Item moved to ${itemStatus}`,
+      actor: actor || 'Staff'
+    };
 
-      return {
-        ...o,
-        items: updatedItems,
-        status: overarchingStatus
-      };
-    }));
+    const updated: Order = {
+      ...existing,
+      items: updatedItems,
+      status: overarchingStatus,
+      updatedAt: new Date().toISOString(),
+      timeline: [...(existing.timeline || []), newEvent]
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    addLog('Update Order Item Status', `Item ${itemObj?.name || itemId} status set to: ${itemStatus}`);
+    syncToFirestore('orders', orderId, updated);
   };
 
-  const processPayment = (orderId: string, paymentMethod: Order['paymentMethod'], discountPercentage: number, redeemPoints = 0) => {
-    setOrders(prev => prev.map(o => {
-      if (o.id !== orderId) return o;
+  const processPayment = (orderId: string, paymentMethod: Order['paymentMethod'], discountPercentage: number, redeemPoints = 0, tipAmount = 0) => {
+    const targetOrder = orders.find(o => o.id === orderId);
+    if (!targetOrder) return;
 
-      const tenant = tenants.find(t => t.id === o.tenantId) || mockTenants[0];
-      const discountVal = parseFloat(((o.subtotal * discountPercentage) / 100).toFixed(2));
-      const pointsDiscount = redeemPoints * tenant.loyaltyRedeemValue;
-      const finalDiscount = discountVal + pointsDiscount;
-      const taxAmount = parseFloat(((o.subtotal * tenant.baseTaxRate) / 100).toFixed(2));
-      const serviceChargeAmount = parseFloat(((o.subtotal * tenant.serviceCharge) / 100).toFixed(2));
-      const finalTotal = parseFloat((o.subtotal + taxAmount + serviceChargeAmount - finalDiscount).toFixed(2));
+    const tenant = tenants.find(t => t.id === targetOrder.tenantId) || mockTenants[0];
+    const discountVal = parseFloat(((targetOrder.subtotal * discountPercentage) / 100).toFixed(2));
+    const pointsDiscount = redeemPoints * tenant.loyaltyRedeemValue;
+    const finalDiscount = discountVal + pointsDiscount;
+    const taxAmount = parseFloat(((targetOrder.subtotal * tenant.baseTaxRate) / 100).toFixed(2));
+    const serviceChargeAmount = parseFloat(((targetOrder.subtotal * tenant.serviceCharge) / 100).toFixed(2));
+    const finalTotal = parseFloat((targetOrder.subtotal + taxAmount + serviceChargeAmount + tipAmount - finalDiscount).toFixed(2));
+    const loyaltyEarned = Math.floor(finalTotal * tenant.loyaltyPointsRatio);
 
-      // Calculate loyalty points earned
-      const loyaltyEarned = Math.floor(finalTotal * tenant.loyaltyPointsRatio);
+    // Loyalty integration
+    if (targetOrder.customerEmail) {
+      const email = targetOrder.customerEmail;
+      setCustomerProfiles(prev => {
+        const current = prev[email] || {
+          id: `cust-${Date.now()}`,
+          email,
+          name: targetOrder.customerName || email.split('@')[0],
+          phone: targetOrder.customerPhone || '',
+          savedAddresses: [],
+          savedFavorites: [],
+          loyaltyPoints: 0,
+          loyaltyHistory: []
+        };
+        const updatedPoints = Math.max(0, current.loyaltyPoints + loyaltyEarned - redeemPoints);
+        const newHistoryEntry: LoyaltyHistoryEntry = {
+          id: `lh-${Date.now()}`,
+          date: new Date().toISOString(),
+          points: loyaltyEarned,
+          type: 'earn',
+          orderNum: targetOrder.orderNum,
+          description: `Earned on order ${targetOrder.orderNum}`
+        };
+        const redeemHistoryEntry: LoyaltyHistoryEntry[] = redeemPoints > 0 ? [{
+          id: `lh-${Date.now()}-red`,
+          date: new Date().toISOString(),
+          points: -redeemPoints,
+          type: 'redeem' as const,
+          orderNum: targetOrder.orderNum,
+          description: `Redeemed on order ${targetOrder.orderNum}`
+        }] : [];
+        const updatedProfile = {
+          ...current,
+          loyaltyPoints: updatedPoints,
+          loyaltyHistory: [...current.loyaltyHistory, newHistoryEntry, ...redeemHistoryEntry]
+        };
+        syncToFirestore('users', updatedProfile.id, updatedProfile);
+        return {
+          ...prev,
+          [email]: updatedProfile
+        };
+      });
+    }
 
-      // Clean table status if dine_in
-      if (o.tableId && o.type === 'dine_in') {
-        updateTableStatus(o.tableId, 'dirty');
-      }
+    // Clean table status if dine_in
+    if (targetOrder.tableId && targetOrder.type === 'dine_in') {
+      updateTableStatus(targetOrder.tableId, 'dirty');
+    }
 
-      return {
-        ...o,
-        status: 'completed' as const,
-        paymentStatus: 'paid' as const,
-        paymentMethod,
-        discount: finalDiscount,
-        total: finalTotal,
-        loyaltyPointsEarned: loyaltyEarned,
-        loyaltyPointsRedeemed: redeemPoints
-      };
-    }));
+    const newEvent: TimelineEvent = {
+      id: `ev-${Date.now()}`,
+      time: new Date().toISOString(),
+      label: 'Payment Completed',
+      desc: `Paid ${tenant.currencySymbol} ${finalTotal} via ${paymentMethod}. Tip: ${tenant.currencySymbol} ${tipAmount}`,
+      actor: 'Cashier'
+    };
 
+    const updated: Order = {
+      ...targetOrder,
+      status: 'completed' as const,
+      paymentStatus: 'paid' as const,
+      paymentMethod,
+      discount: finalDiscount,
+      tip: tipAmount,
+      total: finalTotal,
+      loyaltyPointsEarned: loyaltyEarned,
+      loyaltyPointsRedeemed: redeemPoints,
+      updatedAt: new Date().toISOString(),
+      timeline: [...(targetOrder.timeline || []), newEvent]
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Record Payment', `Order ${orderId} fully paid via ${paymentMethod}.`);
+    syncToFirestore('orders', orderId, updated);
   };
 
   const rateAndFeedback = (orderId: string, rating: number, feedback: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, rating, feedback } : o));
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
+
+    const updated: Order = {
+      ...existing,
+      rating,
+      feedback,
+      updatedAt: new Date().toISOString()
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Customer Review', `Received ${rating}-star rating for order: ${orderId}`);
+    syncToFirestore('orders', orderId, updated);
   };
 
   const cancelOrder = (orderId: string, reason: string) => {
-    setOrders(prev => prev.map(o => {
-      if (o.id !== orderId) return o;
-      if (o.tableId && o.type === 'dine_in') {
-        updateTableStatus(o.tableId, 'empty');
-      }
-      return { ...o, status: 'cancelled' as const };
-    }));
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
+
+    if (existing.tableId && existing.type === 'dine_in') {
+      updateTableStatus(existing.tableId, 'empty');
+    }
+
+    const updated: Order = {
+      ...existing,
+      status: 'cancelled' as const,
+      updatedAt: new Date().toISOString(),
+      timeline: [...(existing.timeline || []), { id: `ev-${Date.now()}`, time: new Date().toISOString(), label: 'Order Cancelled', desc: `Reason: ${reason}`, actor: 'Staff' }]
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Cancel Order', `Order ${orderId} was cancelled. Reason: ${reason}`);
+    syncToFirestore('orders', orderId, updated);
   };
 
   const verifyAdvancePayment = (orderId: string, approve: boolean, rejectionReason?: string) => {
-    setOrders(prev => prev.map(o => {
-      if (o.id !== orderId) return o;
-      if (approve) {
-        return {
-          ...o,
-          paymentVerificationStatus: 'approved' as const,
-          paymentStatus: 'paid' as const,
-          status: 'submitted' as const // Now ready to reach kitchen (submitted status)
-        };
-      } else {
-        return {
-          ...o,
-          paymentVerificationStatus: 'rejected' as const,
-          status: 'cancelled' as const,
-          notes: rejectionReason ? `${o.notes || ''} [Rejected: ${rejectionReason}]` : o.notes
-        };
-      }
-    }));
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
+
+    let updated: Order;
+    if (approve) {
+      updated = {
+        ...existing,
+        paymentVerificationStatus: 'approved' as const,
+        paymentStatus: 'paid' as const,
+        status: 'accepted' as const,
+        updatedAt: new Date().toISOString(),
+        timeline: [...(existing.timeline || []), { id: `ev-${Date.now()}`, time: new Date().toISOString(), label: 'Advance Payment Approved', desc: 'Advance payment verified by cashier', actor: 'Cashier' }]
+      };
+    } else {
+      updated = {
+        ...existing,
+        paymentVerificationStatus: 'rejected' as const,
+        paymentStatus: 'failed' as const,
+        status: 'cancelled' as const,
+        notes: rejectionReason ? `${existing.notes || ''} [Rejected: ${rejectionReason}]` : existing.notes,
+        updatedAt: new Date().toISOString(),
+        timeline: [...(existing.timeline || []), { id: `ev-${Date.now()}`, time: new Date().toISOString(), label: 'Advance Payment Rejected', desc: `Advance payment rejected. Reason: ${rejectionReason}`, actor: 'Cashier' }]
+      };
+    }
+
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Verify Advance Payment', `Advance payment for order ${orderId} was ${approve ? 'approved' : 'rejected'}.`);
+    syncToFirestore('orders', orderId, updated);
+  };
+
+  const addKitchenNote = (orderId: string, text: string) => {
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
+
+    const newNote: KitchenNote = {
+      id: `kn-${Date.now()}`,
+      text,
+      approved: false // requires Manager approval
+    };
+
+    const updated: Order = {
+      ...existing,
+      kitchenNotes: [...(existing.kitchenNotes || []), newNote],
+      updatedAt: new Date().toISOString()
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    addLog('Add Kitchen Note', `Kitchen note added to Order ${orderId}: "${text}" (Awaiting manager approval)`);
+    syncToFirestore('orders', orderId, updated);
+  };
+
+  const approveKitchenNote = (orderId: string, noteId: string, approve: boolean) => {
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
+
+    const updatedNotes = (existing.kitchenNotes || []).map(note => {
+      if (note.id !== noteId) return note;
+      return { ...note, approved: approve, rejected: !approve };
+    }).filter(note => approve ? true : false); // remove if rejected
+    
+    const newEvent: TimelineEvent = {
+      id: `ev-${Date.now()}`,
+      time: new Date().toISOString(),
+      label: `Kitchen Note ${approve ? 'Approved' : 'Rejected'}`,
+      desc: `Manager ${approve ? 'approved' : 'rejected'} a kitchen note`,
+      actor: 'Manager'
+    };
+
+    const updated: Order = {
+      ...existing,
+      kitchenNotes: updatedNotes,
+      updatedAt: new Date().toISOString(),
+      timeline: [...(existing.timeline || []), newEvent]
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    addLog('Approve Kitchen Note', `Manager ${approve ? 'approved' : 'rejected'} kitchen note ${noteId} for Order ${orderId}`);
+    syncToFirestore('orders', orderId, updated);
+  };
+
+  const addTip = (orderId: string, amount: number) => {
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
+
+    const updated: Order = {
+      ...existing,
+      tip: (existing.tip || 0) + amount,
+      total: parseFloat((existing.total + amount).toFixed(2)),
+      updatedAt: new Date().toISOString(),
+      timeline: [...(existing.timeline || []), { id: `ev-${Date.now()}`, time: new Date().toISOString(), label: 'Tip Added', desc: `Recorded tip amount of ${amount}`, actor: 'Staff' }]
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    addLog('Add Tip', `Recorded tip of ${amount} for order: ${orderId}`);
+    syncToFirestore('orders', orderId, updated);
+  };
+
+  const deliverTip = (orderId: string) => {
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
+
+    const updated: Order = {
+      ...existing,
+      tipStatus: 'delivered' as const,
+      updatedAt: new Date().toISOString(),
+      timeline: [...(existing.timeline || []), { id: `ev-${Date.now()}`, time: new Date().toISOString(), label: 'Tip Delivered', desc: 'Tip payout delivered to staff', actor: 'Cashier' }]
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    addLog('Deliver Tip', `Tip delivered for order: ${orderId}`);
+    syncToFirestore('orders', orderId, updated);
   };
 
   // Staff
   const addStaffMember = (memberData: Omit<Staff, 'id' | 'active'>) => {
+    const id = `s-${Date.now()}`;
     const newStaff: Staff = {
       ...memberData,
-      id: `s-${Date.now()}`,
+      id,
       active: true
     };
     setStaff(prev => [...prev, newStaff]);
     addLog('Invite Staff', `Invited employee ${memberData.name} as ${memberData.role}.`);
+    syncToFirestore('users', id, newStaff);
   };
 
   const toggleStaffStatus = (staffId: string) => {
@@ -706,8 +1106,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (s.id !== staffId) return s;
       const newState = !s.active;
       addLog('Toggle Staff Status', `Staff member ${s.name} ${newState ? 'activated' : 'deactivated'}.`);
-      return { ...s, active: newState };
+      const updated = { ...s, active: newState };
+      syncToFirestore('users', staffId, updated);
+      return updated;
     }));
+  };
+
+  const updateStaffPermissions = (staffId: string, permissions: string[]) => {
+    setStaff(prev => prev.map(s => {
+      if (s.id !== staffId) return s;
+      const updated = { ...s, permissions };
+      syncToFirestore('users', staffId, updated);
+      return updated;
+    }));
+    const found = staff.find(s => s.id === staffId);
+    if (found) {
+      addLog('Update Staff Permissions', `Updated custom permissions for employee: ${found.name}.`);
+    }
   };
 
   // Super Admin
@@ -716,7 +1131,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (t.id !== tenantId) return t;
       const nextStatus = t.subscriptionStatus === 'active' ? 'suspended' : 'active';
       addLog('Platform Admin Override', `Tenant ${t.name} subscription status updated to: ${nextStatus}`);
-      return { ...t, subscriptionStatus: nextStatus };
+      const updated = { ...t, subscriptionStatus: nextStatus };
+      syncToFirestore('businesses', tenantId, updated);
+      return updated;
     }));
   };
 
@@ -724,7 +1141,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTenants(prev => prev.map(t => {
       if (t.id !== tenantId) return t;
       addLog('Platform Admin Override', `Tenant ${t.name} subscription plan updated to: ${plan}`);
-      return { ...t, subscriptionPlan: plan };
+      const updated = { ...t, subscriptionPlan: plan };
+      syncToFirestore('businesses', tenantId, updated);
+      return updated;
     }));
   };
 
@@ -732,7 +1151,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTenants(prev => prev.map(t => {
       if (t.id !== tenantId) return t;
       addLog('Subscription', `Tenant ${t.name} requested upgrade to: ${plan}. Status changed to pending_approval.`);
-      return { ...t, subscriptionPlan: plan, subscriptionStatus: 'pending_approval' };
+      const updated = { ...t, subscriptionPlan: plan, subscriptionStatus: 'pending_approval' };
+      syncToFirestore('businesses', tenantId, updated);
+      return updated;
     }));
   };
 
@@ -740,7 +1161,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTenants(prev => prev.map(t => {
       if (t.id !== tenantId) return t;
       addLog('Settings Override', `Tenant ${t.name} currency updated to: ${currency} (${currencySymbol})`);
-      return { ...t, currency, currencySymbol };
+      const updated = { ...t, currency, currencySymbol };
+      syncToFirestore('businesses', tenantId, updated);
+      return updated;
     }));
   };
 
@@ -748,7 +1171,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTenants(prev => prev.map(t => {
       if (t.id !== tenantId) return t;
       addLog('Settings Override', `Tenant ${t.name} logo and bank details updated.`);
-      return { ...t, logoUrl, bankAccount };
+      const updated = { ...t, logoUrl, bankAccount };
+      syncToFirestore('businesses', tenantId, updated);
+      return updated;
     }));
   };
 
@@ -756,7 +1181,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTenants(prev => prev.map(t => {
       if (t.id !== tenantId) return t;
       addLog('Platform Admin Approval', `Business "${t.name}" registration request has been APPROVED.`);
-      return { ...t, subscriptionStatus: 'active' };
+      const updated = { ...t, subscriptionStatus: 'active' };
+      syncToFirestore('businesses', tenantId, updated);
+      return updated;
     }));
   };
 
@@ -764,19 +1191,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTenants(prev => prev.map(t => {
       if (t.id !== tenantId) return t;
       addLog('Platform Admin Approval', `Business "${t.name}" registration request has been REJECTED.`);
-      return { ...t, subscriptionStatus: 'rejected' };
+      const updated = { ...t, subscriptionStatus: 'rejected' };
+      syncToFirestore('businesses', tenantId, updated);
+      return updated;
     }));
   };
 
   const addAd = (adData: Omit<PlatformAd, 'id' | 'createdAt' | 'active'>) => {
+    const id = `ad-${Date.now()}`;
     const newAd: PlatformAd = {
       ...adData,
-      id: `ad-${Date.now()}`,
+      id,
       active: true,
       createdAt: new Date().toISOString()
     };
     setAds(prev => [newAd, ...prev]);
     addLog('Ad Operations', `Published platform ad: ${adData.title}`);
+    syncToFirestore('ads', id, newAd);
   };
 
   const toggleAdStatus = (id: string) => {
@@ -784,14 +1215,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (ad.id !== id) return ad;
       const nextActive = !ad.active;
       addLog('Ad Operations', `Ad "${ad.title}" is now ${nextActive ? 'Active' : 'Paused'}`);
-      return { ...ad, active: nextActive };
+      const updated = { ...ad, active: nextActive };
+      syncToFirestore('ads', id, updated);
+      return updated;
     }));
   };
 
   const deleteAd = (id: string) => {
     setAds(prev => {
       const ad = prev.find(a => a.id === id);
-      if (ad) addLog('Ad Operations', `Deleted ad: ${ad.title}`);
+      if (ad) {
+        addLog('Ad Operations', `Deleted ad: ${ad.title}`);
+        deleteFromFirestore('ads', id);
+      }
       return prev.filter(a => a.id !== id);
     });
   };
@@ -800,7 +1236,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPricingPlans(prev => prev.map(p => {
       if (p.id !== planId) return p;
       addLog('Pricing Operations', `Updated ${p.name} price to USD ${newPriceUSD} / ETB ${newPriceETB}`);
-      return { ...p, priceUSD: newPriceUSD, priceETB: newPriceETB };
+      const updated = { ...p, priceUSD: newPriceUSD, priceETB: newPriceETB };
+      syncToFirestore('pricing_plans', planId, updated);
+      return updated;
     }));
   };
 
@@ -909,6 +1347,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     addLog('Tenant Registration', `Registered new tenant: ${data.name} owned by ${data.ownerName}`);
 
+    // Sync newly created entities to Firestore
+    syncToFirestore('businesses', tenantId, newTenant);
+    syncToFirestore('branches', branchId, newBranch);
+    syncToFirestore('users', ownerId, newStaff);
+    newCategories.forEach(cat => syncToFirestore('categories', cat.id, cat));
+    newMenuItemsList.forEach(item => syncToFirestore('menu_items', item.id, item));
+
     // Set active values
     setActiveTenantId(tenantId);
     setActiveBranchId(branchId);
@@ -947,6 +1392,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     setStaff(prev => [...prev, newStaff]);
     addLog('Platform Owner Sign Up', `Owner signed up: ${name} (${cleanEmail}). Business profile pending creation.`);
+    syncToFirestore('users', ownerId, newStaff);
 
     const loggedUser = {
       id: ownerId,
@@ -957,6 +1403,276 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       branchId: '',
     };
     setCurrentUser(loggedUser);
+  };
+
+  // Sync to Firestore Helper (dynamic, safe imports)
+  const syncToFirestore = async (collectionName: string, docId: string, data: any) => {
+    try {
+      const { getDB } = await import('../lib/firebase');
+      const db = getDB();
+      if (db) {
+        const { doc, setDoc } = await import('firebase/firestore');
+        await setDoc(doc(db, collectionName, docId), data, { merge: true });
+      }
+    } catch (e) {
+      console.warn("Firestore sync skipped/failed:", e);
+    }
+  };
+
+  const deleteFromFirestore = async (collectionName: string, docId: string) => {
+    try {
+      const { getDB } = await import('../lib/firebase');
+      const db = getDB();
+      if (db) {
+        const { doc, deleteDoc } = await import('firebase/firestore');
+        await deleteDoc(doc(db, collectionName, docId));
+      }
+    } catch (e) {
+      console.warn("Firestore delete skipped/failed:", e);
+    }
+  };
+
+  const updatePaymentMethodConfig = (tenantId: string, configs: PaymentMethodConfig[]) => {
+    setPaymentMethodsConfigs(prev => ({
+      ...prev,
+      [tenantId]: configs
+    }));
+    addLog('Update Payment Config', `Updated payment methods configurations for tenant ${tenantId}.`);
+    syncToFirestore('businesses', tenantId, { paymentMethods: configs });
+  };
+
+  const updateLoyaltyConfig = (tenantId: string, config: LoyaltyConfig) => {
+    setLoyaltyConfigs(prev => ({
+      ...prev,
+      [tenantId]: config
+    }));
+    addLog('Update Loyalty Config', `Updated loyalty program settings for tenant ${tenantId}.`);
+    syncToFirestore('businesses', tenantId, { loyaltyConfig: config });
+  };
+
+  const addMealSubscriptionPlan = (plan: Omit<MealSubscriptionPlan, 'id'>) => {
+    const id = `sub-plan-${Date.now()}`;
+    const newPlan: MealSubscriptionPlan = { ...plan, id };
+    setMealSubscriptionPlans(prev => {
+      const list = prev[plan.tenantId] || [];
+      return {
+        ...prev,
+        [plan.tenantId]: [...list, newPlan]
+      };
+    });
+    addLog('Create Meal Subscription Plan', `Created meal subscription plan: ${plan.name}`);
+    syncToFirestore('meal_subscription_plans', id, newPlan);
+  };
+
+  const updateMealSubscriptionPlan = (plan: MealSubscriptionPlan) => {
+    setMealSubscriptionPlans(prev => {
+      const list = prev[plan.tenantId] || [];
+      return {
+        ...prev,
+        [plan.tenantId]: list.map(p => p.id === plan.id ? plan : p)
+      };
+    });
+    addLog('Update Meal Subscription Plan', `Updated meal subscription plan: ${plan.name}`);
+    syncToFirestore('meal_subscription_plans', plan.id, plan);
+  };
+
+  const deleteMealSubscriptionPlan = (tenantId: string, planId: string) => {
+    setMealSubscriptionPlans(prev => {
+      const list = prev[tenantId] || [];
+      return {
+        ...prev,
+        [tenantId]: list.filter(p => p.id !== planId)
+      };
+    });
+    addLog('Delete Meal Subscription Plan', `Deleted meal subscription plan ID: ${planId}`);
+    deleteFromFirestore('meal_subscription_plans', planId);
+  };
+
+  const subscribeToMealPlan = (subData: Omit<CustomerMealSubscription, 'id'>) => {
+    const id = `cust-sub-${Date.now()}`;
+    const newSub: CustomerMealSubscription = { ...subData, id };
+    setCustomerSubscriptions(prev => [...prev, newSub]);
+    addLog('Meal Plan Subscription', `Customer subscribed to meal plan ID: ${subData.planId}`);
+    syncToFirestore('customer_subscriptions', id, newSub);
+  };
+
+  const logMealService = (subscriptionId: string) => {
+    const existing = customerSubscriptions.find(sub => sub.id === subscriptionId);
+    if (!existing) return;
+
+    const todayUsed = existing.mealsUsedToday + 1;
+    const weekUsed = existing.mealsUsedThisWeek + 1;
+    const totalUsed = existing.mealsUsedTotal + 1;
+    const remaining = Math.max(0, existing.mealsRemainingTotal - 1);
+
+    const updated: CustomerMealSubscription = {
+      ...existing,
+      mealsUsedToday: todayUsed,
+      mealsUsedThisWeek: weekUsed,
+      mealsUsedTotal: totalUsed,
+      mealsRemainingTotal: remaining
+    };
+
+    setCustomerSubscriptions(prev => prev.map(sub => sub.id === subscriptionId ? updated : sub));
+    addLog('Log Subscription Meal Served', `Served subscription meal on sub ${subscriptionId}`);
+    syncToFirestore('customer_subscriptions', subscriptionId, updated);
+  };
+
+  const refundOrder = (orderId: string, amount: number, reason: string, actor: string) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      const refundDetails: RefundDetails = {
+        refundAmount: amount,
+        refundReason: reason,
+        refundDate: new Date().toISOString(),
+        refundedBy: actor
+      };
+      
+      const newEvent: TimelineEvent = {
+        id: `ev-${Date.now()}`,
+        time: new Date().toISOString(),
+        label: 'Order Refunded',
+        desc: `Refunded amount: ${amount} | Reason: ${reason} | Refunded by: ${actor}`,
+        actor
+      };
+
+      const updatedOrder = {
+        ...o,
+        status: 'refunded' as const,
+        paymentStatus: 'refunded' as const,
+        refundDetails,
+        timeline: [...(o.timeline || []), newEvent]
+      };
+      
+      syncToFirestore('orders', orderId, updatedOrder);
+      return updatedOrder;
+    }));
+    addLog('Order Refunded', `Order ${orderId} refunded for amount: ${amount}. Reason: ${reason}`);
+  };
+
+  const updateCustomerProfile = (email: string, profileData: Partial<CustomerProfile>) => {
+    setCustomerProfiles(prev => {
+      const current = prev[email] || {
+        id: `cust-${Date.now()}`,
+        email,
+        name: profileData.name || email.split('@')[0],
+        phone: profileData.phone || '',
+        savedAddresses: [],
+        savedFavorites: [],
+        loyaltyPoints: 0,
+        loyaltyHistory: []
+      };
+      const updated = { ...current, ...profileData };
+      syncToFirestore('users', updated.id, updated);
+      return {
+        ...prev,
+        [email]: updated
+      };
+    });
+  };
+
+  const addFavoriteItem = (email: string, menuItemId: string) => {
+    setCustomerProfiles(prev => {
+      const current = prev[email] || {
+        id: `cust-${Date.now()}`,
+        email,
+        name: email.split('@')[0],
+        phone: '',
+        savedAddresses: [],
+        savedFavorites: [],
+        loyaltyPoints: 0,
+        loyaltyHistory: []
+      };
+      const updated = {
+        ...current,
+        savedFavorites: [...new Set([...current.savedFavorites, menuItemId])]
+      };
+      syncToFirestore('users', updated.id, updated);
+      return {
+        ...prev,
+        [email]: updated
+      };
+    });
+  };
+
+  const removeFavoriteItem = (email: string, menuItemId: string) => {
+    setCustomerProfiles(prev => {
+      const current = prev[email];
+      if (!current) return prev;
+      const updated = {
+        ...current,
+        savedFavorites: current.savedFavorites.filter(id => id !== menuItemId)
+      };
+      syncToFirestore('users', updated.id, updated);
+      return {
+        ...prev,
+        [email]: updated
+      };
+    });
+  };
+
+  const addSavedAddress = (email: string, name: string, address: string) => {
+    setCustomerProfiles(prev => {
+      const current = prev[email] || {
+        id: `cust-${Date.now()}`,
+        email,
+        name: email.split('@')[0],
+        phone: '',
+        savedAddresses: [],
+        savedFavorites: [],
+        loyaltyPoints: 0,
+        loyaltyHistory: []
+      };
+      const newAddress = { id: `addr-${Date.now()}`, name, address };
+      const updated = {
+        ...current,
+        savedAddresses: [...current.savedAddresses, newAddress]
+      };
+      syncToFirestore('users', updated.id, updated);
+      return {
+        ...prev,
+        [email]: updated
+      };
+    });
+  };
+
+  const removeSavedAddress = (email: string, addressId: string) => {
+    setCustomerProfiles(prev => {
+      const current = prev[email];
+      if (!current) return prev;
+      const updated = {
+        ...current,
+        savedAddresses: current.savedAddresses.filter(a => a.id !== addressId)
+      };
+      syncToFirestore('users', updated.id, updated);
+      return {
+        ...prev,
+        [email]: updated
+      };
+    });
+  };
+
+  const updateTipStatus = (orderId: string, status: 'pending' | 'delivered' | 'accepted') => {
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      
+      const newEvent: TimelineEvent = {
+        id: `ev-${Date.now()}`,
+        time: new Date().toISOString(),
+        label: status === 'delivered' ? 'Tip Delivered' : status === 'accepted' ? 'Tip Accepted by Staff' : 'Tip Logged',
+        desc: status === 'delivered' ? 'Tip has been delivered to staff by Cashier' : 'Staff accepted the tip payout',
+        actor: status === 'delivered' ? 'Cashier' : 'Waiter'
+      };
+
+      const updated = {
+        ...o,
+        tipStatus: status,
+        timeline: [...(o.timeline || []), newEvent]
+      };
+      syncToFirestore('orders', orderId, updated);
+      return updated;
+    }));
+    addLog('Update Tip Status', `Order ${orderId} tip status updated to: ${status}`);
   };
 
   return (
@@ -996,8 +1712,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       rateAndFeedback,
       cancelOrder,
       verifyAdvancePayment,
+      addKitchenNote,
+      approveKitchenNote,
+      addTip,
+      deliverTip,
       addStaffMember,
       toggleStaffStatus,
+      updateStaffPermissions,
       toggleTenantStatus,
       updateTenantPlan,
       requestTenantUpgrade,
@@ -1013,7 +1734,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updatePlanPrice,
       registerTenant,
       signUpOwnerOnly,
-      addLog
+      addLog,
+      
+      paymentMethodsConfigs,
+      updatePaymentMethodConfig,
+      loyaltyConfigs,
+      updateLoyaltyConfig,
+      mealSubscriptionPlans,
+      customerSubscriptions,
+      addMealSubscriptionPlan,
+      updateMealSubscriptionPlan,
+      deleteMealSubscriptionPlan,
+      subscribeToMealPlan,
+      logMealService,
+      refundOrder,
+      customerProfiles,
+      updateCustomerProfile,
+      addFavoriteItem,
+      removeFavoriteItem,
+      addSavedAddress,
+      removeSavedAddress,
+      updateTipStatus
     }}>
       {children}
     </AppContext.Provider>

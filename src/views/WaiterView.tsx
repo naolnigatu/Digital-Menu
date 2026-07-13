@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Table, MenuItem, Order, OrderItem } from '../types';
 import { 
-  Grid, Plus, Utensils, Check, HelpCircle, ShoppingCart, MessageSquare, Clock, CheckCircle2, RotateCcw
+  Grid, Plus, Utensils, Check, HelpCircle, ShoppingCart, MessageSquare, Clock, CheckCircle2, RotateCcw, Award,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function WaiterView() {
   const { 
+    currentUser,
     tables, 
     orders, 
     menuItems, 
@@ -16,15 +18,22 @@ export default function WaiterView() {
     updateTableStatus, 
     placeOrder, 
     updateOrderStatus, 
-    updateOrderItemStatus 
+    updateOrderItemStatus,
+    addTip
   } = useApp();
 
-  const tenant = tenants.find(t => t.id === activeTenantId) || tenants[0];
-  const branchTables = tables.filter(t => t.branchId === activeBranchId);
-  const branchMenuItems = menuItems[activeTenantId] || [];
+  const tenant = useMemo(() => tenants.find(t => t.id === activeTenantId) || tenants[0], [tenants, activeTenantId]);
+  const branchTables = useMemo(() => tables.filter(t => t.branchId === activeBranchId), [tables, activeBranchId]);
+  const branchMenuItems = useMemo(() => menuItems[activeTenantId] || [], [menuItems, activeTenantId]);
 
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [showOrderPanel, setShowOrderPanel] = useState(false);
+  
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToast({ text, type });
+    setTimeout(() => setToast(null), 3000);
+  };
   
   // Custom Walk-in Order State
   const [cart, setCart] = useState<{ item: MenuItem; qty: number; notes: string; selectedMods: { groupName: string; optionName: string; price: number }[] }[]>([]);
@@ -32,7 +41,10 @@ export default function WaiterView() {
   const [guestPhone, setGuestPhone] = useState('');
 
   // Active Order for selected table (if exists)
-  const activeOrder = orders.find(o => o.tableId === selectedTable?.id && o.status !== 'completed' && o.status !== 'cancelled');
+  const activeOrder = useMemo(() => {
+    if (!selectedTable) return undefined;
+    return orders.find(o => o.tableId === selectedTable.id && o.status !== 'completed' && o.status !== 'cancelled');
+  }, [orders, selectedTable]);
 
   const handleClearTable = (tableId: string) => {
     updateTableStatus(tableId, 'empty');
@@ -216,8 +228,8 @@ export default function WaiterView() {
                         {/* Deliver button if cooking is finished */}
                         {it.status === 'ready' && (
                           <button
-                            onClick={() => updateOrderItemStatus(activeOrder.id, it.id, 'delivered')}
-                            className="w-full flex items-center justify-center gap-1 rounded bg-emerald-600 text-white text-[10px] font-bold py-1 hover:bg-emerald-500 transition-colors"
+                            onClick={() => updateOrderItemStatus(activeOrder.id, it.id, 'delivered', 'Waiter')}
+                            className="w-full flex items-center justify-center gap-1 rounded bg-emerald-600 text-white text-[10px] font-bold py-1 hover:bg-emerald-500 transition-colors cursor-pointer"
                           >
                             <Check className="h-3 w-3" />
                             <span>Deliver to Customer</span>
@@ -231,6 +243,52 @@ export default function WaiterView() {
                   <div className="pt-3 border-t border-slate-100 flex justify-between text-xs">
                     <span className="text-slate-400">Active Check Total:</span>
                     <span className="font-bold text-slate-900">{tenant.currencySymbol} {activeOrder.total.toLocaleString()}</span>
+                  </div>
+
+                  {/* Waiter Shift Tips Registry Card (Part 10) */}
+                  <div className="bg-gradient-to-r from-amber-500/10 to-indigo-500/10 rounded-xl p-3 border border-indigo-100/60 space-y-2.5 shadow-sm">
+                    <div className="flex justify-between items-center">
+                      <p className="font-sans font-extrabold text-[9px] text-indigo-950 uppercase tracking-wider flex items-center gap-1">
+                        <Award className="h-3.5 w-3.5 text-amber-500" />
+                        <span>Shift Tips Registry</span>
+                      </p>
+                      <span className="bg-indigo-600 text-white font-extrabold text-[7px] px-1.5 py-0.5 rounded-full uppercase">
+                        Active
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-1.5 text-center">
+                      <div className="bg-white p-2 rounded-lg border border-slate-100">
+                        <p className="text-[8px] font-bold text-slate-400 uppercase">My Shift Earnings</p>
+                        <p className="text-xs font-black text-slate-800 mt-0.5">
+                          {tenant.currencySymbol} {orders
+                            .filter(o => o.tenantId === activeTenantId && o.waiterId === currentUser?.id)
+                            .reduce((acc, curr) => acc + (curr.tip || 0), 0)}
+                        </p>
+                      </div>
+                      <div className="bg-white p-2 rounded-lg border border-slate-100">
+                        <p className="text-[8px] font-bold text-slate-400 uppercase">Payout Mode</p>
+                        <p className="text-[8px] font-bold text-indigo-600 mt-1 uppercase tracking-wider">Ready / Cashout</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-2 rounded-lg border border-slate-100 space-y-1.5">
+                      <p className="text-[8px] font-bold text-slate-400 uppercase">Add Tip on Current Order</p>
+                      <div className="flex gap-1">
+                        {[10, 20, 50, 100].map(amt => (
+                          <button
+                            key={amt}
+                            onClick={() => {
+                              addTip(activeOrder.id, amt);
+                              showToast(`Registered tip of ${tenant.currencySymbol} ${amt} for Order ${activeOrder.orderNum}.`);
+                            }}
+                            className="flex-1 rounded border border-slate-200 py-0.5 text-[9px] font-extrabold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                          >
+                            +{amt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
                 </div>
@@ -331,6 +389,22 @@ export default function WaiterView() {
         </div>
 
       </div>
+
+      {/* Toast Notification Banner */}
+      {toast && (
+        <div className={`fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-xl border p-4 shadow-xl animate-in slide-in-from-bottom-5 fade-in duration-300 ${
+          toast.type === 'success' 
+            ? 'border-emerald-100 bg-emerald-50 text-emerald-800' 
+            : 'border-rose-100 bg-rose-50 text-rose-800'
+        }`}>
+          {toast.type === 'success' ? (
+            <Check className="h-4 w-4 bg-emerald-500 text-white rounded-full p-0.5" />
+          ) : (
+            <AlertTriangle className="h-4 w-4 text-rose-500" />
+          )}
+          <span className="text-xs font-bold">{toast.text}</span>
+        </div>
+      )}
 
     </div>
   );

@@ -4,6 +4,7 @@
  */
 
 import { AppProvider, useApp } from './context/AppContext';
+import { DinexProvider } from './context/DinexContext';
 import Navbar from './components/Navbar';
 import SuperAdminView from './views/SuperAdminView';
 import BusinessOwnerView from './views/BusinessOwnerView';
@@ -124,7 +125,9 @@ function DashboardShell() {
 export default function App() {
   return (
     <AppProvider>
-      <DashboardShell />
+      <DinexProvider>
+        <DashboardShell />
+      </DinexProvider>
     </AppProvider>
   );
 }

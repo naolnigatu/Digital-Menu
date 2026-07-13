@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { UserRole, SubscriptionPlan } from '../types';
 import { 
   ChefHat, Coffee, QrCode, Shield, Utensils, CreditCard, Globe, Wifi, WifiOff, Bell, LogOut, User, RefreshCw,
-  PlusCircle, Lock, Mail, Building2, Landmark, HelpCircle, Check, ArrowRight
+  PlusCircle, Lock, Mail, Building2, Landmark, HelpCircle, Check, ArrowRight, AlertTriangle
 } from 'lucide-react';
 import { signInWithGoogle, logOut } from '../lib/firebase';
 
@@ -34,9 +34,17 @@ export default function Navbar() {
   const [isGoogleLoadingSignUp, setIsGoogleLoadingSignUp] = useState(false);
   const [isEmailLoading, setIsEmailLoading] = useState(false);
   const [isSignUpLoading, setIsSignUpLoading] = useState(false);
+  const [localNotice, setLocalNotice] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
-  // Sign In / Up States
+  const showNotice = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setLocalNotice({ text, type });
+  };
+
+  // Clear notice whenever the tab changes
   const [activeModalTab, setActiveModalTab] = useState<'signin' | 'signup' | 'demo'>('signin');
+  useEffect(() => {
+    setLocalNotice(null);
+  }, [activeModalTab]);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   
@@ -113,9 +121,9 @@ export default function Navbar() {
       console.error(error);
       const isConfigError = error?.message?.includes('API key') || error?.code?.includes('api-key') || error?.message?.includes('invalid-api-key');
       if (isConfigError) {
-        alert("Firebase is not fully configured yet because the VITE_FIREBASE_API_KEY environment variable is missing in this environment.\n\nTo access the Super Admin or any role right now, please close this alert and click the 'Naol Nigatu' or 'Super Admin' demo accounts directly from the list below!");
+        showNotice("Firebase is not fully configured (missing API key). Please use 'Demo Accounts' tab below to log in instantly!", "error");
       } else {
-        alert(`Google Sign-In Error: ${error?.message || 'Please check your internet connection or try again.'}\n\nTip: You can always access any role instantly by clicking its demo card under 'Or Use Demo Accounts' below!`);
+        showNotice(`Google Sign-In Error: ${error?.message || 'Check network or try again.'}`, "error");
       }
     } finally {
       setIsGoogleLoading(false);
@@ -129,21 +137,21 @@ export default function Navbar() {
       if (user.email) {
         const alreadyRegistered = login(user.email);
         if (alreadyRegistered) {
-          alert(`Welcome back! The Google account (${user.email}) is already registered. Logging you in automatically...`);
-          setShowRoleModal(false);
+          showNotice(`Welcome back! Logging you in with ${user.email}...`, "success");
+          setTimeout(() => setShowRoleModal(false), 1500);
         } else {
           signUpOwnerOnly(user.displayName || 'Google User', user.email);
-          alert(`Google authenticated successfully!\n\nWelcome to MenuFlow, ${user.displayName || 'Owner'}! Let's now create your business brand profile.`);
-          setShowRoleModal(false);
+          showNotice(`Authenticated successfully! Welcome to MenuFlow, ${user.displayName || 'Owner'}. Let's create your business profile!`, "success");
+          setTimeout(() => setShowRoleModal(false), 2000);
         }
       }
     } catch (error: any) {
       console.error(error);
       const isConfigError = error?.message?.includes('API key') || error?.code?.includes('api-key') || error?.message?.includes('invalid-api-key');
       if (isConfigError) {
-        alert("Firebase is not fully configured yet because the VITE_FIREBASE_API_KEY environment variable is missing in this environment.\n\nTo register your brand now, please fill in the email and name fields manually below!");
+        showNotice("Firebase is not fully configured. Please register your brand by filling out the email/name fields manually below!", "info");
       } else {
-        alert(`Google Authentication Error: ${error?.message || 'Please check your internet connection or fill in details manually.'}`);
+        showNotice(`Google Authentication Error: ${error?.message || 'Please fill in details manually.'}`, "error");
       }
     } finally {
       setIsGoogleLoadingSignUp(false);
@@ -162,7 +170,7 @@ export default function Navbar() {
         setLoginEmail('');
         setLoginPassword('');
       } else {
-        alert(`The email "${loginEmail}" is not registered in our system yet.\n\nTip: Switch to the 'Sign Up' tab above to register your brand new owner account instantly!`);
+        showNotice(`The email "${loginEmail}" is not registered yet. Switch to "Owner Sign Up" above to register!`, "error");
       }
     }, 600);
   };
@@ -170,17 +178,19 @@ export default function Navbar() {
   const handleSignUpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!signupOwnerName || !signupOwnerEmail) {
-      alert("Please fill in all the required fields.");
+      showNotice("Please fill in all the required fields.", "error");
       return;
     }
     setIsSignUpLoading(true);
     setTimeout(() => {
       signUpOwnerOnly(signupOwnerName, signupOwnerEmail);
       setIsSignUpLoading(false);
-      alert(`Success! Your platform owner account has been created.\n\nNow, let's create your business profile to get started!`);
-      setShowRoleModal(false);
-      setSignupOwnerName('');
-      setSignupOwnerEmail('');
+      showNotice(`Success! Your platform owner account has been created. Let's create your business profile!`, "success");
+      setTimeout(() => {
+        setShowRoleModal(false);
+        setSignupOwnerName('');
+        setSignupOwnerEmail('');
+      }, 2000);
     }, 800);
   };
 
@@ -410,6 +420,33 @@ export default function Navbar() {
                 Demo Accounts
               </button>
             </div>
+
+            {/* Local Notice Banner */}
+            {localNotice && (
+              <div className={`mb-4 rounded-xl border p-3 text-xs flex items-start gap-2 ${
+                localNotice.type === 'success' 
+                  ? 'bg-emerald-50 border-emerald-100 text-emerald-800' 
+                  : localNotice.type === 'error'
+                  ? 'bg-rose-50 border-rose-100 text-rose-800'
+                  : 'bg-indigo-50 border-indigo-100 text-indigo-800'
+              }`}>
+                {localNotice.type === 'success' ? (
+                  <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1">
+                  <p className="font-semibold leading-normal">{localNotice.text}</p>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => setLocalNotice(null)} 
+                  className="text-[10px] font-bold text-slate-400 hover:text-slate-600 self-center"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
 
             {/* Active Tab Content */}
             <div className="space-y-4">

@@ -1,5 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, Auth } from 'firebase/auth';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -11,25 +12,39 @@ const firebaseConfig = {
 };
 
 let auth: Auth | null = null;
+let db: Firestore | null = null;
 let googleProvider: GoogleAuthProvider | null = null;
 
-const initializeFirebase = () => {
+export const initializeFirebase = () => {
   if (!firebaseConfig.apiKey) {
-    throw new Error('Firebase API key is missing. Please configure VITE_FIREBASE_API_KEY in the environment.');
+    return null;
   }
 
-  if (!getApps().length) {
-    const app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    googleProvider = new GoogleAuthProvider();
+  try {
+    if (!getApps().length) {
+      const app = initializeApp(firebaseConfig);
+      auth = getAuth(app);
+      db = getFirestore(app);
+      googleProvider = new GoogleAuthProvider();
+    }
+  } catch (err) {
+    console.error("Error initializing Firebase:", err);
   }
+  return { auth, db, googleProvider };
+};
+
+export const getDB = (): Firestore | null => {
+  const initialized = initializeFirebase();
+  return initialized ? initialized.db : null;
 };
 
 export const signInWithGoogle = async () => {
   try {
-    initializeFirebase();
-    if (!auth || !googleProvider) throw new Error("Firebase not initialized");
-    const result = await signInWithPopup(auth, googleProvider);
+    const initialized = initializeFirebase();
+    if (!initialized || !initialized.auth || !initialized.googleProvider) {
+      throw new Error("Firebase is not configured in the environment variables (VITE_FIREBASE_API_KEY missing).");
+    }
+    const result = await signInWithPopup(initialized.auth, initialized.googleProvider);
     return result.user;
   } catch (error) {
     console.error('Google Sign In Error:', error);
@@ -39,11 +54,13 @@ export const signInWithGoogle = async () => {
 
 export const logOut = async () => {
   try {
-    if (auth) {
-      await signOut(auth);
+    const initialized = initializeFirebase();
+    if (initialized && initialized.auth) {
+      await signOut(initialized.auth);
     }
   } catch (error) {
     console.error('Logout Error:', error);
     throw error;
   }
 };
+

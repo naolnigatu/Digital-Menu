@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { SubscriptionPlan } from '../types';
 import { 
-  Building2, Landmark, HelpCircle, Check, ArrowRight, ShieldCheck, ChefHat, Sparkles, AlertCircle, RefreshCw
+  Building2, Landmark, HelpCircle, Check, ArrowRight, ShieldCheck, ChefHat, Sparkles, AlertCircle, RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function OnboardingView() {
@@ -12,15 +13,21 @@ export default function OnboardingView() {
   const [description, setDescription] = useState('');
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('free');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToast({ text, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!businessName) {
-      alert('Please fill in your restaurant or business name.');
+      showToast('Please fill in your restaurant or business name.', 'error');
       return;
     }
     if (!currentUser || !currentUser.email) {
-      alert('You must be signed in to create a business profile.');
+      showToast('You must be signed in to create a business profile.', 'error');
       return;
     }
 
@@ -204,6 +211,23 @@ export default function OnboardingView() {
           </div>
         </div>
       </div>
+
+      {/* Toast Notification Banner */}
+      {toast && (
+        <div className={`fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-xl border p-4 shadow-xl animate-in slide-in-from-bottom-5 fade-in duration-300 ${
+          toast.type === 'success' 
+            ? 'border-emerald-100 bg-emerald-50 text-emerald-800' 
+            : 'border-rose-100 bg-rose-50 text-rose-800'
+        }`}>
+          {toast.type === 'success' ? (
+            <Check className="h-4 w-4 bg-emerald-500 text-white rounded-full p-0.5" />
+          ) : (
+            <AlertTriangle className="h-4 w-4 text-rose-500" />
+          )}
+          <span className="text-xs font-bold">{toast.text}</span>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -376,15 +376,21 @@ export const mockOrders: Order[] = [
         assignedStationId: 'st-03'
       }
     ],
-    status: 'cooking',
-    paymentStatus: 'unpaid',
+    status: 'preparing',
+    paymentStatus: 'pending',
     discount: 0,
+    tip: 0,
     tax: 73.5, // 15% of 490 subtotal
     serviceCharge: 24.5, // 5% of 490 subtotal
     subtotal: 490,
     total: 588,
     createdAt: new Date(Date.now() - 35 * 60 * 1000).toISOString(), // 35 minutes ago
-    notes: 'Coffee with extra popcorn please'
+    notes: 'Coffee with extra popcorn please',
+    timeline: [
+      { id: 'ev-1', time: new Date(Date.now() - 35 * 60 * 1000).toISOString(), label: 'Order Created', desc: 'Order received via Dine-in QR' },
+      { id: 'ev-2', time: new Date(Date.now() - 30 * 60 * 1000).toISOString(), label: 'Preparing', desc: 'Chef started preparing' }
+    ],
+    kitchenNotes: []
   },
   {
     id: 'ord-02',
@@ -407,15 +413,20 @@ export const mockOrders: Order[] = [
         assignedStationId: 'st-02'
       }
     ],
-    status: 'submitted',
-    paymentStatus: 'unpaid',
+    status: 'pending',
+    paymentStatus: 'pending',
     discount: 0,
+    tip: 0,
     tax: 147, // 15% of 980
     serviceCharge: 49, // 5% of 980
     subtotal: 980,
     total: 1176,
     createdAt: new Date(Date.now() - 8 * 60 * 1000).toISOString(), // 8 mins ago
-    notes: 'Please bring hot chili sauce (Mitmitta) on the side.'
+    notes: 'Please bring hot chili sauce (Mitmitta) on the side.',
+    timeline: [
+      { id: 'ev-3', time: new Date(Date.now() - 8 * 60 * 1000).toISOString(), label: 'Order Created', desc: 'Order received at floor terminal' }
+    ],
+    kitchenNotes: []
   },
   {
     id: 'ord-03',
@@ -444,13 +455,20 @@ export const mockOrders: Order[] = [
     paymentStatus: 'paid',
     paymentMethod: 'mobile_money',
     discount: 50, // Promo discount
+    tip: 20,
     tax: 76.5,
     serviceCharge: 25.5,
     subtotal: 510,
     total: 562,
     createdAt: new Date(Date.now() - 120 * 60 * 1000).toISOString(), // 2 hours ago
     rating: 5,
-    feedback: 'Amazing traditional flavors. Best Doro Wat in Bole!'
+    feedback: 'Amazing traditional flavors. Best Doro Wat in Bole!',
+    timeline: [
+      { id: 'ev-4', time: new Date(Date.now() - 120 * 60 * 1000).toISOString(), label: 'Order Created', desc: 'Order placed' },
+      { id: 'ev-5', time: new Date(Date.now() - 110 * 60 * 1000).toISOString(), label: 'Accepted', desc: 'Accepted by manager' },
+      { id: 'ev-6', time: new Date(Date.now() - 95 * 60 * 1000).toISOString(), label: 'Completed', desc: 'Paid & Completed' }
+    ],
+    kitchenNotes: []
   },
   {
     id: 'ord-04',
@@ -487,14 +505,19 @@ export const mockOrders: Order[] = [
       }
     ],
     status: 'ready',
-    paymentStatus: 'unpaid',
+    paymentStatus: 'pending',
     discount: 0,
+    tip: 0,
     tax: 1.41, // 16% of 8.80
     serviceCharge: 0,
     subtotal: 8.80,
     total: 10.21,
     createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    notes: ''
+    notes: '',
+    timeline: [
+      { id: 'ev-7', time: new Date(Date.now() - 15 * 60 * 1000).toISOString(), label: 'Order Created', desc: 'Order received' }
+    ],
+    kitchenNotes: []
   }
 ];
 

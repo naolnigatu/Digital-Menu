@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { OrderItem, Order } from '../types';
 import { 
@@ -14,10 +14,11 @@ export default function KDSView() {
     menuItems,
     toggleMenuItemAvailability,
     currentUser, 
-    updateOrderItemStatus 
+    updateOrderItemStatus,
+    approveKitchenNote
   } = useApp();
 
-  const branchStations = stations.filter(s => s.branchId === activeBranchId);
+  const branchStations = useMemo(() => stations.filter(s => s.branchId === activeBranchId), [stations, activeBranchId]);
   
   // Default to user's assigned station or fallback to the first station in the branch
   const [activeStationId, setActiveStationId] = useState<string>(() => {
@@ -28,6 +29,21 @@ export default function KDSView() {
   const [, setTick] = useState(0);
   const [showAvailabilityPanel, setShowAvailabilityPanel] = useState(false);
   const [menuSearchQuery, setMenuSearchQuery] = useState('');
+
+  const activeStationName = useMemo(() => branchStations.find(s => s.id === activeStationId)?.name || 'Select KDS Station', [branchStations, activeStationId]);
+
+  const activeTenantMenuItems = useMemo(() => menuItems[activeTenantId] || [], [menuItems, activeTenantId]);
+  const stationMenuItems = useMemo(() => activeTenantMenuItems.filter(item => item.preparationStationId === activeStationId), [activeTenantMenuItems, activeStationId]);
+  const filteredMenu = useMemo(() => {
+    const term = menuSearchQuery.toLowerCase();
+    return stationMenuItems.filter(item => item.name.toLowerCase().includes(term));
+  }, [stationMenuItems, menuSearchQuery]);
+
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ text, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -118,7 +134,7 @@ export default function KDSView() {
     return 'text-slate-400 font-medium';
   };
 
-  const activeStationName = branchStations.find(s => s.id === activeStationId)?.name || 'Select KDS Station';
+
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
@@ -182,10 +198,6 @@ export default function KDSView() {
           </div>
 
           {(() => {
-            const activeTenantMenuItems = menuItems[activeTenantId] || [];
-            const stationMenuItems = activeTenantMenuItems.filter(item => item.preparationStationId === activeStationId);
-            const filteredMenu = stationMenuItems.filter(item => item.name.toLowerCase().includes(menuSearchQuery.toLowerCase()));
-
             if (stationMenuItems.length === 0) {
               return <p className="text-xs text-slate-400 text-center py-4">No menu items mapped to the "{activeStationName}" station.</p>;
             }
@@ -228,6 +240,87 @@ export default function KDSView() {
           })()}
         </div>
       )}
+
+      {/* Manager Kitchen Notes Security Gatekeeper (Part 6) */}
+      {(() => {
+        const pendingNotesList: { orderId: string; orderNum: string; noteId: string; text: string; time: string }[] = [];
+        orders.forEach(o => {
+          if (o.status === 'completed' || o.status === 'cancelled') return;
+          if (o.kitchenNotes) {
+            o.kitchenNotes.forEach(n => {
+              if (!n.approved) {
+                pendingNotesList.push({
+                  orderId: o.id,
+                  orderNum: o.orderNum,
+                  noteId: n.id,
+                  text: n.text,
+                  time: n.time
+                });
+              }
+            });
+          }
+        });
+
+        if (pendingNotesList.length === 0) return null;
+
+        return (
+          <div className="bg-gradient-to-r from-amber-950 to-slate-900 text-white rounded-2xl p-5 border border-amber-500/30 space-y-4 shadow-xl">
+            <div className="flex justify-between items-center">
+              <div className="space-y-1">
+                <h3 className="font-sans font-extrabold text-sm text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4 text-amber-400 animate-pulse" />
+                  <span>Manager Kitchen Notes Gatekeeper</span>
+                </h3>
+                <p className="text-[11px] text-slate-300">
+                  To prevent line cooks confusion, custom guest instructions are held here. Aisha's branch manager must review & approve before they route to ticket panels.
+                </p>
+              </div>
+              <span className="bg-amber-500/20 border border-amber-500/40 text-amber-300 font-extrabold text-[9px] px-2.5 py-1 rounded-lg uppercase tracking-wider">
+                {pendingNotesList.length} Pending Approval
+              </span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {pendingNotesList.map(note => (
+                <div key={note.noteId} className="bg-white/5 border border-white/10 rounded-xl p-3.5 flex flex-col justify-between space-y-3">
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="font-mono text-[10px] font-extrabold text-amber-400">Order #{note.orderNum}</span>
+                      <span className="text-[8px] text-slate-400">
+                        {new Date(note.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-100 font-medium italic">
+                      "{note.text}"
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        approveKitchenNote(note.orderId, note.noteId, false);
+                        showToast("Rejected instruction. Cleaned from queue.", "error");
+                      }}
+                      className="flex-1 rounded-lg border border-white/10 hover:bg-white/5 text-slate-300 font-bold py-1.5 text-[10px] cursor-pointer"
+                    >
+                      Reject Note
+                    </button>
+                    <button
+                      onClick={() => {
+                        approveKitchenNote(note.orderId, note.noteId, true);
+                        showToast("Successfully Approved note! Rerouted instantly into station ticket cards.");
+                      }}
+                      className="flex-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black py-1.5 text-[10px] cursor-pointer shadow"
+                    >
+                      Approve Note
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Stats of tickets at this station */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center bg-white border border-slate-200 rounded-xl p-4 text-xs text-slate-600 shadow-sm">
@@ -319,6 +412,21 @@ export default function KDSView() {
                       <p className="italic">"{ticket.item.notes}"</p>
                     </div>
                   )}
+
+                  {/* Parent level approved kitchen notes (Part 6) */}
+                  {(() => {
+                    const parentOrder = orders.find(o => o.id === ticket.orderId);
+                    const approvedNotes = parentOrder?.kitchenNotes?.filter(n => n.approved) || [];
+                    if (approvedNotes.length === 0) return null;
+                    return (
+                      <div className="rounded-lg bg-amber-50 border border-amber-200 p-2 text-[10px] text-amber-950 space-y-1">
+                        <p className="font-bold uppercase text-[8px] text-amber-800">Approved Special Requests:</p>
+                        {approvedNotes.map(n => (
+                          <p key={n.id} className="italic font-medium">💡 "{n.text}"</p>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* KDS Kitchen State buttons */}
@@ -361,6 +469,20 @@ export default function KDSView() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Toast Notification Banner */}
+      {toast && (
+        <div className={`fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-xl border p-4 shadow-xl animate-in slide-in-from-bottom-5 fade-in duration-300 ${
+          toast.type === 'success' 
+            ? 'border-emerald-100 bg-emerald-50 text-emerald-800' 
+            : toast.type === 'error'
+            ? 'border-rose-100 bg-rose-50 text-rose-800'
+            : 'border-slate-100 bg-slate-50 text-slate-800'
+        }`}>
+          {toast.type === 'success' ? <Check className="h-4.5 w-4.5 bg-emerald-500 text-white rounded-full p-0.5" /> : <AlertTriangle className="h-4.5 w-4.5 text-rose-500" />}
+          <span className="text-xs font-bold">{toast.text}</span>
         </div>
       )}
 

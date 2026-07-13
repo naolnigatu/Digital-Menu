@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Order } from '../types';
 import { 
-  CreditCard, Coins, QrCode, Percent, ArrowRight, Printer, CheckCircle, Ticket, User, HelpCircle
+  CreditCard, Coins, QrCode, Percent, ArrowRight, Printer, CheckCircle, Ticket, User, HelpCircle,
+  Check, AlertTriangle
 } from 'lucide-react';
 
 export default function CashierView() {
@@ -17,20 +18,20 @@ export default function CashierView() {
     verifyAdvancePayment
   } = useApp();
 
-  const tenant = tenants.find(t => t.id === activeTenantId) || tenants[0];
-  const branchObj = branches.find(b => b.id === activeBranchId) || branches[0];
+  const tenant = useMemo(() => tenants.find(t => t.id === activeTenantId) || tenants[0], [tenants, activeTenantId]);
+  const branchObj = useMemo(() => branches.find(b => b.id === activeBranchId) || branches[0], [branches, activeBranchId]);
 
-  const activeUnpaidOrders = orders.filter(
+  const activeUnpaidOrders = useMemo(() => orders.filter(
     o => o.branchId === activeBranchId && 
          o.paymentStatus === 'unpaid' && 
          o.status !== 'cancelled' && 
          o.paymentVerificationStatus !== 'pending' && 
          o.paymentVerificationStatus !== 'rejected'
-  );
+  ), [orders, activeBranchId]);
 
-  const pendingAdvancePayments = orders.filter(
+  const pendingAdvancePayments = useMemo(() => orders.filter(
     o => o.branchId === activeBranchId && o.paymentVerificationStatus === 'pending'
-  );
+  ), [orders, activeBranchId]);
 
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [discountPercent, setDiscountPercent] = useState<number>(0);
@@ -41,6 +42,12 @@ export default function CashierView() {
   // Receipt Modal State
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
+
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToast({ text, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const handleSettleOrder = () => {
     if (!selectedOrder) return;
@@ -469,7 +476,7 @@ export default function CashierView() {
 
             <button
               onClick={() => {
-                alert('Sent thermal packet to ESC/POS Bluetooth printer successfully!');
+                showToast('Sent thermal packet to ESC/POS Bluetooth printer successfully!');
               }}
               className="w-full rounded-lg bg-slate-950 text-white font-bold py-2 text-xs hover:bg-slate-800 transition-colors flex items-center justify-center gap-1.5"
             >
@@ -478,6 +485,22 @@ export default function CashierView() {
             </button>
 
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification Banner */}
+      {toast && (
+        <div className={`fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-xl border p-4 shadow-xl animate-in slide-in-from-bottom-5 fade-in duration-300 ${
+          toast.type === 'success' 
+            ? 'border-emerald-100 bg-emerald-50 text-emerald-800' 
+            : 'border-rose-100 bg-rose-50 text-rose-800'
+        }`}>
+          {toast.type === 'success' ? (
+            <Check className="h-4 w-4 bg-emerald-500 text-white rounded-full p-0.5" />
+          ) : (
+            <AlertTriangle className="h-4 w-4 text-rose-500" />
+          )}
+          <span className="text-xs font-bold">{toast.text}</span>
         </div>
       )}
 
