@@ -403,54 +403,124 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('mf_customer_subscriptions', JSON.stringify(customerSubscriptions));
   }, [customerSubscriptions]);
 
-  // 4a. Final Features State
-  const [reservations, setReservations] = useState<Reservation[]>(() => {
-    const local = localStorage.getItem('mf_reservations');
-    return local ? JSON.parse(local) : [];
+  // 4a. Final Features State (Fully migrated to Firestore with realtime listeners)
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
+  const [notifications, setNotifications] = useState<DinexNotification[]>([]);
+  const [marketplaceExtensions, setMarketplaceExtensions] = useState<MarketplaceExtension[]>([]);
+  const [installedExtensions, setInstalledExtensions] = useState<InstalledExtension[]>([]);
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({
+    supportedCountries: ['Ethiopia', 'Kenya', 'Rwanda', 'Nigeria', 'South Africa'],
+    supportedCurrencies: ['ETB', 'KES', 'RWF', 'NGN', 'ZAR', 'USD'],
+    maintenanceMode: false,
+    announcements: [],
+    globalFeatureFlags: {}
   });
-  useEffect(() => { localStorage.setItem('mf_reservations', JSON.stringify(reservations)); }, [reservations]);
 
-  const [ingredients, setIngredients] = useState<Ingredient[]>(() => {
-    const local = localStorage.getItem('mf_ingredients');
-    return local ? JSON.parse(local) : [];
-  });
-  useEffect(() => { localStorage.setItem('mf_ingredients', JSON.stringify(ingredients)); }, [ingredients]);
+  useEffect(() => {
+    const initializeListeners = async () => {
+      try {
+        const { getDB } = await import('../lib/firebase');
+        const db = getDB();
+        if (db) {
+          const { collection, onSnapshot, doc: firestoreDoc } = await import('firebase/firestore');
 
-  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() => {
-    const local = localStorage.getItem('mf_stock_movements');
-    return local ? JSON.parse(local) : [];
-  });
-  useEffect(() => { localStorage.setItem('mf_stock_movements', JSON.stringify(stockMovements)); }, [stockMovements]);
+          const unsubscribeReservations = onSnapshot(collection(db, 'reservations'), (snapshot) => {
+            const list: Reservation[] = [];
+            snapshot.forEach((docSnap) => {
+              list.push({ id: docSnap.id, ...docSnap.data() } as Reservation);
+            });
+            setReservations(list);
+          }, (err) => {
+            console.error("Firestore reservations listener error:", err);
+          });
 
-  const [notifications, setNotifications] = useState<DinexNotification[]>(() => {
-    const local = localStorage.getItem('mf_notifications');
-    return local ? JSON.parse(local) : [];
-  });
-  useEffect(() => { localStorage.setItem('mf_notifications', JSON.stringify(notifications)); }, [notifications]);
+          const unsubscribeIngredients = onSnapshot(collection(db, 'ingredients'), (snapshot) => {
+            const list: Ingredient[] = [];
+            snapshot.forEach((docSnap) => {
+              list.push({ id: docSnap.id, ...docSnap.data() } as Ingredient);
+            });
+            setIngredients(list);
+          }, (err) => {
+            console.error("Firestore ingredients listener error:", err);
+          });
 
-  const [marketplaceExtensions, setMarketplaceExtensions] = useState<MarketplaceExtension[]>(() => {
-    const local = localStorage.getItem('mf_marketplace_extensions');
-    return local ? JSON.parse(local) : [];
-  });
-  useEffect(() => { localStorage.setItem('mf_marketplace_extensions', JSON.stringify(marketplaceExtensions)); }, [marketplaceExtensions]);
+          const unsubscribeStockMovements = onSnapshot(collection(db, 'stock_movements'), (snapshot) => {
+            const list: StockMovement[] = [];
+            snapshot.forEach((docSnap) => {
+              list.push({ id: docSnap.id, ...docSnap.data() } as StockMovement);
+            });
+            setStockMovements(list);
+          }, (err) => {
+            console.error("Firestore stock movements listener error:", err);
+          });
 
-  const [installedExtensions, setInstalledExtensions] = useState<InstalledExtension[]>(() => {
-    const local = localStorage.getItem('mf_installed_extensions');
-    return local ? JSON.parse(local) : [];
-  });
-  useEffect(() => { localStorage.setItem('mf_installed_extensions', JSON.stringify(installedExtensions)); }, [installedExtensions]);
+          const unsubscribeNotifications = onSnapshot(collection(db, 'notifications'), (snapshot) => {
+            const list: DinexNotification[] = [];
+            snapshot.forEach((docSnap) => {
+              list.push({ id: docSnap.id, ...docSnap.data() } as DinexNotification);
+            });
+            list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            setNotifications(list);
+          }, (err) => {
+            console.error("Firestore notifications listener error:", err);
+          });
 
-  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>(() => {
-    const local = localStorage.getItem('mf_global_settings');
-    return local ? JSON.parse(local) : {
-      supportedCountries: ['Ethiopia', 'Kenya', 'Rwanda', 'Nigeria', 'South Africa'],
-      supportedCurrencies: ['ETB', 'KES', 'RWF', 'NGN', 'ZAR', 'USD'],
-      maintenanceMode: false,
-      announcements: [],
-      globalFeatureFlags: {}
+          const unsubscribeMarketplaceExtensions = onSnapshot(collection(db, 'marketplace_extensions'), (snapshot) => {
+            const list: MarketplaceExtension[] = [];
+            snapshot.forEach((docSnap) => {
+              list.push({ id: docSnap.id, ...docSnap.data() } as MarketplaceExtension);
+            });
+            setMarketplaceExtensions(list);
+          }, (err) => {
+            console.error("Firestore marketplace extensions listener error:", err);
+          });
+
+          const unsubscribeInstalledExtensions = onSnapshot(collection(db, 'installed_extensions'), (snapshot) => {
+            const list: InstalledExtension[] = [];
+            snapshot.forEach((docSnap) => {
+              list.push({ id: docSnap.id, ...docSnap.data() } as InstalledExtension);
+            });
+            setInstalledExtensions(list);
+          }, (err) => {
+            console.error("Firestore installed extensions listener error:", err);
+          });
+
+          const unsubscribeGlobalSettings = onSnapshot(firestoreDoc(db, 'system_settings', 'global'), (docSnapshot) => {
+            if (docSnapshot.exists()) {
+              setGlobalSettings(docSnapshot.data() as GlobalSettings);
+            }
+          }, (err) => {
+            console.error("Firestore global settings listener error:", err);
+          });
+
+          return () => {
+            unsubscribeReservations();
+            unsubscribeIngredients();
+            unsubscribeStockMovements();
+            unsubscribeNotifications();
+            unsubscribeMarketplaceExtensions();
+            unsubscribeInstalledExtensions();
+            unsubscribeGlobalSettings();
+          };
+        }
+      } catch (err) {
+        console.warn("Error setting up Firestore realtime listeners:", err);
+      }
     };
-  });
-  useEffect(() => { localStorage.setItem('mf_global_settings', JSON.stringify(globalSettings)); }, [globalSettings]);
+
+    let unsubscribeFn: (() => void) | undefined;
+    initializeListeners().then((unsub) => {
+      unsubscribeFn = unsub;
+    });
+
+    return () => {
+      if (unsubscribeFn) {
+        unsubscribeFn();
+      }
+    };
+  }, []);
 
   // 5. Customer Profiles State
   const [customerProfiles, setCustomerProfiles] = useState<Record<string, CustomerProfile>>(() => {
@@ -1754,7 +1824,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Final Features Actions
-  const addReservation = (reservation: Omit<Reservation, 'id' | 'createdAt' | 'timeline' | 'status'>) => {
+  const addReservation = async (reservation: Omit<Reservation, 'id' | 'createdAt' | 'timeline' | 'status'>) => {
     const id = `res-${Date.now()}`;
     const newReservation: Reservation = {
       ...reservation,
@@ -1763,67 +1833,139 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       timeline: [{ id: `te-${Date.now()}`, time: new Date().toISOString(), label: 'Created', desc: 'Reservation requested' }],
       createdAt: new Date().toISOString()
     };
-    setReservations(prev => [...prev, newReservation]);
+    try {
+      await syncToFirestore('reservations', id, newReservation);
+      addLog('Create Reservation Success', `Successfully submitted reservation for ${reservation.customerName} on ${reservation.date} at ${reservation.time}.`);
+    } catch (err: any) {
+      addLog('Create Reservation Error', `Failed to create reservation: ${err.message || err}`);
+    }
   };
 
-  const updateReservationStatus = (id: string, status: Reservation['status'], tableId?: string) => {
-    setReservations(prev => prev.map(res => {
-      if (res.id !== id) return res;
-      const updated = { ...res, status, tableId: tableId || res.tableId };
-      updated.timeline.push({ id: `te-${Date.now()}`, time: new Date().toISOString(), label: `Status updated`, desc: `Reservation ${status}` });
-      return updated;
-    }));
+  const updateReservationStatus = async (id: string, status: Reservation['status'], tableId?: string) => {
+    try {
+      const res = reservations.find(r => r.id === id);
+      if (!res) {
+        throw new Error(`Reservation ID ${id} not found in state.`);
+      }
+      const updated = { 
+        ...res, 
+        status, 
+        tableId: tableId || res.tableId,
+        timeline: [
+          ...res.timeline,
+          { id: `te-${Date.now()}`, time: new Date().toISOString(), label: `Status updated`, desc: `Reservation ${status}` }
+        ]
+      };
+      await syncToFirestore('reservations', id, updated);
+      addLog('Update Reservation Status Success', `Successfully updated reservation status of ${res.customerName} to ${status}.`);
+    } catch (err: any) {
+      addLog('Update Reservation Status Error', `Failed to update reservation status: ${err.message || err}`);
+    }
   };
 
-  const addIngredient = (ingredient: Omit<Ingredient, 'id'>) => {
+  const addIngredient = async (ingredient: Omit<Ingredient, 'id'>) => {
     const id = `ing-${Date.now()}`;
-    setIngredients(prev => [...prev, { ...ingredient, id }]);
+    const newIngredient = { ...ingredient, id };
+    try {
+      await syncToFirestore('ingredients', id, newIngredient);
+      addLog('Add Ingredient Success', `Successfully added ingredient ${ingredient.name} with stock ${ingredient.stockQuantity} ${ingredient.unit}.`);
+    } catch (err: any) {
+      addLog('Add Ingredient Error', `Failed to add ingredient: ${err.message || err}`);
+    }
   };
 
-  const updateIngredient = (ingredient: Ingredient) => {
-    setIngredients(prev => prev.map(ing => ing.id === ingredient.id ? ingredient : ing));
+  const updateIngredient = async (ingredient: Ingredient) => {
+    try {
+      await syncToFirestore('ingredients', ingredient.id, ingredient);
+      addLog('Update Ingredient Success', `Successfully updated ingredient ${ingredient.name}.`);
+    } catch (err: any) {
+      addLog('Update Ingredient Error', `Failed to update ingredient: ${err.message || err}`);
+    }
   };
 
-  const addStockMovement = (movement: Omit<StockMovement, 'id' | 'date'>) => {
+  const addStockMovement = async (movement: Omit<StockMovement, 'id' | 'date'>) => {
     const id = `sm-${Date.now()}`;
     const newMovement: StockMovement = { ...movement, id, date: new Date().toISOString() };
-    setStockMovements(prev => [...prev, newMovement]);
-
-    // Update ingredient stock
-    setIngredients(prev => prev.map(ing => {
-      if (ing.id !== movement.ingredientId) return ing;
-      let newStock = ing.stockQuantity;
-      if (movement.type === 'in') newStock += movement.quantity;
-      else if (movement.type === 'out' || movement.type === 'waste') newStock -= movement.quantity;
-      else if (movement.type === 'adjustment') newStock = movement.quantity; // Treat adjustment as absolute setting for simplicity here
-      return { ...ing, stockQuantity: newStock };
-    }));
+    try {
+      await syncToFirestore('stock_movements', id, newMovement);
+      
+      const ing = ingredients.find(i => i.id === movement.ingredientId);
+      if (ing) {
+        let newStock = ing.stockQuantity;
+        if (movement.type === 'in') newStock += movement.quantity;
+        else if (movement.type === 'out' || movement.type === 'waste') newStock -= movement.quantity;
+        else if (movement.type === 'adjustment') newStock = movement.quantity;
+        
+        const updatedIngredient = { ...ing, stockQuantity: newStock };
+        await syncToFirestore('ingredients', ing.id, updatedIngredient);
+        addLog('Stock Movement Processed', `Recorded ${movement.type} movement of ${movement.quantity} units for ${ing.name}. Updated stock: ${newStock}.`);
+      } else {
+        addLog('Stock Movement Warning', `Movement logged but ingredient ${movement.ingredientId} was not found in state.`);
+      }
+    } catch (err: any) {
+      addLog('Stock Movement Error', `Failed to log stock movement: ${err.message || err}`);
+    }
   };
 
-  const markNotificationRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  const markNotificationRead = async (id: string) => {
+    try {
+      const notif = notifications.find(n => n.id === id);
+      if (notif) {
+        const updated = { ...notif, read: true };
+        await syncToFirestore('notifications', id, updated);
+      }
+    } catch (err: any) {
+      console.error("Failed to mark notification read:", err);
+    }
   };
 
-  const deleteNotification = (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
+  const deleteNotification = async (id: string) => {
+    try {
+      await deleteFromFirestore('notifications', id);
+    } catch (err: any) {
+      console.error("Failed to delete notification:", err);
+    }
   };
 
-  const addNotification = (notification: Omit<DinexNotification, 'id' | 'createdAt' | 'read'>) => {
+  const addNotification = async (notification: Omit<DinexNotification, 'id' | 'createdAt' | 'read'>) => {
     const id = `notif-${Date.now()}`;
-    setNotifications(prev => [{ ...notification, id, read: false, createdAt: new Date().toISOString() }, ...prev]);
+    const newNotif = { ...notification, id, read: false, createdAt: new Date().toISOString() };
+    try {
+      await syncToFirestore('notifications', id, newNotif);
+    } catch (err: any) {
+      console.error("Failed to add notification:", err);
+    }
   };
 
-  const installExtension = (tenantId: string, extensionId: string) => {
-    const id = `inst-${Date.now()}`;
-    setInstalledExtensions(prev => [...prev, { id: extensionId, tenantId, installedAt: new Date().toISOString(), status: 'active' }]);
+  const installExtension = async (tenantId: string, extensionId: string) => {
+    const id = `${tenantId}_${extensionId}`;
+    const newInstalled = { id: extensionId, tenantId, installedAt: new Date().toISOString(), status: 'active' as const };
+    try {
+      await syncToFirestore('installed_extensions', id, newInstalled);
+      addLog('Install Extension Success', `Successfully installed extension ${extensionId} for tenant ${tenantId}.`);
+    } catch (err: any) {
+      addLog('Install Extension Error', `Failed to install extension: ${err.message || err}`);
+    }
   };
 
-  const uninstallExtension = (tenantId: string, extensionId: string) => {
-    setInstalledExtensions(prev => prev.filter(inst => !(inst.tenantId === tenantId && inst.id === extensionId)));
+  const uninstallExtension = async (tenantId: string, extensionId: string) => {
+    const id = `${tenantId}_${extensionId}`;
+    try {
+      await deleteFromFirestore('installed_extensions', id);
+      addLog('Uninstall Extension Success', `Successfully uninstalled extension ${extensionId} for tenant ${tenantId}.`);
+    } catch (err: any) {
+      addLog('Uninstall Extension Error', `Failed to uninstall extension: ${err.message || err}`);
+    }
   };
 
-  const updateGlobalSettings = (settings: Partial<GlobalSettings>) => {
-    setGlobalSettings(prev => ({ ...prev, ...settings }));
+  const updateGlobalSettings = async (settings: Partial<GlobalSettings>) => {
+    const updated = { ...globalSettings, ...settings };
+    try {
+      await syncToFirestore('system_settings', 'global', updated);
+      addLog('Update Global Settings Success', `Successfully updated system-wide configuration.`);
+    } catch (err: any) {
+      addLog('Update Global Settings Error', `Failed to update global settings: ${err.message || err}`);
+    }
   };
 
   return (
