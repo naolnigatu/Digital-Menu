@@ -126,11 +126,14 @@ export default function SuperAdminView() {
   ]);
 
   // Platform Global Settings
+  const { globalSettings, updateGlobalSettings } = useApp();
   const [globalTaxRate, setGlobalTaxRate] = useState(15);
   const [supportEmail, setSupportEmail] = useState('naolnigatu2025@gmail.com');
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [maintenanceMode, setMaintenanceMode] = useState(globalSettings.maintenanceMode);
   const [usdEtbRate, setUsdEtbRate] = useState(115);
   const [isSavingGlobalSettings, setIsSavingGlobalSettings] = useState(false);
+  const [supportedCountriesText, setSupportedCountriesText] = useState(globalSettings.supportedCountries.join(', '));
+  const [supportedCurrenciesText, setSupportedCurrenciesText] = useState(globalSettings.supportedCurrencies.join(', '));
 
   // User search
   const [userSearchTerm, setUserSearchTerm] = useState('');
@@ -221,6 +224,11 @@ export default function SuperAdminView() {
     e.preventDefault();
     setIsSavingGlobalSettings(true);
     await new Promise(resolve => setTimeout(resolve, 800));
+    updateGlobalSettings({
+      maintenanceMode,
+      supportedCountries: supportedCountriesText.split(',').map(s => s.trim()).filter(Boolean),
+      supportedCurrencies: supportedCurrenciesText.split(',').map(s => s.trim()).filter(Boolean),
+    });
     addLog('Global Configuration', `Tax Default set to ${globalTaxRate}%, Exchange Rate set to ${usdEtbRate} ETB/USD, Maintenance: ${maintenanceMode}`);
     setIsSavingGlobalSettings(false);
     showToast('✓ Saved successfully.');
@@ -1483,6 +1491,26 @@ export default function SuperAdminView() {
                     className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-indigo-500"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Supported Countries (comma separated)</label>
+                <input
+                  type="text"
+                  value={supportedCountriesText}
+                  onChange={(e) => setSupportedCountriesText(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Supported Currencies (comma separated)</label>
+                <input
+                  type="text"
+                  value={supportedCurrenciesText}
+                  onChange={(e) => setSupportedCurrenciesText(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:border-indigo-500"
+                />
               </div>
 
               <div>

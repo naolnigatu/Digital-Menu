@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   Tenant, Branch, PreparationStation, Category, MenuItem, Table, Order, Staff, SystemLog, UserRole, OrderStatus, OrderItem, SubscriptionPlan, PlatformAd, PlanPricing, TimelineEvent, KitchenNote,
-  PaymentMethodConfig, LoyaltyConfig, MealSubscriptionPlan, CustomerMealSubscription, CustomerProfile, RefundDetails, LoyaltyHistoryEntry
+  PaymentMethodConfig, LoyaltyConfig, MealSubscriptionPlan, CustomerMealSubscription, CustomerProfile, RefundDetails, LoyaltyHistoryEntry,
+  Reservation, Ingredient, StockMovement, MarketplaceExtension, InstalledExtension, DinexNotification, GlobalSettings
 } from '../types';
 import { 
   mockTenants, mockBranches, mockStations, mockCategories, mockMenuItems, mockTables, mockStaff, mockOrders, mockSystemLogs 
@@ -29,6 +30,34 @@ interface AppContextType {
   activeTenantId: string;
   activeBranchId: string;
   currentLanguage: 'en' | 'am';
+
+  // Reservations
+  reservations: Reservation[];
+  addReservation: (reservation: Omit<Reservation, 'id' | 'createdAt' | 'timeline' | 'status'>) => void;
+  updateReservationStatus: (id: string, status: Reservation['status'], tableId?: string) => void;
+
+  // Inventory
+  ingredients: Ingredient[];
+  addIngredient: (ingredient: Omit<Ingredient, 'id'>) => void;
+  updateIngredient: (ingredient: Ingredient) => void;
+  stockMovements: StockMovement[];
+  addStockMovement: (movement: Omit<StockMovement, 'id' | 'date'>) => void;
+
+  // Notifications
+  notifications: DinexNotification[];
+  markNotificationRead: (id: string) => void;
+  deleteNotification: (id: string) => void;
+  addNotification: (notification: Omit<DinexNotification, 'id' | 'createdAt' | 'read'>) => void;
+
+  // Marketplace
+  marketplaceExtensions: MarketplaceExtension[];
+  installedExtensions: InstalledExtension[];
+  installExtension: (tenantId: string, extensionId: string) => void;
+  uninstallExtension: (tenantId: string, extensionId: string) => void;
+
+  // Platform Settings
+  globalSettings: GlobalSettings;
+  updateGlobalSettings: (settings: Partial<GlobalSettings>) => void;
   
   // Actions
   login: (email: string) => boolean;
@@ -374,6 +403,55 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('mf_customer_subscriptions', JSON.stringify(customerSubscriptions));
   }, [customerSubscriptions]);
 
+  // 4a. Final Features State
+  const [reservations, setReservations] = useState<Reservation[]>(() => {
+    const local = localStorage.getItem('mf_reservations');
+    return local ? JSON.parse(local) : [];
+  });
+  useEffect(() => { localStorage.setItem('mf_reservations', JSON.stringify(reservations)); }, [reservations]);
+
+  const [ingredients, setIngredients] = useState<Ingredient[]>(() => {
+    const local = localStorage.getItem('mf_ingredients');
+    return local ? JSON.parse(local) : [];
+  });
+  useEffect(() => { localStorage.setItem('mf_ingredients', JSON.stringify(ingredients)); }, [ingredients]);
+
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() => {
+    const local = localStorage.getItem('mf_stock_movements');
+    return local ? JSON.parse(local) : [];
+  });
+  useEffect(() => { localStorage.setItem('mf_stock_movements', JSON.stringify(stockMovements)); }, [stockMovements]);
+
+  const [notifications, setNotifications] = useState<DinexNotification[]>(() => {
+    const local = localStorage.getItem('mf_notifications');
+    return local ? JSON.parse(local) : [];
+  });
+  useEffect(() => { localStorage.setItem('mf_notifications', JSON.stringify(notifications)); }, [notifications]);
+
+  const [marketplaceExtensions, setMarketplaceExtensions] = useState<MarketplaceExtension[]>(() => {
+    const local = localStorage.getItem('mf_marketplace_extensions');
+    return local ? JSON.parse(local) : [];
+  });
+  useEffect(() => { localStorage.setItem('mf_marketplace_extensions', JSON.stringify(marketplaceExtensions)); }, [marketplaceExtensions]);
+
+  const [installedExtensions, setInstalledExtensions] = useState<InstalledExtension[]>(() => {
+    const local = localStorage.getItem('mf_installed_extensions');
+    return local ? JSON.parse(local) : [];
+  });
+  useEffect(() => { localStorage.setItem('mf_installed_extensions', JSON.stringify(installedExtensions)); }, [installedExtensions]);
+
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>(() => {
+    const local = localStorage.getItem('mf_global_settings');
+    return local ? JSON.parse(local) : {
+      supportedCountries: ['Ethiopia', 'Kenya', 'Rwanda', 'Nigeria', 'South Africa'],
+      supportedCurrencies: ['ETB', 'KES', 'RWF', 'NGN', 'ZAR', 'USD'],
+      maintenanceMode: false,
+      announcements: [],
+      globalFeatureFlags: {}
+    };
+  });
+  useEffect(() => { localStorage.setItem('mf_global_settings', JSON.stringify(globalSettings)); }, [globalSettings]);
+
   // 5. Customer Profiles State
   const [customerProfiles, setCustomerProfiles] = useState<Record<string, CustomerProfile>>(() => {
     const local = localStorage.getItem('mf_customer_profiles');
@@ -694,7 +772,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let subtotal = 0;
     orderData.items.forEach(it => {
       let itemCost = it.price;
-      it.selectedModifiers.forEach(m => {
+      (it.selectedModifiers || []).forEach(m => {
         itemCost += m.price;
       });
       subtotal += itemCost * it.quantity;
@@ -1675,6 +1753,79 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addLog('Update Tip Status', `Order ${orderId} tip status updated to: ${status}`);
   };
 
+  // Final Features Actions
+  const addReservation = (reservation: Omit<Reservation, 'id' | 'createdAt' | 'timeline' | 'status'>) => {
+    const id = `res-${Date.now()}`;
+    const newReservation: Reservation = {
+      ...reservation,
+      id,
+      status: 'pending',
+      timeline: [{ id: `te-${Date.now()}`, time: new Date().toISOString(), label: 'Created', desc: 'Reservation requested' }],
+      createdAt: new Date().toISOString()
+    };
+    setReservations(prev => [...prev, newReservation]);
+  };
+
+  const updateReservationStatus = (id: string, status: Reservation['status'], tableId?: string) => {
+    setReservations(prev => prev.map(res => {
+      if (res.id !== id) return res;
+      const updated = { ...res, status, tableId: tableId || res.tableId };
+      updated.timeline.push({ id: `te-${Date.now()}`, time: new Date().toISOString(), label: `Status updated`, desc: `Reservation ${status}` });
+      return updated;
+    }));
+  };
+
+  const addIngredient = (ingredient: Omit<Ingredient, 'id'>) => {
+    const id = `ing-${Date.now()}`;
+    setIngredients(prev => [...prev, { ...ingredient, id }]);
+  };
+
+  const updateIngredient = (ingredient: Ingredient) => {
+    setIngredients(prev => prev.map(ing => ing.id === ingredient.id ? ingredient : ing));
+  };
+
+  const addStockMovement = (movement: Omit<StockMovement, 'id' | 'date'>) => {
+    const id = `sm-${Date.now()}`;
+    const newMovement: StockMovement = { ...movement, id, date: new Date().toISOString() };
+    setStockMovements(prev => [...prev, newMovement]);
+
+    // Update ingredient stock
+    setIngredients(prev => prev.map(ing => {
+      if (ing.id !== movement.ingredientId) return ing;
+      let newStock = ing.stockQuantity;
+      if (movement.type === 'in') newStock += movement.quantity;
+      else if (movement.type === 'out' || movement.type === 'waste') newStock -= movement.quantity;
+      else if (movement.type === 'adjustment') newStock = movement.quantity; // Treat adjustment as absolute setting for simplicity here
+      return { ...ing, stockQuantity: newStock };
+    }));
+  };
+
+  const markNotificationRead = (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  };
+
+  const deleteNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const addNotification = (notification: Omit<DinexNotification, 'id' | 'createdAt' | 'read'>) => {
+    const id = `notif-${Date.now()}`;
+    setNotifications(prev => [{ ...notification, id, read: false, createdAt: new Date().toISOString() }, ...prev]);
+  };
+
+  const installExtension = (tenantId: string, extensionId: string) => {
+    const id = `inst-${Date.now()}`;
+    setInstalledExtensions(prev => [...prev, { id: extensionId, tenantId, installedAt: new Date().toISOString(), status: 'active' }]);
+  };
+
+  const uninstallExtension = (tenantId: string, extensionId: string) => {
+    setInstalledExtensions(prev => prev.filter(inst => !(inst.tenantId === tenantId && inst.id === extensionId)));
+  };
+
+  const updateGlobalSettings = (settings: Partial<GlobalSettings>) => {
+    setGlobalSettings(prev => ({ ...prev, ...settings }));
+  };
+
   return (
     <AppContext.Provider value={{
       tenants,
@@ -1754,7 +1905,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       removeFavoriteItem,
       addSavedAddress,
       removeSavedAddress,
-      updateTipStatus
+      updateTipStatus,
+
+      reservations,
+      addReservation,
+      updateReservationStatus,
+
+      ingredients,
+      addIngredient,
+      updateIngredient,
+      stockMovements,
+      addStockMovement,
+
+      notifications,
+      markNotificationRead,
+      deleteNotification,
+      addNotification,
+
+      marketplaceExtensions,
+      installedExtensions,
+      installExtension,
+      uninstallExtension,
+
+      globalSettings,
+      updateGlobalSettings
     }}>
       {children}
     </AppContext.Provider>

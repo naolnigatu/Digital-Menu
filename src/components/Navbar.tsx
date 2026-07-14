@@ -20,15 +20,14 @@ export default function Navbar() {
     logs,
     addLog,
     registerTenant,
-    signUpOwnerOnly
+    signUpOwnerOnly,
+    notifications,
+    markNotificationRead,
+    deleteNotification
   } = useApp();
 
   const [simulatedOffline, setSimulatedOffline] = useState(false);
   const [showRoleModal, setShowRoleModal] = useState(false);
-  const [notifications, setNotifications] = useState<string[]>([
-    'New Table Order MF-3011 received at Hot Stews Station!',
-    'Traditional Coffee Ceremony is ready for pickup at Bar!'
-  ]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isGoogleLoadingSignUp, setIsGoogleLoadingSignUp] = useState(false);
@@ -271,7 +270,7 @@ export default function Navbar() {
               className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-colors"
             >
               <Bell className="h-5 w-5" />
-              {notifications.length > 0 && (
+              {notifications.filter(n => !n.read).length > 0 && (
                 <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white"></span>
               )}
             </button>
@@ -280,20 +279,26 @@ export default function Navbar() {
                 <div className="mb-2 flex items-center justify-between border-b border-slate-50 pb-2">
                   <span className="text-xs font-bold text-slate-800">Operational Alerts</span>
                   <button 
-                    onClick={() => setNotifications([])}
+                    onClick={() => notifications.forEach(n => deleteNotification(n.id))}
                     className="text-[10px] text-slate-400 hover:text-slate-600 font-semibold"
                   >
                     Clear All
                   </button>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                   {notifications.length === 0 ? (
                     <p className="py-4 text-center text-xs font-medium text-slate-400">No active alerts. All quiet!</p>
                   ) : (
-                    notifications.map((notif, index) => (
-                      <div key={index} className="flex gap-2 rounded-lg bg-slate-50 p-2 text-[11px] leading-relaxed text-slate-600">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 mt-1.5"></span>
-                        <p>{notif}</p>
+                    notifications.map((notif) => (
+                      <div key={notif.id} className={`flex gap-2 rounded-lg p-2 text-[11px] leading-relaxed cursor-pointer transition-colors ${notif.read ? 'bg-white text-slate-500' : 'bg-slate-50 text-slate-700 font-medium'}`} onClick={() => markNotificationRead(notif.id)}>
+                        {!notif.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 mt-1.5"></span>}
+                        <div className="flex-1">
+                          <p>{notif.message}</p>
+                          <span className="text-[9px] text-slate-400 mt-0.5 block">{new Date(notif.createdAt).toLocaleTimeString()}</span>
+                        </div>
+                        <button onClick={(e) => { e.stopPropagation(); deleteNotification(notif.id); }} className="text-slate-400 hover:text-red-500 ml-1">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                        </button>
                       </div>
                     ))
                   )}

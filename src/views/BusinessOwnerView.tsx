@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { MenuItem, Category, Table, Staff, ModifierGroup, BusinessType, Order, OrderItem } from '../types';
 import { 
   LayoutDashboard, Utensils, QrCode, Users, Settings, Plus, Trash2, Edit, Check, 
-  BarChart3, Users2, Shield, Languages, Award, PlusCircle, CreditCard, ChevronRight, FileSpreadsheet,
+  BarChart3, Users2, Shield, Languages, Award, PlusCircle, CreditCard, ChevronRight, ChevronLeft, FileSpreadsheet,
   Upload, Image, X, Sparkles, MapPin, Phone, Mail, HelpCircle, AlertTriangle, XCircle, ShieldAlert,
   ChevronUp, ChevronDown, EyeOff, Eye, Search
 } from 'lucide-react';
@@ -19,6 +19,10 @@ import PaymentSettings from '../components/PaymentSettings';
 import LoyaltySettings from '../components/LoyaltySettings';
 import MealSubscriptionSettings from '../components/MealSubscriptionSettings';
 import ReportsDashboard from '../components/ReportsDashboard';
+import { ReservationsTab } from '../components/ReservationsTab';
+import { InventoryTab } from '../components/InventoryTab';
+import { MarketingTab } from '../components/MarketingTab';
+import { MarketplaceTab } from '../components/MarketplaceTab';
 
 const PERMISSION_MODULES = [
   {
@@ -228,7 +232,15 @@ export default function BusinessOwnerView() {
   const { can, customRoles, addCustomRole, updateCustomRole, deleteCustomRole } = useDinexPermission();
   const { isFeatureEnabled } = useDinexFeature();
 
-  const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'orders' | 'menu' | 'tables' | 'staff' | 'settings' | 'payments' | 'loyalty' | 'subscriptions' | 'reports'>('dashboard');
+  const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'orders' | 'menu' | 'tables' | 'staff' | 'settings' | 'payments' | 'loyalty' | 'subscriptions' | 'reports' | 'reservations' | 'inventory' | 'ads' | 'marketplace'>(() => {
+    if (can('reports.view')) return 'dashboard';
+    if (can('orders.manage')) return 'orders';
+    if (can('menu.create')) return 'menu';
+    if (can('business.edit')) return 'tables';
+    if (can('staff.manage')) return 'staff';
+    if (can('payments.verify')) return 'payments';
+    return 'dashboard';
+  });
 
   // --- Order Management State ---
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
@@ -256,7 +268,7 @@ export default function BusinessOwnerView() {
 
   // Calculations for Draft Order
   const draftSubtotal = draftOrderItems.reduce((acc, it) => {
-    const itemCost = it.price + it.selectedModifiers.reduce((sum, m) => sum + m.price, 0);
+    const itemCost = it.price + (it.selectedModifiers || []).reduce((sum, m) => sum + m.price, 0);
     return acc + (itemCost * it.quantity);
   }, 0);
 
@@ -1029,147 +1041,223 @@ export default function BusinessOwnerView() {
       </div>
 
       {/* Internal Subtabs Navigation */}
-      <div className="flex border-b border-slate-100 overflow-x-auto gap-2">
-        <button
-          onClick={() => setActiveSubTab('dashboard')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
-            activeSubTab === 'dashboard' 
-              ? 'border-slate-900 text-slate-900' 
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <LayoutDashboard className="h-4 w-4" />
-          <span>Analytics</span>
-          {tenant.subscriptionPlan === 'free' && (
-            <span className="ml-1 rounded-full bg-amber-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-amber-600 border border-amber-500/20 uppercase tracking-tight">
-              Upgrade
+      <div className="flex border-b border-slate-100 overflow-x-auto gap-2 scrollbar-hide px-2">
+        {can('reports.view') && (
+          <button
+            onClick={() => setActiveSubTab('dashboard')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'dashboard' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <LayoutDashboard className="h-4 w-4" />
+            <span>Analytics</span>
+            {tenant.subscriptionPlan === 'free' && (
+              <span className="ml-1 rounded-full bg-amber-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-amber-600 border border-amber-500/20 uppercase tracking-tight">
+                Upgrade
+              </span>
+            )}
+          </button>
+        )}
+
+        {can('orders.manage') && (
+          <button
+            onClick={() => setActiveSubTab('orders')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'orders' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <FileSpreadsheet className="h-4 w-4 text-indigo-600 animate-pulse" />
+            <span>Order Manager</span>
+            <span className="ml-1 rounded-full bg-indigo-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-indigo-600 border border-indigo-500/20 uppercase tracking-tight">
+              Core Engine
             </span>
-          )}
-        </button>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveSubTab('orders')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
-            activeSubTab === 'orders' 
-              ? 'border-slate-900 text-slate-900' 
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <FileSpreadsheet className="h-4 w-4 text-indigo-600 animate-pulse" />
-          <span>Order Manager</span>
-          <span className="ml-1 rounded-full bg-indigo-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-indigo-600 border border-indigo-500/20 uppercase tracking-tight">
-            Core Engine
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('menu')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
-            activeSubTab === 'menu' 
-              ? 'border-slate-900 text-slate-900' 
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <Utensils className="h-4 w-4" />
-          <span>Menu Designer</span>
-          <span className="ml-1 rounded-full bg-emerald-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-emerald-600 border border-emerald-500/20 uppercase tracking-tight">
-            Free
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('tables')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
-            activeSubTab === 'tables' 
-              ? 'border-slate-900 text-slate-900' 
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <QrCode className="h-4 w-4" />
-          <span>QR Tables</span>
-          {tenant.subscriptionPlan === 'free' && (
-            <span className="ml-1 rounded-full bg-amber-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-amber-600 border border-amber-500/20 uppercase tracking-tight">
-              Upgrade
+        {can('menu.create') && (
+          <button
+            onClick={() => setActiveSubTab('menu')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'menu' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Utensils className="h-4 w-4" />
+            <span>Menu Designer</span>
+            <span className="ml-1 rounded-full bg-emerald-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-emerald-600 border border-emerald-500/20 uppercase tracking-tight">
+              Free
             </span>
-          )}
-        </button>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveSubTab('staff')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
-            activeSubTab === 'staff' 
-              ? 'border-slate-900 text-slate-900' 
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <Users className="h-4 w-4" />
-          <span>Team Invites</span>
-          {tenant.subscriptionPlan === 'free' && (
-            <span className="ml-1 rounded-full bg-amber-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-amber-600 border border-amber-500/20 uppercase tracking-tight">
-              Upgrade
-            </span>
-          )}
-        </button>
+        {can('business.edit') && (
+          <button
+            onClick={() => setActiveSubTab('tables')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'tables' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <QrCode className="h-4 w-4" />
+            <span>QR Tables</span>
+            {tenant.subscriptionPlan === 'free' && (
+              <span className="ml-1 rounded-full bg-amber-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-amber-600 border border-amber-500/20 uppercase tracking-tight">
+                Upgrade
+              </span>
+            )}
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveSubTab('payments')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
-            activeSubTab === 'payments' 
-              ? 'border-slate-900 text-slate-900' 
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <CreditCard className="h-4 w-4" />
-          <span>Payments</span>
-        </button>
+        {can('staff.manage') && (
+          <button
+            onClick={() => setActiveSubTab('staff')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'staff' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Users className="h-4 w-4" />
+            <span>Team Invites</span>
+            {tenant.subscriptionPlan === 'free' && (
+              <span className="ml-1 rounded-full bg-amber-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-amber-600 border border-amber-500/20 uppercase tracking-tight">
+                Upgrade
+              </span>
+            )}
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveSubTab('loyalty')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
-            activeSubTab === 'loyalty' 
-              ? 'border-slate-900 text-slate-900' 
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <Award className="h-4 w-4" />
-          <span>Loyalty</span>
-        </button>
+        {can('payments.verify') && (
+          <button
+            onClick={() => setActiveSubTab('payments')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'payments' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <CreditCard className="h-4 w-4" />
+            <span>Payments</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveSubTab('subscriptions')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
-            activeSubTab === 'subscriptions' 
-              ? 'border-slate-900 text-slate-900' 
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          <span>Subscriptions</span>
-        </button>
+        {can('business.edit') && (
+          <button
+            onClick={() => setActiveSubTab('loyalty')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'loyalty' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Award className="h-4 w-4" />
+            <span>Loyalty</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveSubTab('reports')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
-            activeSubTab === 'reports' 
-              ? 'border-slate-900 text-slate-900' 
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <BarChart3 className="h-4 w-4" />
-          <span>Reports</span>
-        </button>
+        {can('business.edit') && (
+          <button
+            onClick={() => setActiveSubTab('subscriptions')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'subscriptions' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            <span>Subscriptions</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveSubTab('settings')}
-          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
-            activeSubTab === 'settings' 
-              ? 'border-slate-900 text-slate-900' 
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <Settings className="h-4 w-4" />
-          <span>SaaS Plan</span>
-        </button>
+        {can('reports.view') && (
+          <button
+            onClick={() => setActiveSubTab('reports')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'reports' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <BarChart3 className="h-4 w-4" />
+            <span>Reports</span>
+          </button>
+        )}
+
+        {isFeatureEnabled('reservations') && can('orders.manage') && (
+          <button
+            onClick={() => setActiveSubTab('reservations')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'reservations' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <MapPin className="h-4 w-4" />
+            <span>Reservations</span>
+          </button>
+        )}
+
+        {tenant.subscriptionPlan === 'enterprise' && can('business.edit') && (
+          <button
+            onClick={() => setActiveSubTab('inventory')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'inventory' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Upload className="h-4 w-4" />
+            <span>Inventory</span>
+          </button>
+        )}
+
+        {can('business.edit') && (
+          <button
+            onClick={() => setActiveSubTab('ads')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'ads' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>Marketing</span>
+          </button>
+        )}
+
+        {can('business.edit') && (
+          <button
+            onClick={() => setActiveSubTab('marketplace')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'marketplace' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <LayoutDashboard className="h-4 w-4" />
+            <span>Marketplace</span>
+          </button>
+        )}
+
+        {can('business.edit') && (
+          <button
+            onClick={() => setActiveSubTab('settings')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'settings' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Settings className="h-4 w-4" />
+            <span>SaaS Plan</span>
+          </button>
+        )}
       </div>
 
       {/* SUBTAB CONTENTS */}
@@ -1184,7 +1272,7 @@ export default function BusinessOwnerView() {
       ) : (
         <>
           {/* 1. DYNAMIC DINEX DASHBOARD CORE */}
-          {activeSubTab === 'orders' && (
+          {activeSubTab === 'orders' && can('orders.manage') && (
             <div className="space-y-6 animate-in fade-in duration-300">
               
               {/* TOP SUMMARY STRIP */}
@@ -1232,6 +1320,7 @@ export default function BusinessOwnerView() {
                     <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
                     <input
                       type="text"
+                      aria-label="Search orders"
                       placeholder="Search #no or customer..."
                       value={orderSearchTerm}
                       onChange={(e) => setOrderSearchTerm(e.target.value)}
@@ -1240,6 +1329,7 @@ export default function BusinessOwnerView() {
                   </div>
 
                   <select
+                    aria-label="Filter by order type"
                     value={filterOrderType}
                     onChange={(e) => setFilterOrderType(e.target.value)}
                     className="rounded-lg border border-slate-200 p-1.5 text-xs font-bold text-slate-700 bg-white"
@@ -1254,6 +1344,7 @@ export default function BusinessOwnerView() {
                   </select>
 
                   <select
+                    aria-label="Filter by order status"
                     value={filterOrderStatus}
                     onChange={(e) => setFilterOrderStatus(e.target.value)}
                     className="rounded-lg border border-slate-200 p-1.5 text-xs font-bold text-slate-700 bg-white"
@@ -1269,6 +1360,7 @@ export default function BusinessOwnerView() {
                   </select>
 
                   <select
+                    aria-label="Filter by payment status"
                     value={filterPaymentStatus}
                     onChange={(e) => setFilterPaymentStatus(e.target.value)}
                     className="rounded-lg border border-slate-200 p-1.5 text-xs font-bold text-slate-700 bg-white"
@@ -1298,7 +1390,7 @@ export default function BusinessOwnerView() {
               <div className="grid gap-6 lg:grid-cols-3">
                 
                 {/* LEFT LIST PANEL */}
-                <div className="lg:col-span-1 space-y-3">
+                <div className={`lg:col-span-1 space-y-3 ${selectedOrderDetail ? 'hidden lg:block' : 'block'}`}>
                   <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                     <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
                       <h3 className="font-sans font-bold text-xs text-slate-700 uppercase tracking-wider">Branch Tickets Queue</h3>
@@ -1363,10 +1455,18 @@ export default function BusinessOwnerView() {
                 </div>
 
                 {/* RIGHT DETAIL PREVIEW */}
-                <div className="lg:col-span-2">
+                <div className={`lg:col-span-2 ${selectedOrderDetail ? 'block' : 'hidden lg:block'}`}>
                   {selectedOrderDetail ? (
                     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-6">
                       
+                      {/* MOBILE BACK BUTTON */}
+                      <button 
+                        onClick={() => setSelectedOrderDetail(null)}
+                        className="lg:hidden flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-700 mb-4"
+                      >
+                        <ChevronLeft className="h-4 w-4" /> Back to Orders List
+                      </button>
+
                       {/* RECEIPT HEADER */}
                       <div className="flex justify-between items-start border-b border-slate-100 pb-4">
                         <div className="space-y-1">
@@ -1413,7 +1513,7 @@ export default function BusinessOwnerView() {
                                   </div>
                                 )}
                               </div>
-                              <span className="text-slate-600 font-mono">{activeBusiness?.currency || tenant.currency} {((it.price + it.selectedModifiers.reduce((sum, m) => sum + m.price, 0)) * it.quantity).toLocaleString()}</span>
+                              <span className="text-slate-600 font-mono">{activeBusiness?.currency || tenant.currency} {((it.price + (it.selectedModifiers || []).reduce((sum, m) => sum + m.price, 0)) * it.quantity).toLocaleString()}</span>
                             </div>
                           ))}
                         </div>
@@ -1768,7 +1868,7 @@ export default function BusinessOwnerView() {
                               <div key={it.id} className="p-3 bg-white flex justify-between items-center font-semibold">
                                 <div>
                                   <span className="font-bold text-slate-900">{it.quantity}x {it.name}</span>
-                                  {it.selectedModifiers.length > 0 && (
+                                  {it.selectedModifiers && it.selectedModifiers.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mt-1">
                                       {it.selectedModifiers.map((mod, mIdx) => (
                                         <span key={mIdx} className="bg-slate-100 text-[10px] text-slate-500 rounded px-1">
@@ -1779,7 +1879,7 @@ export default function BusinessOwnerView() {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-3">
-                                  <span className="font-mono text-slate-800">{activeBusiness?.currency || tenant.currency} {((it.price + it.selectedModifiers.reduce((sum, m) => sum + m.price, 0)) * it.quantity).toLocaleString()}</span>
+                                  <span className="font-mono text-slate-800">{activeBusiness?.currency || tenant.currency} {((it.price + (it.selectedModifiers || []).reduce((sum, m) => sum + m.price, 0)) * it.quantity).toLocaleString()}</span>
                                   <button
                                     type="button"
                                     onClick={() => setDraftOrderItems(prev => prev.filter((_, iIdx) => iIdx !== idx))}
@@ -1893,7 +1993,7 @@ export default function BusinessOwnerView() {
           )}
 
           {/* 1. DYNAMIC DINEX DASHBOARD CORE */}
-          {activeSubTab === 'dashboard' && (
+          {activeSubTab === 'dashboard' && can('reports.view') && (
             <div className="space-y-6 animate-in fade-in duration-300">
               
               {/* Dynamic Overview banner */}
@@ -2108,7 +2208,7 @@ export default function BusinessOwnerView() {
           )}
 
       {/* 2. MENU DESIGNER */}
-      {activeSubTab === 'menu' && (
+      {activeSubTab === 'menu' && can('menu.create') && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h3 className="font-sans font-bold text-sm text-slate-800">Branch Categories & Dishes</h3>
@@ -2742,7 +2842,7 @@ export default function BusinessOwnerView() {
       )}
 
       {/* 3. TABLES & QR ENGINE */}
-      {activeSubTab === 'tables' && (
+      {activeSubTab === 'tables' && can('business.edit') && (
         <div className="grid gap-6 lg:grid-cols-3">
           
           {/* Create Table Card */}
@@ -2857,7 +2957,7 @@ export default function BusinessOwnerView() {
       )}
 
       {/* 4. TEAM INVITES & ROLES */}
-      {activeSubTab === 'staff' && (
+      {activeSubTab === 'staff' && can('staff.manage') && (
         <div className="space-y-6">
           
           {/* Sub Navigation */}
@@ -3308,7 +3408,7 @@ export default function BusinessOwnerView() {
       )}
 
       {/* 5. BILLING & SAAS SETTINGS */}
-      {activeSubTab === 'settings' && (
+      {activeSubTab === 'settings' && can('business.edit') && (
         <div className="max-w-2xl mx-auto space-y-6">
           
           <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm space-y-4">
@@ -3625,30 +3725,58 @@ export default function BusinessOwnerView() {
       )}
 
       {/* PAYMENTS SUBTAB */}
-      {activeSubTab === 'payments' && activeBusiness && (
+      {activeSubTab === 'payments' && activeBusiness && can('payments.verify') && (
         <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300">
           <PaymentSettings tenantId={activeBusiness.id} />
         </div>
       )}
 
       {/* LOYALTY SUBTAB */}
-      {activeSubTab === 'loyalty' && activeBusiness && (
+      {activeSubTab === 'loyalty' && activeBusiness && can('business.edit') && (
         <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300">
           <LoyaltySettings tenantId={activeBusiness.id} />
         </div>
       )}
 
       {/* SUBSCRIPTIONS SUBTAB */}
-      {activeSubTab === 'subscriptions' && activeBusiness && (
+      {activeSubTab === 'subscriptions' && activeBusiness && can('business.edit') && (
         <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300">
           <MealSubscriptionSettings tenantId={activeBusiness.id} />
         </div>
       )}
 
       {/* REPORTS SUBTAB */}
-      {activeSubTab === 'reports' && activeBusiness && (
+      {activeSubTab === 'reports' && activeBusiness && can('reports.view') && (
         <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300">
           <ReportsDashboard tenantId={activeBusiness.id} />
+        </div>
+      )}
+
+      {/* RESERVATIONS SUBTAB */}
+      {activeSubTab === 'reservations' && activeBusiness && isFeatureEnabled('reservations') && can('orders.manage') && (
+        <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300">
+          <ReservationsTab tenantId={activeBusiness.id} branchId={activeBranchId} />
+        </div>
+      )}
+
+      {/* INVENTORY SUBTAB */}
+      {activeSubTab === 'inventory' && activeBusiness && activeBusiness.subscriptionPlan === 'enterprise' && can('business.edit') && (
+        <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
+          <InventoryTab tenantId={activeBusiness.id} branchId={activeBranchId} />
+        </div>
+      )}
+
+      {/* MARKETING SUBTAB */}
+      {activeSubTab === 'ads' && activeBusiness && can('business.edit') && (
+        <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
+          <MarketingTab tenantId={activeBusiness.id} />
+        </div>
+      )}
+
+      {/* MARKETPLACE SUBTAB */}
+      {activeSubTab === 'marketplace' && activeBusiness && can('business.edit') && (
+        <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
+          <MarketplaceTab tenantId={activeBusiness.id} />
         </div>
       )}
       </>

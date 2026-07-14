@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import CustomerProfileDashboard from '../components/CustomerProfileDashboard';
 
+import { CustomerReservationModal } from '../components/CustomerReservationModal';
+
 export default function CustomerView() {
   const { 
     currentUser,
@@ -56,6 +58,7 @@ export default function CustomerView() {
 
   // New States: Account Dashboards & Auth
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+  const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
   const [isEmailLoginModalOpen, setIsEmailLoginModalOpen] = useState(false);
   const [customerEmailForDashboard, setCustomerEmailForDashboard] = useState(() => {
     return localStorage.getItem('mf_customer_logged_email') || '';
@@ -500,6 +503,13 @@ export default function CustomerView() {
                 </button>
 
                 {/* Account Dashboard Toggle */}
+                <button
+                  onClick={() => setIsReservationModalOpen(true)}
+                  className="bg-amber-600 hover:bg-amber-500 text-white transition-colors border-none rounded-lg px-3 py-1 text-[11px] font-bold flex items-center gap-1 shrink-0 shadow-xs"
+                >
+                  <MapPin className="h-3.5 w-3.5" />
+                  Book Table
+                </button>
                 <button
                   onClick={() => {
                     if (customerEmailForDashboard) {
@@ -1598,6 +1608,15 @@ export default function CustomerView() {
           )}
 
         </div>
+      )}
+
+      {/* RESERVATION MODAL */}
+      {isReservationModalOpen && (
+        <CustomerReservationModal 
+          tenantId={activeTenant.id} 
+          branchId={activeBranchId} 
+          onClose={() => setIsReservationModalOpen(false)} 
+        />
       )}
 
       {/* MY ACCOUNT DASHBOARD MODAL */}

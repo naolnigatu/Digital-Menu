@@ -202,17 +202,6 @@ export interface PlanPricing {
   features: string[];
 }
 
-export interface PlatformAd {
-  id: string;
-  tenantId?: string; // empty/undefined means global platform-wide ad, otherwise target a specific restaurant
-  title: string;
-  subtitle: string;
-  imageUrl: string;
-  actionUrl?: string;
-  active: boolean;
-  createdAt: string;
-}
-
 export type BusinessType =
   | 'Hotel'
   | 'Ethiopian Restaurant'
@@ -227,6 +216,98 @@ export type BusinessType =
   | 'Bar'
   | 'Coffee House'
   | 'Custom';
+
+export interface PlatformAd {
+  id: string;
+  tenantId?: string; // empty/undefined means global platform-wide ad, otherwise target a specific restaurant
+  title: string;
+  subtitle: string;
+  description?: string;
+  imageUrl: string;
+  actionUrl?: string;
+  active: boolean;
+  status: 'pending' | 'approved' | 'rejected' | 'disabled' | 'removed';
+  startDate?: string;
+  endDate?: string;
+  targetAudience?: string;
+  createdAt: string;
+}
+
+export interface Reservation {
+  id: string;
+  tenantId: string;
+  branchId: string;
+  customerName: string;
+  customerPhone: string;
+  date: string;
+  time: string;
+  guests: number;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'completed';
+  tableId?: string;
+  specialRequests?: string;
+  timeline: TimelineEvent[];
+  createdAt: string;
+}
+
+export interface Ingredient {
+  id: string;
+  tenantId: string;
+  branchId: string;
+  name: string;
+  stockQuantity: number;
+  unit: string;
+  reorderLevel: number;
+  supplier?: string;
+}
+
+export interface StockMovement {
+  id: string;
+  ingredientId: string;
+  tenantId: string;
+  branchId: string;
+  type: 'in' | 'out' | 'waste' | 'adjustment';
+  quantity: number;
+  date: string;
+  note?: string;
+  actor: string;
+}
+
+export interface MarketplaceExtension {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  icon: string;
+  category: 'Integration' | 'Premium Feature' | 'Hardware';
+  developer: string;
+  status: 'active' | 'deprecated';
+}
+
+export interface InstalledExtension {
+  id: string; // extension ID
+  tenantId: string;
+  installedAt: string;
+  status: 'active' | 'suspended';
+}
+
+export interface DinexNotification {
+  id: string;
+  tenantId: string;
+  userId?: string;
+  type: 'order_ready' | 'payment_verified' | 'reservation_approved' | 'reservation_cancelled' | 'subscription_expiring' | 'staff_invite' | 'low_inventory' | 'ad_approved' | 'system';
+  message: string;
+  read: boolean;
+  createdAt: string;
+  link?: string;
+}
+
+export interface GlobalSettings {
+  supportedCountries: string[];
+  supportedCurrencies: string[];
+  maintenanceMode: boolean;
+  announcements: string[];
+  globalFeatureFlags: Record<string, boolean>;
+}
 
 export interface Business {
   id: string;
