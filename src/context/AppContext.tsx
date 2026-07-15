@@ -403,20 +403,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('mf_customer_subscriptions', JSON.stringify(customerSubscriptions));
   }, [customerSubscriptions]);
 
-  // 4a. Final Features State (Fully migrated to Firestore with realtime listeners)
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
-  const [notifications, setNotifications] = useState<DinexNotification[]>([]);
-  const [marketplaceExtensions, setMarketplaceExtensions] = useState<MarketplaceExtension[]>([]);
-  const [installedExtensions, setInstalledExtensions] = useState<InstalledExtension[]>([]);
-  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({
-    supportedCountries: ['Ethiopia', 'Kenya', 'Rwanda', 'Nigeria', 'South Africa'],
-    supportedCurrencies: ['ETB', 'KES', 'RWF', 'NGN', 'ZAR', 'USD'],
-    maintenanceMode: false,
-    announcements: [],
-    globalFeatureFlags: {}
+  // 4a. Final Features State (Fully migrated to Firestore with realtime listeners & localStorage fallback)
+  const [reservations, setReservations] = useState<Reservation[]>(() => {
+    const local = localStorage.getItem('mf_reservations');
+    return local ? JSON.parse(local) : [];
   });
+  useEffect(() => { localStorage.setItem('mf_reservations', JSON.stringify(reservations)); }, [reservations]);
+
+  const [ingredients, setIngredients] = useState<Ingredient[]>(() => {
+    const local = localStorage.getItem('mf_ingredients');
+    return local ? JSON.parse(local) : [];
+  });
+  useEffect(() => { localStorage.setItem('mf_ingredients', JSON.stringify(ingredients)); }, [ingredients]);
+
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() => {
+    const local = localStorage.getItem('mf_stock_movements');
+    return local ? JSON.parse(local) : [];
+  });
+  useEffect(() => { localStorage.setItem('mf_stock_movements', JSON.stringify(stockMovements)); }, [stockMovements]);
+
+  const [notifications, setNotifications] = useState<DinexNotification[]>(() => {
+    const local = localStorage.getItem('mf_notifications');
+    return local ? JSON.parse(local) : [];
+  });
+  useEffect(() => { localStorage.setItem('mf_notifications', JSON.stringify(notifications)); }, [notifications]);
+
+  const [marketplaceExtensions, setMarketplaceExtensions] = useState<MarketplaceExtension[]>(() => {
+    const local = localStorage.getItem('mf_marketplace_extensions');
+    return local ? JSON.parse(local) : [];
+  });
+  useEffect(() => { localStorage.setItem('mf_marketplace_extensions', JSON.stringify(marketplaceExtensions)); }, [marketplaceExtensions]);
+
+  const [installedExtensions, setInstalledExtensions] = useState<InstalledExtension[]>(() => {
+    const local = localStorage.getItem('mf_installed_extensions');
+    return local ? JSON.parse(local) : [];
+  });
+  useEffect(() => { localStorage.setItem('mf_installed_extensions', JSON.stringify(installedExtensions)); }, [installedExtensions]);
+
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>(() => {
+    const local = localStorage.getItem('mf_global_settings');
+    return local ? JSON.parse(local) : {
+      supportedCountries: ['Ethiopia', 'Kenya', 'Rwanda', 'Nigeria', 'South Africa'],
+      supportedCurrencies: ['ETB', 'KES', 'RWF', 'NGN', 'ZAR', 'USD'],
+      maintenanceMode: false,
+      announcements: [],
+      globalFeatureFlags: {}
+    };
+  });
+  useEffect(() => { localStorage.setItem('mf_global_settings', JSON.stringify(globalSettings)); }, [globalSettings]);
 
   useEffect(() => {
     const initializeListeners = async () => {
@@ -1833,6 +1867,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       timeline: [{ id: `te-${Date.now()}`, time: new Date().toISOString(), label: 'Created', desc: 'Reservation requested' }],
       createdAt: new Date().toISOString()
     };
+    setReservations(prev => [...prev, newReservation]);
     try {
       await syncToFirestore('reservations', id, newReservation);
       addLog('Create Reservation Success', `Successfully submitted reservation for ${reservation.customerName} on ${reservation.date} at ${reservation.time}.`);
@@ -1842,22 +1877,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateReservationStatus = async (id: string, status: Reservation['status'], tableId?: string) => {
-    try {
-      const res = reservations.find(r => r.id === id);
-      if (!res) {
-        throw new Error(`Reservation ID ${id} not found in state.`);
-      }
-      const updated = { 
-        ...res, 
-        status, 
+    setReservations(prev => prev.map(res => {
+      if (res.id !== id) return res;
+      return {
+        ...res,
+        status,
         tableId: tableId || res.tableId,
         timeline: [
           ...res.timeline,
           { id: `te-${Date.now()}`, time: new Date().toISOString(), label: `Status updated`, desc: `Reservation ${status}` }
         ]
       };
-      await syncToFirestore('reservations', id, updated);
-      addLog('Update Reservation Status Success', `Successfully updated reservation status of ${res.customerName} to ${status}.`);
+    }));
+
+    try {
+      const res = reservations.find(r => r.id === id);
+      if (res) {
+        const updated = { 
+          ...res, 
+          status, 
+          tableId: tableId || res.tableId,
+          timeline: [
+            ...res.timeline,
+            { id: `te-${Date.now()}`, time: new Date().toISOString(), label: `Status updated`, desc: `Reservation ${status}` }
+          ]
+        };
+        await syncToFirestore('reservations', id, updated);
+      }
+      addLog('Update Reservation Status Success', `Successfully updated reservation status of ID ${id} to ${status}.`);
     } catch (err: any) {
       addLog('Update Reservation Status Error', `Failed to update reservation status: ${err.message || err}`);
     }
@@ -1866,6 +1913,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const addIngredient = async (ingredient: Omit<Ingredient, 'id'>) => {
     const id = `ing-${Date.now()}`;
     const newIngredient = { ...ingredient, id };
+    setIngredients(prev => [...prev, newIngredient]);
     try {
       await syncToFirestore('ingredients', id, newIngredient);
       addLog('Add Ingredient Success', `Successfully added ingredient ${ingredient.name} with stock ${ingredient.stockQuantity} ${ingredient.unit}.`);
@@ -1875,6 +1923,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateIngredient = async (ingredient: Ingredient) => {
+    setIngredients(prev => prev.map(ing => ing.id === ingredient.id ? ingredient : ing));
     try {
       await syncToFirestore('ingredients', ingredient.id, ingredient);
       addLog('Update Ingredient Success', `Successfully updated ingredient ${ingredient.name}.`);
@@ -1886,28 +1935,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const addStockMovement = async (movement: Omit<StockMovement, 'id' | 'date'>) => {
     const id = `sm-${Date.now()}`;
     const newMovement: StockMovement = { ...movement, id, date: new Date().toISOString() };
+    setStockMovements(prev => [...prev, newMovement]);
+
+    // Update ingredient stock locally
+    setIngredients(prev => prev.map(ing => {
+      if (ing.id !== movement.ingredientId) return ing;
+      let newStock = ing.stockQuantity;
+      if (movement.type === 'in') newStock += movement.quantity;
+      else if (movement.type === 'out' || movement.type === 'waste') newStock -= movement.quantity;
+      else if (movement.type === 'adjustment') newStock = movement.quantity;
+      
+      const updatedIngredient = { ...ing, stockQuantity: newStock };
+      // Sync the updated ingredient to Firestore in the background
+      syncToFirestore('ingredients', ing.id, updatedIngredient);
+      return updatedIngredient;
+    }));
+
     try {
       await syncToFirestore('stock_movements', id, newMovement);
-      
-      const ing = ingredients.find(i => i.id === movement.ingredientId);
-      if (ing) {
-        let newStock = ing.stockQuantity;
-        if (movement.type === 'in') newStock += movement.quantity;
-        else if (movement.type === 'out' || movement.type === 'waste') newStock -= movement.quantity;
-        else if (movement.type === 'adjustment') newStock = movement.quantity;
-        
-        const updatedIngredient = { ...ing, stockQuantity: newStock };
-        await syncToFirestore('ingredients', ing.id, updatedIngredient);
-        addLog('Stock Movement Processed', `Recorded ${movement.type} movement of ${movement.quantity} units for ${ing.name}. Updated stock: ${newStock}.`);
-      } else {
-        addLog('Stock Movement Warning', `Movement logged but ingredient ${movement.ingredientId} was not found in state.`);
-      }
+      addLog('Stock Movement Processed', `Recorded ${movement.type} movement of ${movement.quantity} units for ingredient ID ${movement.ingredientId}.`);
     } catch (err: any) {
       addLog('Stock Movement Error', `Failed to log stock movement: ${err.message || err}`);
     }
   };
 
   const markNotificationRead = async (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     try {
       const notif = notifications.find(n => n.id === id);
       if (notif) {
@@ -1920,6 +1973,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteNotification = async (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
     try {
       await deleteFromFirestore('notifications', id);
     } catch (err: any) {
@@ -1930,6 +1984,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const addNotification = async (notification: Omit<DinexNotification, 'id' | 'createdAt' | 'read'>) => {
     const id = `notif-${Date.now()}`;
     const newNotif = { ...notification, id, read: false, createdAt: new Date().toISOString() };
+    setNotifications(prev => [newNotif, ...prev]);
     try {
       await syncToFirestore('notifications', id, newNotif);
     } catch (err: any) {
@@ -1940,6 +1995,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const installExtension = async (tenantId: string, extensionId: string) => {
     const id = `${tenantId}_${extensionId}`;
     const newInstalled = { id: extensionId, tenantId, installedAt: new Date().toISOString(), status: 'active' as const };
+    setInstalledExtensions(prev => [...prev, newInstalled]);
     try {
       await syncToFirestore('installed_extensions', id, newInstalled);
       addLog('Install Extension Success', `Successfully installed extension ${extensionId} for tenant ${tenantId}.`);
@@ -1950,6 +2006,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const uninstallExtension = async (tenantId: string, extensionId: string) => {
     const id = `${tenantId}_${extensionId}`;
+    setInstalledExtensions(prev => prev.filter(inst => !(inst.tenantId === tenantId && inst.id === extensionId)));
     try {
       await deleteFromFirestore('installed_extensions', id);
       addLog('Uninstall Extension Success', `Successfully uninstalled extension ${extensionId} for tenant ${tenantId}.`);
@@ -1960,6 +2017,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const updateGlobalSettings = async (settings: Partial<GlobalSettings>) => {
     const updated = { ...globalSettings, ...settings };
+    setGlobalSettings(updated);
     try {
       await syncToFirestore('system_settings', 'global', updated);
       addLog('Update Global Settings Success', `Successfully updated system-wide configuration.`);
