@@ -611,7 +611,7 @@ export default function Navbar() {
                   {demoUsers.map((user) => {
                     const Icon = user.icon;
                     const isCurrent = currentUser 
-                      ? currentUser.email.toLowerCase() === user.email.toLowerCase()
+                      ? (currentUser.email || '').toLowerCase() === (user.email || '').toLowerCase()
                       : user.email === 'guest@menuflow.com';
 
                     return (

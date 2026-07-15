@@ -599,7 +599,7 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   // Filter based on user membership scoped branch IDs (unless Owner/Super Admin, who sees all)
   const allowedBranches = !activeMembership || activeMembership.role === 'Owner'
     ? businessBranches
-    : businessBranches.filter((b) => activeMembership.branchIds.includes(b.id));
+    : businessBranches.filter((b) => (activeMembership.branchIds || []).includes(b.id));
 
   const activeBranch = allowedBranches.find((b) => b.id === activeBranchId) || allowedBranches[0] || null;
 
@@ -728,12 +728,12 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
 
     // Check custom role by name (for tolerance)
     const customByName = customRoles.find(
-      r => r.name.toLowerCase() === roleNameOrId.toLowerCase() && r.businessId === activeBusiness?.id
+      r => (r.name || '').toLowerCase() === (roleNameOrId || '').toLowerCase() && r.businessId === activeBusiness?.id
     );
     if (customByName) return customByName.permissions;
 
     // Otherwise standard default roles
-    switch (roleNameOrId.toLowerCase()) {
+    switch ((roleNameOrId || '').toLowerCase()) {
       case 'owner':
         return ['business.edit', 'menu.create', 'orders.manage', 'payments.verify', 'staff.manage', 'roles.manage', 'reports.view'];
       case 'manager':
@@ -763,9 +763,9 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
     if (userRole === 'super_admin') {
       return ['do.all', 'business.edit', 'menu.create', 'orders.manage', 'payments.verify', 'staff.manage', 'roles.manage', 'reports.view'];
     }
-    const staffRec = staff.find(s => s.email.toLowerCase().trim() === userEmail.toLowerCase().trim() && s.tenantId === activeBusiness?.id);
+    const staffRec = staff.find(s => (s.email || '').toLowerCase().trim() === (userEmail || '').toLowerCase().trim() && s.tenantId === activeBusiness?.id);
     if (staffRec) {
-      if (staffRec.role.toLowerCase() === 'owner') {
+      if ((staffRec.role || '').toLowerCase() === 'owner') {
         return ['do.all', 'business.edit', 'menu.create', 'orders.manage', 'payments.verify', 'staff.manage', 'roles.manage', 'reports.view'];
       }
       if (staffRec.permissions) {
@@ -781,7 +781,7 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
 
   const can = (permission: string): boolean => {
     if (userRole === 'super_admin') return true;
-    if (activeRole.toLowerCase() === 'owner') return true; // Owners always pass everything
+    if ((activeRole || '').toLowerCase() === 'owner') return true; // Owners always pass everything
     const currentPerms = getStaffPermissions();
     if (currentPerms.includes('do.all')) return true;
     return currentPerms.includes(permission);

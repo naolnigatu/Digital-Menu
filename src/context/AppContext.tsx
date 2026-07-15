@@ -677,7 +677,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const login = (email: string): boolean => {
     // 1. Check Super Admin
-    const cleanEmail = email.toLowerCase().trim();
+    const cleanEmail = (email || '').toLowerCase().trim();
     if (cleanEmail === 'admin@menuflow.com' || cleanEmail === 'naolnigatu2025@gmail.com') {
       const name = cleanEmail === 'naolnigatu2025@gmail.com' ? 'Naol Nigatu (Platform Admin)' : 'Super Administrator';
       const user = { email: cleanEmail, role: 'super_admin' as const, name };
@@ -687,7 +687,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     // 2. Check Staff list
-    const foundStaff = staff.find(s => s.email.toLowerCase().trim() === cleanEmail && s.active);
+    const foundStaff = staff.find(s => (s.email || '').toLowerCase().trim() === cleanEmail && s.active);
     if (foundStaff) {
       const tenantObj = tenants.find(t => t.id === foundStaff.tenantId);
       const user = {
@@ -707,7 +707,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     // 3. Check Owner signups from tenants list (fallback)
-    const foundTenant = tenants.find(t => t.ownerEmail.toLowerCase().trim() === cleanEmail);
+    const foundTenant = tenants.find(t => (t.ownerEmail || '').toLowerCase().trim() === cleanEmail);
     if (foundTenant) {
       const tenantBranch = branches.find(b => b.tenantId === foundTenant.id);
       const user = {
@@ -1440,7 +1440,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const newTenant: Tenant = {
       id: tenantId,
       name: data.name,
-      slug: data.slug || data.name.toLowerCase().replace(/\s+/g, '-'),
+      slug: data.slug || (data.name || '').toLowerCase().replace(/\s+/g, '-'),
       logoUrl: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80',
       description: data.description || `Welcome to ${data.name}!`,
       currency: data.currency,
@@ -1449,7 +1449,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       serviceCharge: 0,
       subscriptionPlan: data.subscriptionPlan,
       subscriptionStatus: 'pending_approval',
-      ownerEmail: data.ownerEmail.toLowerCase().trim(),
+      ownerEmail: (data.ownerEmail || '').toLowerCase().trim(),
       createdAt: new Date().toISOString(),
       loyaltyPointsRatio: 0.05,
       loyaltyMinRedeemPoints: 10,
@@ -1467,7 +1467,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const newStaff: Staff = {
       id: ownerId,
       name: data.ownerName,
-      email: data.ownerEmail.toLowerCase().trim(),
+      email: (data.ownerEmail || '').toLowerCase().trim(),
       role: 'owner',
       tenantId,
       branchId,
@@ -1543,7 +1543,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Login as the registered owner
     const loggedUser = {
       id: ownerId,
-      email: data.ownerEmail.toLowerCase().trim(),
+      email: (data.ownerEmail || '').toLowerCase().trim(),
       role: 'owner' as const,
       name: data.ownerName,
       tenantId,
@@ -1553,9 +1553,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUpOwnerOnly = (name: string, email: string) => {
-    const cleanEmail = email.toLowerCase().trim();
+    const cleanEmail = (email || '').toLowerCase().trim();
     // Check if they are already in the system
-    const exists = staff.find(s => s.email.toLowerCase().trim() === cleanEmail);
+    const exists = staff.find(s => (s.email || '').toLowerCase().trim() === cleanEmail);
     if (exists) {
       login(cleanEmail);
       return;

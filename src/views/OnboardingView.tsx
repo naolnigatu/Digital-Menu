@@ -35,7 +35,7 @@ export default function OnboardingView() {
     setTimeout(() => {
       registerTenant({
         name: businessName,
-        slug: businessName.toLowerCase().trim().replace(/\s+/g, '-'),
+        slug: (businessName || '').toLowerCase().trim().replace(/\s+/g, '-'),
         description: description || `Welcome to ${businessName}! Experience our finest culinary offerings.`,
         currency,
         subscriptionPlan: selectedPlan,

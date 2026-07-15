@@ -268,10 +268,10 @@ export default function SuperAdminView() {
 
     // Filter list
     return list.filter(u => 
-      u.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-      u.role.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-      u.tenantName.toLowerCase().includes(userSearchTerm.toLowerCase())
+      (u.name || '').toLowerCase().includes((userSearchTerm || '').toLowerCase()) ||
+      (u.email || '').toLowerCase().includes((userSearchTerm || '').toLowerCase()) ||
+      (u.role || '').toLowerCase().includes((userSearchTerm || '').toLowerCase()) ||
+      (u.tenantName || '').toLowerCase().includes((userSearchTerm || '').toLowerCase())
     );
   }, [tenants, staff, userSearchTerm]);
 
@@ -602,7 +602,7 @@ export default function SuperAdminView() {
                   <div key={request.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
                     <div className="flex items-start gap-3">
                       <div className="h-11 w-11 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 border border-amber-200 font-extrabold text-xs">
-                        {request.name.slice(0, 2).toUpperCase()}
+                        {(request.name || '').slice(0, 2).toUpperCase()}
                       </div>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
@@ -611,7 +611,7 @@ export default function SuperAdminView() {
                             Awaiting Approval
                           </span>
                           <span className="bg-indigo-100 text-indigo-800 rounded-full px-2.5 py-0.5 text-[8px] font-extrabold uppercase border border-indigo-200 tracking-wide">
-                            Requested Tier: {request.subscriptionPlan.toUpperCase()}
+                            Requested Tier: {(request.subscriptionPlan || '').toUpperCase()}
                           </span>
                         </div>
                         <p className="text-[10px] text-slate-500 mt-1">
@@ -1571,7 +1571,7 @@ export default function SuperAdminView() {
               {logs.map((log, idx) => (
                 <div key={`${log.id}-${idx}`} className="rounded-lg bg-slate-50 p-3 text-xs space-y-1.5 border border-slate-100 hover:border-slate-200 hover:bg-slate-100/20 transition-all">
                   <div className="flex justify-between text-[11px] text-slate-400 font-bold">
-                    <span>{log.userEmail} ({log.role.toUpperCase()})</span>
+                    <span>{log.userEmail} ({(log.role || '').toUpperCase()})</span>
                     <span>{new Date(log.timestamp).toLocaleString()}</span>
                   </div>
                   <p className="text-slate-800 font-bold">{log.action}: {log.details}</p>

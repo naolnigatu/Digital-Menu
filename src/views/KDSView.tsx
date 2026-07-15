@@ -35,8 +35,8 @@ export default function KDSView() {
   const activeTenantMenuItems = useMemo(() => menuItems[activeTenantId] || [], [menuItems, activeTenantId]);
   const stationMenuItems = useMemo(() => activeTenantMenuItems.filter(item => item.preparationStationId === activeStationId), [activeTenantMenuItems, activeStationId]);
   const filteredMenu = useMemo(() => {
-    const term = menuSearchQuery.toLowerCase();
-    return stationMenuItems.filter(item => item.name.toLowerCase().includes(term));
+    const term = (menuSearchQuery || '').toLowerCase();
+    return stationMenuItems.filter(item => (item.name || '').toLowerCase().includes(term));
   }, [stationMenuItems, menuSearchQuery]);
 
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);

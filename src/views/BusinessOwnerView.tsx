@@ -159,7 +159,7 @@ const TEMPLATES: Record<string, string[]> = {
 };
 
 const getStaffDefaultRolePermissions = (roleName: string): string[] => {
-  switch (roleName.toLowerCase()) {
+  switch ((roleName || '').toLowerCase()) {
     case 'owner':
       return ['do.all', 'business.edit', 'menu.create', 'orders.manage', 'payments.verify', 'staff.manage', 'roles.manage', 'reports.view'];
     case 'manager':
@@ -599,7 +599,7 @@ export default function BusinessOwnerView() {
 
   // List of active employees of the current business (excluding owners)
   const currentBusinessEmployees = React.useMemo(() => {
-    return staff.filter(s => s.tenantId === activeTenantId && s.role.toLowerCase() !== 'owner');
+    return staff.filter(s => s.tenantId === activeTenantId && (s.role || '').toLowerCase() !== 'owner');
   }, [staff, activeTenantId]);
 
   // Handle staff dropdown selection change
@@ -1400,9 +1400,9 @@ export default function BusinessOwnerView() {
                       {branchOrders
                         .filter(o => {
                           const matchesSearch = 
-                            o.orderNum.toLowerCase().includes(orderSearchTerm.toLowerCase()) ||
-                            (o.customerName || '').toLowerCase().includes(orderSearchTerm.toLowerCase()) ||
-                            (o.customerPhone || '').includes(orderSearchTerm);
+                            (o.orderNum || '').toLowerCase().includes((orderSearchTerm || '').toLowerCase()) ||
+                            (o.customerName || '').toLowerCase().includes((orderSearchTerm || '').toLowerCase()) ||
+                            (o.customerPhone || '').includes(orderSearchTerm || '');
                           const matchesType = filterOrderType === 'all' || o.type === filterOrderType;
                           const matchesStatus = filterOrderStatus === 'all' || o.status === filterOrderStatus;
                           const matchesPayment = filterPaymentStatus === 'all' || o.paymentStatus === filterPaymentStatus;
@@ -3183,9 +3183,9 @@ export default function BusinessOwnerView() {
                         >
                           {(() => {
                             const filtered = currentBusinessEmployees.filter(emp =>
-                              emp.name.toLowerCase().includes(staffPermSearchQuery.toLowerCase()) ||
-                              emp.email.toLowerCase().includes(staffPermSearchQuery.toLowerCase()) ||
-                              emp.role.toLowerCase().includes(staffPermSearchQuery.toLowerCase())
+                              (emp.name || '').toLowerCase().includes((staffPermSearchQuery || '').toLowerCase()) ||
+                              (emp.email || '').toLowerCase().includes((staffPermSearchQuery || '').toLowerCase()) ||
+                              (emp.role || '').toLowerCase().includes((staffPermSearchQuery || '').toLowerCase())
                             );
                             if (filtered.length === 0) {
                               return <option value="">No matching employee</option>;

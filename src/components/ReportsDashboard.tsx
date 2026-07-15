@@ -28,7 +28,7 @@ export default function ReportsDashboard({ tenantId }: ReportsDashboardProps) {
   const dailySales = completedOrders
     .filter(o => {
       const today = new Date().toISOString().split('T')[0];
-      return o.createdAt.startsWith(today);
+      return (o.createdAt || '').startsWith(today);
     })
     .reduce((sum, o) => sum + o.total, 0);
 

@@ -47,13 +47,13 @@ export default function CustomerProfileDashboard({ customerEmail, onAddFavoriteT
   const [addressToast, setAddressToast] = useState('');
 
   // 1. Filter Orders
-  const customerOrders = orders.filter(o => o.customerEmail?.toLowerCase() === customerEmail.toLowerCase());
+  const customerOrders = orders.filter(o => (o.customerEmail || '').toLowerCase() === (customerEmail || '').toLowerCase());
 
   // 2. Filter Subscriptions
-  const subscriptions = customerSubscriptions.filter(sub => sub.customerId?.toLowerCase() === customerEmail.toLowerCase() || sub.id.includes(profile.id));
+  const subscriptions = customerSubscriptions.filter(sub => (sub.customerId || '').toLowerCase() === (customerEmail || '').toLowerCase() || (sub.id || '').includes(profile.id || ''));
 
   // 3. Resolve Favorites
-  const favoritesList = menuItems.filter(item => profile.savedFavorites.includes(item.id));
+  const favoritesList = menuItems.filter(item => (profile.savedFavorites || []).includes(item.id));
 
   // Calculate Loyalty Badge
   const loyaltyConfig = loyaltyConfigs[tenantId];
@@ -86,7 +86,7 @@ export default function CustomerProfileDashboard({ customerEmail, onAddFavoriteT
       <div className="bg-linear-to-r from-slate-900 via-slate-800 to-indigo-950 px-6 py-8 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-xl border border-indigo-500/30">
-            {profile.name.charAt(0).toUpperCase()}
+            {(profile.name || '').charAt(0).toUpperCase()}
           </div>
           <div className="space-y-1">
             <h3 className="font-bold text-xl tracking-tight text-white">{profile.name}</h3>

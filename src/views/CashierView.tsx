@@ -467,7 +467,7 @@ export default function CashierView() {
               <div className="border-t border-dashed border-slate-300 my-2"></div>
 
               <div className="text-center text-[10px] text-slate-400 font-bold tracking-wider">
-                <p>PAID VIA {receiptOrder.paymentMethod?.replace('_', ' ').toUpperCase()}</p>
+                <p>PAID VIA {(receiptOrder.paymentMethod || 'cash').replace('_', ' ').toUpperCase()}</p>
                 <p className="mt-2 text-[9px] font-normal">Thank you for dining with us!</p>
                 <p className="text-[8px] font-normal">Powered by MenuFlow SaaS</p>
               </div>

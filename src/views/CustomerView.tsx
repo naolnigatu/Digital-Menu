@@ -192,8 +192,8 @@ export default function CustomerView() {
     const map: Record<string, { name: string; amName: string }> = {};
     for (const c of activeCategories) {
       map[c.id] = {
-        name: c.name.toLowerCase(),
-        amName: c.translations?.am ? c.translations.am.toLowerCase() : ''
+        name: (c.name || '').toLowerCase(),
+        amName: c.translations?.am ? (c.translations.am || '').toLowerCase() : ''
       };
     }
     return map;
@@ -201,7 +201,7 @@ export default function CustomerView() {
 
   // Filter items
   const filteredItems = useMemo(() => {
-    const term = searchTerm.toLowerCase();
+    const term = (searchTerm || '').toLowerCase();
     return activeItems.filter(item => {
       const isAvail = item.availability === undefined || item.availability === 'Available';
       if (!isAvail) return false;
@@ -215,10 +215,10 @@ export default function CustomerView() {
       const catName = catInfo ? catInfo.name : '';
       const catAmName = catInfo ? catInfo.amName : '';
 
-      return item.name.toLowerCase().includes(term) || 
-             item.description.toLowerCase().includes(term) ||
-             catName.includes(term) ||
-             catAmName.includes(term);
+      return (item.name || '').toLowerCase().includes(term) || 
+             (item.description || '').toLowerCase().includes(term) ||
+             (catName || '').includes(term) ||
+             (catAmName || '').includes(term);
     });
   }, [activeItems, categoryLookup, selectedCategory, searchTerm]);
 
@@ -248,7 +248,7 @@ export default function CustomerView() {
     setItemNote('');
     setItemQty(1);
     const defaults = item.modifiers
-      .filter(g => !g.name.toLowerCase().includes('injera'))
+      .filter(g => !(g.name || '').toLowerCase().includes('injera'))
       .map(g => ({
         groupName: g.name,
         optionName: g.options[0].name,
@@ -438,7 +438,7 @@ export default function CustomerView() {
   const handleCustomerLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginEmailInput.trim()) return;
-    const email = loginEmailInput.toLowerCase().trim();
+    const email = (loginEmailInput || '').toLowerCase().trim();
     const name = loginNameInput.trim() || email.split('@')[0];
     
     localStorage.setItem('mf_customer_logged_email', email);
@@ -902,7 +902,7 @@ export default function CustomerView() {
 
                 {/* Modifiers selector list */}
                 <div className="space-y-4">
-                  {activeItemDetails.modifiers.filter(g => !g.name.toLowerCase().includes('injera')).map(group => (
+                  {activeItemDetails.modifiers.filter(g => !(g.name || '').toLowerCase().includes('injera')).map(group => (
                     <div key={group.id} className="space-y-2">
                       <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                         <span>{group.name}</span>
@@ -1021,7 +1021,7 @@ export default function CustomerView() {
                       
                       const foundOrder = orders.find(o => 
                         o.tenantId === activeTenantId && 
-                        (o.customerPhone === query || o.id.includes(query) || o.orderNum.includes(query) || o.customerEmail?.toLowerCase() === query.toLowerCase())
+                        (o.customerPhone === query || (o.id || '').includes(query) || (o.orderNum || '').includes(query) || (o.customerEmail || '').toLowerCase() === (query || '').toLowerCase())
                       );
 
                       if (foundOrder) {
