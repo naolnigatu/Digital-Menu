@@ -15,7 +15,8 @@ export default function KDSView() {
     toggleMenuItemAvailability,
     currentUser, 
     updateOrderItemStatus,
-    approveKitchenNote
+    approveKitchenNote,
+    reportOrderItemIssue
   } = useApp();
 
   const branchStations = useMemo(() => stations.filter(s => s.branchId === activeBranchId), [stations, activeBranchId]);
@@ -190,7 +191,7 @@ export default function KDSView() {
             
             <input
               type="text"
-              placeholder="Filter dishes/drinks..."
+              
               value={menuSearchQuery}
               onChange={(e) => setMenuSearchQuery(e.target.value)}
               className="bg-white rounded-lg border border-slate-200 px-3 py-1 text-xs w-full sm:w-64 focus:outline-none focus:border-slate-400 font-semibold"
@@ -440,6 +441,21 @@ export default function KDSView() {
                       <span>Start Cooking</span>
                     </button>
                   )}
+                  {(ticket.item.status === 'received' || ticket.item.status === 'cooking') && (
+                    <button
+                      onClick={() => {
+                        const reason = window.prompt("Reason for not preparing?");
+                        if (reason) {
+                          reportOrderItemIssue(ticket.orderId, ticket.item.id, reason);
+                          showToast("Issue reported to manager", "info");
+                        }
+                      }}
+                      className="w-full mt-2 flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 py-1.5 text-[10px] font-bold transition-colors cursor-pointer border border-rose-200"
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      <span>Report Can't Prepare</span>
+                    </button>
+                  )}
 
                   {ticket.item.status === 'cooking' && (
                     <button
@@ -451,6 +467,12 @@ export default function KDSView() {
                     </button>
                   )}
 
+                  {ticket.item.status === 'issue_reported' && (
+                    <div className="w-full flex items-center justify-center gap-1 rounded-lg bg-rose-50 text-rose-800 py-1.5 text-xs font-bold border border-rose-100">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span>Issue Reported to Manager</span>
+                    </div>
+                  )}
                   {ticket.item.status === 'ready' && (
                     <div className="w-full flex items-center justify-center gap-1 rounded-lg bg-emerald-50 text-emerald-800 py-1.5 text-xs font-bold border border-emerald-100">
                       <Check className="h-4 w-4" />

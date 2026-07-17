@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { sanitizeName, validatePhone } from '../utils/validation';
 import { useApp } from '../context/AppContext';
 import { MenuItem, OrderItem, Order, Category, PaymentMethodConfig, MealSubscriptionPlan } from '../types';
 import { 
@@ -8,6 +9,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import CustomerProfileDashboard from '../components/CustomerProfileDashboard';
+import { useDinexSettings } from '../context/DinexContext';
 
 import { CustomerReservationModal } from '../components/CustomerReservationModal';
 
@@ -19,9 +21,10 @@ export default function CustomerView() {
     menuItems, 
     tables, 
     orders, 
+    stations,
     activeTenantId, 
     setActiveTenantId,
-    activeBranchId,
+    activeBranchId, 
     placeOrder, 
     currentLanguage, 
     setLanguage,
@@ -38,8 +41,11 @@ export default function CustomerView() {
     paymentMethodsConfigs,
     loyaltyConfigs,
     updateOrderStatus,
+    acceptDeliveryFee,
     addTip
   } = useApp();
+
+  const { activeSettings } = useDinexSettings();
 
   const activeTenant = useMemo(() => tenants.find(t => t.id === activeTenantId) || tenants[0], [tenants, activeTenantId]);
   const activeCategories = useMemo(() => categories[activeTenantId] || [], [categories, activeTenantId]);
@@ -49,10 +55,22 @@ export default function CustomerView() {
   // States
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [activeTableId, setActiveTableId] = useState<string>(() => activeTables[0]?.id || '');
+  const [activeZone, setActiveZone] = useState<string>('all');
+  const filteredActiveTables = useMemo(() => {
+    return activeZone === 'all' 
+      ? activeTables 
+      : activeTables.filter(t => t.section === activeZone);
+  }, [activeTables, activeZone]);
+  
+  const [activeTableId, setActiveTableId] = useState<string>(() => filteredActiveTables[0]?.id || '');
   const [orderType, setOrderType] = useState<string>('dine_in');
   const [showAccountPrompt, setShowAccountPrompt] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryLandmark, setDeliveryLandmark] = useState('');
+  const [deliveryInstructions, setDeliveryInstructions] = useState('');
+  const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
+  const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
+  const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [licensePlate, setLicensePlate] = useState('');
   const [subscriptionPeriod, setSubscriptionPeriod] = useState('weekly');
 
@@ -60,6 +78,8 @@ export default function CustomerView() {
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
   const [isEmailLoginModalOpen, setIsEmailLoginModalOpen] = useState(false);
+  const [showBizSearchModal, setShowBizSearchModal] = useState(false);
+  const [bizSearchTerm, setBizSearchTerm] = useState('');
   const [customerEmailForDashboard, setCustomerEmailForDashboard] = useState(() => {
     return localStorage.getItem('mf_customer_logged_email') || '';
   });
@@ -77,6 +97,8 @@ export default function CustomerView() {
   const [selectedTipAmount, setSelectedTipAmount] = useState<number>(0);
   const [customTipActive, setCustomTipActive] = useState(false);
   const [customTipValue, setCustomTipValue] = useState('');
+  const [cashTipRecipient, setCashTipRecipient] = useState<'waiter' | 'kitchen'>('waiter');
+  const [cashTipStationId, setCashTipStationId] = useState<string>('');
 
   // Stripe simulated card checkout inputs
   const [stripeCardNum, setStripeCardNum] = useState('');
@@ -131,6 +153,7 @@ export default function CustomerView() {
 
   // Modals & Tracking
   const [activeItemDetails, setActiveItemDetails] = useState<MenuItem | null>(null);
+  const [selectedPortion, setSelectedPortion] = useState<{name: string, price: number} | null>(null);
   const [selectedMods, setSelectedMods] = useState<{ groupName: string; optionName: string; price: number }[]>([]);
   const [itemNote, setItemNote] = useState('');
   const [itemQty, setItemQty] = useState<number>(1);
@@ -176,6 +199,9 @@ export default function CustomerView() {
 
   // Calculate final discount percentage
   let finalDiscountPct = badgeBonus;
+  if (orderType === 'meal_subscription' && activeTenant.mealSubscriptionDiscountPercent) {
+    finalDiscountPct += activeTenant.mealSubscriptionDiscountPercent;
+  }
   let pointsToRedeem = 0;
   if (redeemPointsActive && loyaltyConfig?.enabled && profile.loyaltyPoints >= loyaltyConfig.minPointsToRedeem) {
     finalDiscountPct += loyaltyConfig.discountPercentage;
@@ -246,6 +272,11 @@ export default function CustomerView() {
   const handleOpenItemDetails = (item: MenuItem) => {
     setActiveItemDetails(item);
     setItemNote('');
+    if (item.portions && item.portions.length > 0) {
+      setSelectedPortion(item.portions[0]);
+    } else {
+      setSelectedPortion(null);
+    }
     setItemQty(1);
     const defaults = item.modifiers
       .filter(g => !(g.name || '').toLowerCase().includes('injera'))
@@ -267,6 +298,13 @@ export default function CustomerView() {
       return [...filtered, { groupName, optionName, price }];
     });
   };
+
+  const currentItemPrice = useMemo(() => {
+    if (!activeItemDetails) return 0;
+    let total = activeItemDetails.price;
+    selectedMods.forEach(m => { total += m.price; });
+    return total * itemQty;
+  }, [activeItemDetails, selectedMods, itemQty]);
 
   const handleAddToCart = () => {
     if (!activeItemDetails) return;
@@ -290,6 +328,11 @@ export default function CustomerView() {
       }];
     });
     setActiveItemDetails(null);
+  };
+
+  const handleOrderNow = () => {
+    handleAddToCart();
+    setIsCartOpen(true);
   };
 
   const calculateCartTotal = () => {
@@ -323,10 +366,13 @@ export default function CustomerView() {
     // Validate Prepayments
     const isPrepaidType = ['pickup', 'delivery', 'drive_through', 'meal_subscription'].includes(orderType);
     if (isPrepaidType) {
-      if (!customerName.trim() || !customerPhone.trim()) {
-        showToast('Please enter your name and phone details before proceeding.', 'error');
-        return;
-      }
+      
+      const nameCheck = sanitizeName(customerName);
+      if (!nameCheck.valid) { showToast(nameCheck.error || 'Invalid name.', 'error'); return; }
+      
+      const phoneCheck = validatePhone(customerPhone);
+      if (!phoneCheck.valid) { showToast(phoneCheck.error || 'Invalid phone.', 'error'); return; }
+
       if (chosenConfig?.requiresProof && !paymentScreenshot) {
         showToast('This business requires advance payment verification. Please upload payment screenshot/receipt.', 'error');
         return;
@@ -349,6 +395,30 @@ export default function CustomerView() {
     }
   };
 
+  const handleShareLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setIsSharingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setDeliveryLat(lat);
+        setDeliveryLng(lng);
+        setDeliveryAddress(`Shared Location (Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)})`);
+        setIsSharingLocation(false);
+      },
+      (error) => {
+        console.error(error);
+        alert('Could not detect location. Please enter it manually.');
+        setIsSharingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
+  };
+
   const executeOrderSubmission = () => {
     const chosenConfig = enabledPaymentConfigs.find(c => c.id === selectedPaymentMethodId);
     
@@ -368,6 +438,19 @@ export default function CustomerView() {
     const calculatedSubtotal = calculateCartTotal();
     const discountVal = parseFloat(((calculatedSubtotal * finalDiscountPct) / 100).toFixed(2));
 
+    const isAutoApproval = activeSettings?.deliveryApprovalMode === 'automatic';
+    const initStatus = orderType === 'delivery' 
+      ? (isAutoApproval ? 'accepted' : 'pending_approval') 
+      : (selectedPaymentMethodId === 'stripe' ? 'accepted' : 'pending');
+
+    const initDeliveryStatus = orderType === 'delivery' 
+      ? (isAutoApproval ? 'preparing' : 'pending_approval') 
+      : undefined;
+
+    const initDeliveryFee = orderType === 'delivery'
+      ? (isAutoApproval ? (activeSettings?.predefinedDeliveryFee || 150) : 0)
+      : undefined;
+
     const submitted = placeOrder({
       tenantId: activeTenantId,
       branchId: activeBranchId,
@@ -380,26 +463,40 @@ export default function CustomerView() {
       discount: discountVal,
       subtotal: calculatedSubtotal,
       total: 0, // AppContext computes automatically
+      status: initStatus as any,
       pickupTime: ['pickup', 'takeaway'].includes(orderType) ? pickupTime : undefined,
-      notes: orderType === 'delivery' ? `Delivery Address: ${deliveryAddress}` : orderType === 'drive_through' ? `Drive-thru Plate: ${licensePlate}` : orderType === 'meal_subscription' ? `Subscription Term: ${subscriptionPeriod}` : undefined,
+      notes: (orderType === 'delivery' ? `Delivery Address: ${deliveryAddress}` : orderType === 'drive_through' ? `Drive-thru Plate: ${licensePlate}` : orderType === 'meal_subscription' ? `Subscription Term: ${subscriptionPeriod}` : '') + (selectedPaymentMethodId === 'cash' ? ` | [Cash Recognition: ${cashTipRecipient === 'waiter' ? 'Floor Waiter' : 'Kitchen Crew'}${cashTipRecipient === 'kitchen' && cashTipStationId ? ` (${(stations || []).find(s => s.id === cashTipStationId)?.name || 'General'} Station)` : ''}]` : ''),
       paymentScreenshotUrl: isPrepaidType ? (paymentScreenshot || undefined) : undefined,
       paymentVerificationStatus: selectedPaymentMethodId === 'stripe' ? 'approved' : isPrepaidType ? 'pending' : undefined,
       advancePaymentRef: isPrepaidType ? (paymentRef || undefined) : undefined,
       paymentMethod: selectedPaymentMethodId as any,
-      tip: selectedTipAmount
-    });
+      tip: selectedTipAmount,
+      cashTipRecipient: selectedPaymentMethodId === 'cash' ? cashTipRecipient : undefined,
+      cashTipStationId: selectedPaymentMethodId === 'cash' && cashTipRecipient === 'kitchen' ? cashTipStationId : undefined,
+      
+      // Inject delivery details
+      deliveryAddress: orderType === 'delivery' ? deliveryAddress : undefined,
+      deliveryLandmark: orderType === 'delivery' ? deliveryLandmark : undefined,
+      deliveryInstructions: orderType === 'delivery' ? deliveryInstructions : undefined,
+      deliveryLatitude: orderType === 'delivery' ? (deliveryLat || undefined) : undefined,
+      deliveryLongitude: orderType === 'delivery' ? (deliveryLng || undefined) : undefined,
+      deliveryStatus: initDeliveryStatus as any,
+      deliveryFee: initDeliveryFee,
+    } as any);
 
     saveOrderId(submitted.id);
 
+
     // If subscribed to meal plan
-    if (orderType === 'meal_subscription' && selectedSubPlanId) {
+    if (orderType === 'meal_subscription') {
       subscribeToMealPlan({
         customerId: customerEmailForDashboard || customerPhone || 'anonymous',
         tenantId: activeTenantId,
-        planId: selectedSubPlanId,
+        planId: selectedSubPlanId || 'custom_plan',
+        menuItemIds: cart.map(c => c.item.id),
         startDate: new Date().toISOString(),
         endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        status: 'active',
+        status: (selectedPaymentMethodId === 'stripe' || !isPrepaidType) ? 'active' : 'pending_approval',
         mealsUsedToday: 0,
         mealsUsedThisWeek: 0,
         mealsUsedTotal: 0,
@@ -409,6 +506,7 @@ export default function CustomerView() {
         nextRenewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
       });
     }
+
 
     // Process customer profiles loyalty logic if logged in
     if (customerEmailForDashboard) {
@@ -443,7 +541,7 @@ export default function CustomerView() {
     
     localStorage.setItem('mf_customer_logged_email', email);
     setCustomerEmailForDashboard(email);
-    updateCustomerProfile(email, { name });
+    updateCustomerProfile(email, { name, tenantId: activeTenantId });
     
     setIsEmailLoginModalOpen(false);
     setIsDashboardOpen(true);
@@ -482,33 +580,38 @@ export default function CustomerView() {
       {!currentLiveOrder ? (
         <>
           <div className="bg-slate-900 text-white p-5 space-y-4 shadow-md rounded-b-2xl">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-row justify-between items-center gap-2">
+              <div className="flex-1 flex items-center gap-2 min-w-0">
                 <img 
                   src={activeTenant.logoUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=80'} 
                   alt={activeTenant.name} 
-                  className="h-8 w-8 rounded-full border border-white/20 object-cover"
+                  className="h-8 w-8 shrink-0 rounded-full border border-white/20 object-cover"
                   referrerPolicy="no-referrer"
                 />
-                <span className="font-sans font-extrabold text-sm">{activeTenant.name}</span>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-sans font-extrabold text-sm leading-tight truncate">{activeTenant.name}</span>
+                  <button 
+                    onClick={() => {
+                      setBizSearchTerm('');
+                      setShowBizSearchModal(true);
+                    }}
+                    className="text-[10px] text-indigo-300 font-extrabold text-left hover:text-indigo-200 transition-colors flex items-center gap-1 mt-0.5"
+                  >
+                    🔍 Switch Business
+                  </button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setLanguage(currentLanguage === 'en' ? 'am' : 'en')}
-                  className="bg-white/10 text-white hover:bg-white/20 transition-colors border-none rounded-lg px-2.5 py-1 text-[11px] font-bold flex items-center gap-1"
-                >
-                  <Languages className="h-3 w-3" />
-                  {currentLanguage === 'en' ? 'EN' : 'አማ'}
-                </button>
+              <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+                
 
                 {/* Account Dashboard Toggle */}
                 <button
                   onClick={() => setIsReservationModalOpen(true)}
-                  className="bg-amber-600 hover:bg-amber-500 text-white transition-colors border-none rounded-lg px-3 py-1 text-[11px] font-bold flex items-center gap-1 shrink-0 shadow-xs"
+                  className="bg-amber-600 hover:bg-amber-500 text-white transition-colors border-none rounded-lg px-2 py-1 text-[10px] font-bold flex items-center gap-0.5 shrink-0 shadow-xs"
                 >
                   <MapPin className="h-3.5 w-3.5" />
-                  Book Table
+                  <span className="hidden md:inline">Book Table</span>
                 </button>
                 <button
                   onClick={() => {
@@ -518,10 +621,10 @@ export default function CustomerView() {
                       setIsEmailLoginModalOpen(true);
                     }
                   }}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white transition-colors border-none rounded-lg px-3 py-1 text-[11px] font-bold flex items-center gap-1 shrink-0 shadow-xs"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white transition-colors border-none rounded-lg px-2 py-1 text-[10px] font-bold flex items-center gap-0.5 shrink-0 shadow-xs"
                 >
                   <User className="h-3.5 w-3.5" />
-                  {customerEmailForDashboard ? 'My Profile' : 'Sign In'}
+                  <span className="hidden md:inline">{customerEmailForDashboard ? 'My Profile' : 'Sign In'}</span>
                 </button>
               </div>
             </div>
@@ -530,17 +633,37 @@ export default function CustomerView() {
 
             <div className="space-y-3">
               {orderType === 'dine_in' && (
-                <div>
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Self-Serve Table</label>
-                  <select
-                    value={activeTableId}
-                    onChange={(e) => setActiveTableId(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2.5 py-1 text-xs font-semibold mt-1"
-                  >
-                    {activeTables.map(t => (
-                      <option key={t.id} value={t.id} className="text-slate-900">{t.number} ({t.section})</option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[9px] font-bold text-slate-400 uppercase">Zone / Section</label>
+                    <select
+                      value={activeZone}
+                      onChange={(e) => {
+                        setActiveZone(e.target.value);
+                        const newZone = e.target.value;
+                        const filtered = newZone === 'all' ? activeTables : activeTables.filter(t => t.section === newZone);
+                        if (filtered.length > 0) setActiveTableId(filtered[0].id);
+                      }}
+                      className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2.5 py-1 text-xs font-semibold mt-1"
+                    >
+                      <option value="all" className="text-slate-900">All Zones</option>
+                      {Array.from(new Set(activeTables.map(t => t.section))).map(zone => (
+                        <option key={zone} value={zone} className="text-slate-900">{zone}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold text-slate-400 uppercase">Self-Serve Table</label>
+                    <select
+                      value={activeTableId}
+                      onChange={(e) => setActiveTableId(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2.5 py-1 text-xs font-semibold mt-1"
+                    >
+                      {filteredActiveTables.map(t => (
+                        <option key={t.id} value={t.id} className="text-slate-900">{t.number}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
 
@@ -571,16 +694,51 @@ export default function CustomerView() {
               </div>
 
               {orderType === 'delivery' && (
-                <div>
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Delivery Address</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter your street/apartment address..."
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2.5 py-1.5 text-xs font-semibold mt-1"
-                  />
+                <div className="space-y-2.5">
+                  <div>
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase">Delivery Address</label>
+                      <button
+                        type="button"
+                        onClick={handleShareLocation}
+                        disabled={isSharingLocation}
+                        className="text-[9px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
+                      >
+                        <span>{isSharingLocation ? "Getting Location..." : "📍 Share My Location"}</span>
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2.5 py-1.5 text-xs font-semibold mt-1"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase">Nearby Landmark</label>
+                      <input
+                        type="text"
+                        
+                        value={deliveryLandmark}
+                        onChange={(e) => setDeliveryLandmark(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2.5 py-1.5 text-xs font-semibold mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase">Driver Instructions</label>
+                      <input
+                        type="text"
+                        
+                        value={deliveryInstructions}
+                        onChange={(e) => setDeliveryInstructions(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2.5 py-1.5 text-xs font-semibold mt-1"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -590,7 +748,7 @@ export default function CustomerView() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. AA 2-B34567"
+                    
                     value={licensePlate}
                     onChange={(e) => setLicensePlate(e.target.value)}
                     className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2.5 py-1.5 text-xs font-semibold mt-1"
@@ -734,7 +892,7 @@ export default function CustomerView() {
               <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
               <input
                 type="text"
-                placeholder={currentLanguage === 'en' ? 'Search dishes or drinks...' : 'ምግብ ወይም መጠጥ ፈልግ...'}
+                
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-600"
@@ -790,7 +948,7 @@ export default function CustomerView() {
           </div>
 
           {/* Items catalog list */}
-          <div className="space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
             {filteredItems
               .filter(item => {
                 try {
@@ -808,25 +966,20 @@ export default function CustomerView() {
                   <div 
                     key={item.id} 
                     onClick={isAvailable ? () => handleOpenItemDetails(item) : undefined}
-                    className={`rounded-2xl border p-3 shadow-sm flex gap-3 transition-all duration-200 relative ${
+                    className={`rounded-xl border p-2 shadow-sm flex flex-col gap-2 transition-all duration-200 relative ${
                       isAvailable
                         ? 'border-slate-200 bg-white cursor-pointer hover:border-indigo-500 hover:shadow-md'
                         : 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
                     }`}
                   >
                     {item.photoUrl && (
-                      <img 
-                        src={item.photoUrl} 
-                        alt={item.name} 
-                        className={`h-20 w-20 rounded-xl object-cover shrink-0 border border-slate-50 ${!isAvailable && 'grayscale'}`}
-                        referrerPolicy="no-referrer"
-                      />
+                      <div className="w-full aspect-[4/3] rounded-lg overflow-hidden shrink-0 border border-slate-50"><img src={item.photoUrl} alt={item.name} className={`h-full w-full object-cover ${!isAvailable && 'grayscale'}`} referrerPolicy="no-referrer" /></div>
                     )}
                     
                     <div className="flex-1 flex flex-col justify-between">
                       <div className="space-y-1">
                         <div className="flex justify-between items-start gap-1">
-                          <h4 className={`text-xs font-extrabold ${isAvailable ? 'text-slate-900' : 'text-slate-500 line-through'} flex flex-wrap items-center gap-1`}>
+                          <h4 className={`text-[11px] leading-tight font-extrabold ${isAvailable ? 'text-slate-900' : 'text-slate-500 line-through'} line-clamp-2`}>
                             <span>{info.name}</span>
                             {item.featured && (
                               <span className="bg-amber-100 text-amber-800 text-[8px] font-extrabold px-1.5 py-0.5 rounded tracking-wider uppercase">
@@ -958,7 +1111,7 @@ export default function CustomerView() {
                     <label className="text-[10px] font-bold text-slate-400 uppercase block">Kitchen instructions (optional)</label>
                     <input
                       type="text"
-                      placeholder="e.g. Medium rare / Extra cheese..."
+                      
                       value={itemNote}
                       onChange={(e) => setItemNote(e.target.value)}
                       className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold focus:ring-1 focus:ring-indigo-600 outline-none"
@@ -966,13 +1119,21 @@ export default function CustomerView() {
                   </div>
                 </div>
 
-                <button
-                  onClick={handleAddToCart}
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 mt-4"
-                >
-                  <ShoppingBag className="h-4.5 w-4.5" />
-                  Add to Cart
-                </button>
+                <div className="flex gap-2 mt-4">
+                  <button
+                    onClick={handleAddToCart}
+                    className="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <ShoppingBag className="h-4 w-4" />
+                    Add to Cart
+                  </button>
+                  <button
+                    onClick={handleOrderNow}
+                    className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center"
+                  >
+                    Order Now - {activeTenant.currencySymbol} {currentItemPrice.toLocaleString()}
+                  </button>
+                </div>
 
               </div>
             </div>
@@ -1002,7 +1163,7 @@ export default function CustomerView() {
                     <label className="text-[9px] font-bold text-slate-400 uppercase">Phone or Order ID</label>
                     <input
                       type="text"
-                      placeholder="e.g. 0911... or ORD-1234"
+                      
                       value={trackSearchQuery}
                       onChange={(e) => setTrackSearchQuery(e.target.value)}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold mt-1"
@@ -1035,6 +1196,39 @@ export default function CustomerView() {
                   >
                     Search & Track
                   </button>
+
+                  {myOrderIds.length > 0 && (
+                    <div className="pt-4 mt-2 border-t border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Recent Device Orders</p>
+                      <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+                        {orders
+                          .filter(o => o.tenantId === activeTenantId && myOrderIds.includes(o.id))
+                          .sort((a, b) => b.createdAt - a.createdAt)
+                          .map(o => (
+                            <button
+                              key={o.id}
+                              onClick={() => {
+                                setActiveCustomerOrder(o);
+                                setIsTrackModalOpen(false);
+                              }}
+                              className="w-full text-left p-2 rounded-lg border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50 transition-colors flex justify-between items-center"
+                            >
+                              <div>
+                                <p className="font-bold text-slate-800">{o.orderNum}</p>
+                                <p className="text-[10px] text-slate-500">{new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                              </div>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                                o.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                                o.status === 'cancelled' ? 'bg-rose-100 text-rose-800' :
+                                'bg-indigo-100 text-indigo-800'
+                              }`}>
+                                {o.status}
+                              </span>
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1082,14 +1276,14 @@ export default function CustomerView() {
                   <div className="grid gap-2 text-xs">
                     <input
                       type="text"
-                      placeholder="Your Name (e.g., Sarah)"
+                      
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
                       className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-gray-900"
                     />
                     <input
                       type="text"
-                      placeholder="Phone (for prep notifications)"
+                      
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
                       className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-gray-900 font-mono"
@@ -1097,21 +1291,50 @@ export default function CustomerView() {
                     {['pickup', 'delivery', 'drive_through', 'meal_subscription'].includes(orderType) && (
                       <>
                         {orderType === 'delivery' && (
-                          <input
-                            type="text"
-                            required
-                            placeholder="Street / Delivery Address"
-                            value={deliveryAddress}
-                            onChange={(e) => setDeliveryAddress(e.target.value)}
-                            className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-gray-900"
-                          />
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center px-1">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase">Address & Geolocation</span>
+                              <button
+                                type="button"
+                                onClick={handleShareLocation}
+                                disabled={isSharingLocation}
+                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1"
+                              >
+                                <span>{isSharingLocation ? "Resolving Location..." : "📍 Share Browser Location"}</span>
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              required
+                              
+                              value={deliveryAddress}
+                              onChange={(e) => setDeliveryAddress(e.target.value)}
+                              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-gray-900"
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                type="text"
+                                
+                                value={deliveryLandmark}
+                                onChange={(e) => setDeliveryLandmark(e.target.value)}
+                                className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-gray-900"
+                              />
+                              <input
+                                type="text"
+                                
+                                value={deliveryInstructions}
+                                onChange={(e) => setDeliveryInstructions(e.target.value)}
+                                className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-gray-900"
+                              />
+                            </div>
+                          </div>
                         )}
 
                         {orderType === 'drive_through' && (
                           <input
                             type="text"
                             required
-                            placeholder="Vehicle License Plate (e.g. AA 2-B34567)"
+                            
                             value={licensePlate}
                             onChange={(e) => setLicensePlate(e.target.value)}
                             className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-gray-900 font-mono"
@@ -1121,7 +1344,7 @@ export default function CustomerView() {
                         {['pickup', 'takeaway'].includes(orderType) && (
                           <input
                             type="text"
-                            placeholder="Pickup Time (e.g. 12:30 PM)"
+                            
                             value={pickupTime}
                             onChange={(e) => setPickupTime(e.target.value)}
                             className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-gray-900"
@@ -1158,7 +1381,13 @@ export default function CustomerView() {
                       <button
                         key={method.id}
                         type="button"
-                        onClick={() => setSelectedPaymentMethodId(method.id)}
+                        onClick={() => {
+                          setSelectedPaymentMethodId(method.id);
+                          if (method.id === 'cash') {
+                            setSelectedTipAmount(0);
+                            setCustomTipActive(false);
+                          }
+                        }}
                         className={`p-2 rounded-xl border text-left font-semibold transition-all ${
                           selectedPaymentMethodId === method.id
                             ? 'bg-indigo-600 border-indigo-600 text-white'
@@ -1210,7 +1439,7 @@ export default function CustomerView() {
                               <label className="text-[9px] font-bold text-slate-400 uppercase block">Transaction Reference</label>
                               <input
                                 type="text"
-                                placeholder="e.g., CBE-TXN987"
+                                
                                 value={paymentRef}
                                 onChange={(e) => setPaymentRef(e.target.value)}
                                 className="w-full bg-white rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-gray-900"
@@ -1225,7 +1454,7 @@ export default function CustomerView() {
                             <input
                               type="text"
                               maxLength={19}
-                              placeholder="Card Number (4242 4242 ...)"
+                              
                               value={stripeCardNum}
                               onChange={(e) => setStripeCardNum(e.target.value)}
                               className="w-full bg-white rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold font-mono text-gray-900"
@@ -1234,7 +1463,7 @@ export default function CustomerView() {
                               <input
                                 type="text"
                                 maxLength={5}
-                                placeholder="MM/YY"
+                                
                                 value={stripeExpiry}
                                 onChange={(e) => setStripeExpiry(e.target.value)}
                                 className="bg-white rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold font-mono text-gray-900 text-center"
@@ -1242,7 +1471,7 @@ export default function CustomerView() {
                               <input
                                 type="password"
                                 maxLength={3}
-                                placeholder="CVC"
+                                
                                 value={stripeCvc}
                                 onChange={(e) => setStripeCvc(e.target.value)}
                                 className="bg-white rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold font-mono text-gray-900 text-center"
@@ -1256,57 +1485,108 @@ export default function CustomerView() {
                 </div>
 
                 {/* Waiter Tip Selection Options (Part 6) */}
-                <div className="space-y-2 pt-2 border-t border-slate-100">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">Support the wait staff (Waiter Tip)</p>
-                  <div className="grid grid-cols-5 gap-1.5 text-xs text-center">
-                    {[0, 1, 3, 5].map((amt) => (
+                {selectedPaymentMethodId === 'cash' ? (
+                  <div className="space-y-3 pt-2.5 border-t border-slate-100 bg-amber-50/30 p-3 rounded-xl border border-amber-100/60">
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2 md:mt-0 w-full md:w-auto">
+                      <span className="text-amber-650 text-xs">💰</span>
+                      <p className="text-[10px] font-bold text-slate-850 uppercase tracking-wide">Cash Support Designation</p>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-normal">Direct tipping is disabled for cash checkouts. Please choose who your service appreciation belongs to so we can record your feedback:</p>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-xs">
                       <button
-                        key={amt}
                         type="button"
-                        onClick={() => {
-                          setSelectedTipAmount(amt);
-                          setCustomTipActive(false);
-                        }}
-                        className={`py-1.5 rounded-lg border font-mono font-bold transition-all ${
-                          selectedTipAmount === amt && !customTipActive
+                        onClick={() => setCashTipRecipient('waiter')}
+                        className={`py-2 rounded-xl border text-center font-bold transition-all cursor-pointer ${
+                          cashTipRecipient === 'waiter'
+                            ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        🤵 Floor Waiter
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCashTipRecipient('kitchen')}
+                        className={`py-2 rounded-xl border text-center font-bold transition-all cursor-pointer ${
+                          cashTipRecipient === 'kitchen'
+                            ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        🍳 Kitchen Crew
+                      </button>
+                    </div>
+
+                    {cashTipRecipient === 'kitchen' && (
+                      <div className="space-y-1 mt-2.5 animate-in slide-in-from-top-1">
+                        <label className="text-[9px] font-bold text-slate-400 uppercase">Specific Cooking Station</label>
+                        <select
+                          value={cashTipStationId}
+                          onChange={(e) => setCashTipStationId(e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold focus:outline-none"
+                        >
+                          <option value="">Whole Kitchen (General Team)</option>
+                          {(stations || []).filter(s => s.branchId === activeBranchId).map(s => (
+                            <option key={s.id} value={s.id}>{s.name} Station</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Support the wait staff (Waiter Tip)</p>
+                    <div className="grid grid-cols-5 gap-1.5 text-xs text-center">
+                      {[0, 1, 3, 5].map((amt) => (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => {
+                            setSelectedTipAmount(amt);
+                            setCustomTipActive(false);
+                          }}
+                          className={`py-1.5 rounded-lg border font-mono font-bold transition-all ${
+                            selectedTipAmount === amt && !customTipActive
+                              ? 'bg-amber-500 border-amber-500 text-slate-950'
+                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
+                          }`}
+                        >
+                          {amt === 0 ? 'No Tip' : `${activeTenant.currencySymbol}${amt}`}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setCustomTipActive(true)}
+                        className={`py-1.5 rounded-lg border font-bold transition-all ${
+                          customTipActive
                             ? 'bg-amber-500 border-amber-500 text-slate-950'
                             : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
                         }`}
                       >
-                        {amt === 0 ? 'No Tip' : `${activeTenant.currencySymbol}${amt}`}
+                        Custom
                       </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setCustomTipActive(true)}
-                      className={`py-1.5 rounded-lg border font-bold transition-all ${
-                        customTipActive
-                          ? 'bg-amber-500 border-amber-500 text-slate-950'
-                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
-                      }`}
-                    >
-                      Custom
-                    </button>
+                    </div>
+                    {customTipActive && (
+                      <input
+                        type="number"
+                        
+                        value={customTipValue}
+                        onChange={(e) => {
+                          setCustomTipValue(e.target.value);
+                          setSelectedTipAmount(parseFloat(e.target.value) || 0);
+                        }}
+                        className="w-full bg-slate-50 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold font-mono text-gray-900"
+                      />
+                    )}
                   </div>
-                  {customTipActive && (
-                    <input
-                      type="number"
-                      placeholder="e.g. 10"
-                      value={customTipValue}
-                      onChange={(e) => {
-                        setCustomTipValue(e.target.value);
-                        setSelectedTipAmount(parseFloat(e.target.value) || 0);
-                      }}
-                      className="w-full bg-slate-50 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold font-mono text-gray-900"
-                    />
-                  )}
-                </div>
+                )}
 
                 {/* Financial Totals */}
                 <div className="rounded-xl bg-slate-50 p-3 space-y-1.5 text-xs">
                   {finalDiscountPct > 0 && (
                     <div className="flex justify-between font-medium text-emerald-600">
-                      <span>Loyalty / Badge Discount ({finalDiscountPct}%)</span>
+                      <span>Discount ({finalDiscountPct}%)</span>
                       <span>-{activeTenant.currencySymbol} {((calculateCartTotal() * finalDiscountPct) / 100).toFixed(2)}</span>
                     </div>
                   )}
@@ -1391,6 +1671,107 @@ export default function CustomerView() {
                 </div>
               ) : (
                 <div className="space-y-5">
+                  {/* Delivery Status Banner/Quote Approvals */}
+                  {currentLiveOrder.type === 'delivery' && (
+                    <div className="mb-4">
+                      {currentLiveOrder.deliveryStatus === 'pending_approval' && (
+                        <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100 text-center space-y-2 animate-pulse">
+                          <span className="text-2xl">⏳</span>
+                          <h4 className="font-sans font-bold text-sm text-indigo-950">Awaiting Delivery Approval...</h4>
+                          <p className="text-[10px] text-indigo-800 leading-normal">
+                            Our manager is routing a delivery courier to your address and calculating the local delivery fee. Please hang tight!
+                          </p>
+                        </div>
+                      )}
+
+                      {currentLiveOrder.deliveryStatus === 'pending_acceptance' && (
+                        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 space-y-3 animate-in fade-in">
+                          <div className="text-center space-y-1">
+                            <span className="text-2xl">🚴</span>
+                            <h4 className="font-sans font-bold text-sm text-amber-950">Delivery Quote Approved!</h4>
+                            <p className="text-[10px] text-amber-800 leading-normal">
+                              Courier <strong>{currentLiveOrder.deliveryStaffName || 'Dinex Rider'}</strong> has been assigned. Please accept the final quote to start preparation.
+                            </p>
+                          </div>
+
+                          <div className="bg-white p-3 rounded-xl border border-amber-100 text-xs space-y-2.5">
+                            <div className="flex justify-between font-medium text-slate-500">
+                              <span>Food Subtotal</span>
+                              <span>{activeTenant.currencySymbol} {currentLiveOrder.subtotal}</span>
+                            </div>
+                            <div className="flex justify-between font-semibold text-amber-900 border-b border-dashed border-amber-100 pb-2">
+                              <span>Delivery Rider Fee</span>
+                              <span>+ {activeTenant.currencySymbol} {currentLiveOrder.deliveryFee || 0}</span>
+                            </div>
+                            <div className="flex justify-between font-bold text-slate-900 text-sm pt-1">
+                              <span>Final Total</span>
+                              <span>{activeTenant.currencySymbol} {currentLiveOrder.total}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateOrderStatus(currentLiveOrder.id, 'cancelled', 'Customer');
+                                showToast('Order cancelled.', 'success');
+                              }}
+                              className="rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-600 font-bold py-2 text-xs transition-colors"
+                            >
+                              Cancel Order
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                acceptDeliveryFee(currentLiveOrder.id);
+                                showToast('Delivery accepted! Cooking started.', 'success');
+                              }}
+                              className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 text-xs transition-colors shadow"
+                            >
+                              Accept & Prepare
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Display Delivery Progress details */}
+                      {['preparing', 'out_for_delivery', 'delivered'].includes(currentLiveOrder.deliveryStatus || '') && (
+                        <div className="p-3.5 rounded-xl border border-emerald-100 bg-emerald-50/50 flex items-center justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100/50 px-2 py-0.5 rounded uppercase">
+                              {currentLiveOrder.deliveryStatus === 'preparing' ? 'Preparing Food' : currentLiveOrder.deliveryStatus === 'out_for_delivery' ? 'Out for Delivery' : 'Delivered'}
+                            </span>
+                            <p className="text-[11px] font-semibold text-slate-700 mt-1">
+                              Rider: {currentLiveOrder.deliveryStaffName || 'Assigned Courier'}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] text-slate-400">Delivery Fee</p>
+                            <p className="text-xs font-bold text-slate-700">{activeTenant.currencySymbol} {currentLiveOrder.deliveryFee || 0}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                                    {/* Cancelled Items Notification */}
+                  {currentLiveOrder.items.some(it => it.status === 'cancelled') && (
+                    <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl text-xs space-y-1.5 mb-4 animate-in fade-in">
+                      <p className="font-bold text-rose-800 flex items-center gap-1">
+                        <AlertTriangle className="h-4 w-4 text-rose-600" />
+                        <span>Unavailable Items (Cancelled)</span>
+                      </p>
+                      <p className="text-[10px] text-rose-700 leading-normal mb-1">
+                        We apologize, but the following items cannot be prepared and have been cancelled from your order.
+                      </p>
+                      <ul className="list-disc list-inside text-[10px] text-rose-900 font-medium space-y-0.5">
+                        {currentLiveOrder.items.filter(it => it.status === 'cancelled').map(it => (
+                          <li key={it.id}>{it.quantity}x {it.name}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
                   {/* Visual Progress Steps */}
                   <div className="grid grid-cols-5 gap-1 border-b border-slate-50 pb-4">
                     {[
@@ -1448,7 +1829,7 @@ export default function CustomerView() {
                   {showAccountPrompt && !currentUser && !customerEmailForDashboard && (
                     <div className="bg-gradient-to-r from-amber-50 to-indigo-50 border border-indigo-100 rounded-2xl p-4 space-y-3 shadow-sm animate-in fade-in zoom-in-95 duration-200">
                       <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2 md:mt-0 w-full md:w-auto">
                           <span className="text-sm">✨</span>
                           <h4 className="font-sans font-extrabold text-xs text-indigo-950 uppercase">Unlock Guest Benefits</h4>
                         </div>
@@ -1496,7 +1877,7 @@ export default function CustomerView() {
                         <input
                           type="text"
                           id="new-kitchen-note-input"
-                          placeholder="e.g., Please serve tea steaming hot..."
+                          
                           className="flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                         />
                         <button
@@ -1589,7 +1970,7 @@ export default function CustomerView() {
                     <label className="text-[10px] font-bold text-slate-400 uppercase">Leave comments or reviews</label>
                     <textarea
                       required
-                      placeholder="e.g. Food was absolutely sensational!"
+                      
                       value={feedback}
                       onChange={(e) => setFeedback(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs min-h-[50px] text-gray-900"
@@ -1674,7 +2055,7 @@ export default function CustomerView() {
                   id="login-email"
                   type="email"
                   required
-                  placeholder="naolnigatu2025@gmail.com"
+                  
                   value={loginEmailInput}
                   onChange={(e) => setLoginEmailInput(e.target.value)}
                   className="w-full px-3.5 py-2 mt-1 rounded-lg border border-gray-200 text-xs font-semibold text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-600"
@@ -1686,7 +2067,7 @@ export default function CustomerView() {
                 <input
                   id="login-name"
                   type="text"
-                  placeholder="Naol Nigatu"
+                  
                   value={loginNameInput}
                   onChange={(e) => setLoginNameInput(e.target.value)}
                   className="w-full px-3.5 py-2 mt-1 rounded-lg border border-gray-200 text-xs font-semibold text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-600"
@@ -1710,6 +2091,88 @@ export default function CustomerView() {
               </div>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* BUSINESS SEARCH & SWITCH MODAL */}
+      {showBizSearchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl border border-slate-100 flex flex-col max-h-[80vh] animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3.5">
+              <h3 className="font-sans font-bold text-sm text-slate-900">Search Businesses</h3>
+              <button 
+                onClick={() => setShowBizSearchModal(false)}
+                className="text-[10px] bg-slate-100 hover:bg-slate-250 text-slate-500 rounded-lg px-2.5 py-1 font-bold"
+              >
+                Close
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-400 mb-3">Type below to find any business instantly and access their portal without needing to scan a QR code.</p>
+
+            <div className="relative mb-3 shrink-0">
+              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="text"
+                
+                value={bizSearchTerm}
+                onChange={(e) => setBizSearchTerm(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600 focus:bg-white"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 p-1">
+              {(() => {
+                const term = bizSearchTerm.toLowerCase().trim();
+                const filtered = tenants.filter(t => 
+                  t.name.toLowerCase().includes(term) ||
+                  (t.description || '').toLowerCase().includes(term)
+                );
+                
+                if (filtered.length === 0) {
+                  return (
+                    <p className="text-center text-xs text-slate-400 italic py-6">No matching businesses found.</p>
+                  );
+                }
+
+                return filtered.map(t => {
+                  const isActive = t.id === activeTenantId;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setActiveTenantId(t.id);
+                        setShowBizSearchModal(false);
+                      }}
+                      className={`w-full flex items-center gap-3 p-2.5 rounded-xl border text-left transition-all ${
+                        isActive 
+                          ? 'border-indigo-500 bg-indigo-50/50 hover:bg-indigo-50' 
+                          : 'border-slate-100 bg-white hover:bg-slate-50'
+                      }`}
+                    >
+                      <img 
+                        src={t.logoUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=80'} 
+                        alt={t.name}
+                        className="h-9 w-9 rounded-full border border-slate-200 object-cover shrink-0"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-xs text-slate-900 truncate">{t.name}</span>
+                          {isActive && (
+                            <span className="bg-indigo-600 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase shrink-0">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-450 truncate mt-0.5">{t.description || 'Delicious food & fast dining experience.'}</p>
+                      </div>
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+          </div>
         </div>
       )}
 

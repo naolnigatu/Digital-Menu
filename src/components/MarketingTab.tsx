@@ -87,7 +87,7 @@ export const MarketingTab = ({ tenantId }: { tenantId: string }) => {
                   type="text" 
                   value={title} 
                   onChange={e => setTitle(e.target.value)} 
-                  placeholder="e.g. 20% Off Weekend Espresso!" 
+                   
                   className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-semibold" 
                 />
               </div>
@@ -99,7 +99,7 @@ export const MarketingTab = ({ tenantId }: { tenantId: string }) => {
                   rows={3}
                   value={subtitle} 
                   onChange={e => setSubtitle(e.target.value)} 
-                  placeholder="e.g. Try Carlos fine espresso with amazing discount this weekend." 
+                   
                   className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-semibold" 
                 />
               </div>
@@ -148,7 +148,7 @@ export const MarketingTab = ({ tenantId }: { tenantId: string }) => {
                     type="url" 
                     value={customImageUrl} 
                     onChange={e => setCustomImageUrl(e.target.value)} 
-                    placeholder="https://images.unsplash.com/... or any public URL" 
+                     
                     className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-semibold" 
                   />
                 )}

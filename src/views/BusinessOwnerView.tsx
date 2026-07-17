@@ -1,3 +1,4 @@
+import { sanitizeName, validatePhone, validateEmail, validateNumber } from '../utils/validation';
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { MenuItem, Category, Table, Staff, ModifierGroup, BusinessType, Order, OrderItem } from '../types';
@@ -5,7 +6,7 @@ import {
   LayoutDashboard, Utensils, QrCode, Users, Settings, Plus, Trash2, Edit, Check, 
   BarChart3, Users2, Shield, Languages, Award, PlusCircle, CreditCard, ChevronRight, ChevronLeft, FileSpreadsheet,
   Upload, Image, X, Sparkles, MapPin, Phone, Mail, HelpCircle, AlertTriangle, XCircle, ShieldAlert,
-  ChevronUp, ChevronDown, EyeOff, Eye, Search
+  ChevronUp, ChevronDown, EyeOff, Eye, Search, Bike
 } from 'lucide-react';
 import { 
   useDinexBusiness, 
@@ -187,6 +188,8 @@ const getStaffDefaultRolePermissions = (roleName: string): string[] => {
       return ['kitchen.view', 'kitchen.manage', 'orders.manage'];
     case 'receptionist':
       return ['reservations.manage', 'customers.view', 'notifications.view'];
+    case 'delivery':
+      return ['delivery.view', 'delivery.accept', 'delivery.update', 'payments.collect'];
     default:
       return [];
   }
@@ -224,7 +227,27 @@ export default function BusinessOwnerView() {
     updateOrderStatus,
     processPayment,
     cancelOrder,
+    assignDelivery,
+    customerProfiles,
+    updateCustomerProfile,
+    requestSubscriptionUpgrade,
+    superAdminPaymentInfo,
+    updateTenantType,
   } = useApp();
+
+  const [selectedUpgradePlan, setSelectedUpgradePlan] = useState<string | null>(null);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [subDuration, setSubDuration] = useState<number>(1);
+  const [subMethod, setSubMethod] = useState('bank_transfer');
+  const [subTxId, setSubTxId] = useState('');
+  const [subProof, setSubProof] = useState('');
+  const [editingBusinessType, setEditingBusinessType] = useState('');
+  const [isEditingBizType, setIsEditingBizType] = useState(false);
+  const activeTenant = tenants.find(t => t.id === activeTenantId);
+  const activePlanDef = activeTenant ? pricingPlans.find(p => p.id === activeTenant.subscriptionPlan) : null;
+  const enabledTabs = activePlanDef?.enabledTabs || ['dashboard', 'orders', 'menu', 'tables', 'settings'];
+  const isTabEnabled = (tabId: string) => enabledTabs.includes(tabId);
+
 
   const { activeBusiness, businesses, setActiveBusinessId, createBusiness } = useDinexBusiness();
   const { activeBranch: dinexActiveBranch, branches: dinexBranches, setActiveBranchId: setDinexBranchId, createBranch: createDinexBranch } = useDinexBranch();
@@ -355,6 +378,8 @@ export default function BusinessOwnerView() {
     kitchenEnabled: true,
     takeawayEnabled: true,
     deliveryEnabled: true,
+    deliveryApprovalMode: 'manual' as 'manual' | 'automatic',
+    predefinedDeliveryFee: 150,
   });
 
   useEffect(() => {
@@ -369,6 +394,17 @@ export default function BusinessOwnerView() {
   const [newBizType, setNewBizType] = useState<BusinessType>('Ethiopian Restaurant');
   const [newBizCountry, setNewBizCountry] = useState('Ethiopia');
   const [newBizCity, setNewBizCity] = useState('Addis Ababa');
+
+  // Delivery states (Task 5)
+  const [selectedRiderId, setSelectedRiderId] = useState('');
+  const [deliveryFeeInput, setDeliveryFeeInput] = useState<number>(150);
+
+  useEffect(() => {
+    if (selectedOrderDetail) {
+      setDeliveryFeeInput(selectedOrderDetail.deliveryFee || activeSettings?.predefinedDeliveryFee || 150);
+      setSelectedRiderId(selectedOrderDetail.deliveryStaffId || '');
+    }
+  }, [selectedOrderDetail, activeSettings]);
   const [newBizPhone, setNewBizPhone] = useState('');
   const [newBizEmail, setNewBizEmail] = useState('');
   const [newBizCurrency, setNewBizCurrency] = useState('ETB');
@@ -553,6 +589,9 @@ export default function BusinessOwnerView() {
   const [itemAmName, setItemAmName] = useState('');
   const [itemAmDesc, setItemAmDesc] = useState('');
   const [itemModifiers, setItemModifiers] = useState<ModifierGroup[]>([]);
+  const [itemPortions, setItemPortions] = useState<{name: string, price: number}[]>([]);
+  const [newPortionName, setNewPortionName] = useState('');
+  const [newPortionPrice, setNewPortionPrice] = useState(0);
   const [newModName, setNewModName] = useState('');
   const [newModOptionStr, setNewModOptionStr] = useState(''); // "Standard:0, Double:40"
   const [itemPhotoUrl, setItemPhotoUrl] = useState('');
@@ -587,7 +626,15 @@ export default function BusinessOwnerView() {
   const [staffStation, setStaffStation] = useState('');
 
   // Dinex Custom Role states
-  const [staffViewTab, setStaffViewTab] = useState<'roster' | 'roles'>('roster');
+  const [staffViewTab, setStaffViewTab] = useState<'roster' | 'roles' | 'users'>('roster');
+  
+  // User Management State
+  const [registerUserName, setRegisterUserName] = useState('');
+  const [registerUserEmail, setRegisterUserEmail] = useState('');
+  const [registerUserPhone, setRegisterUserPhone] = useState('');
+  const [promotingUserEmail, setPromotingUserEmail] = useState<string | null>(null);
+  const [promotingStaffRole, setPromotingStaffRole] = useState<string>('waiter');
+  const [promotingStaffStation, setPromotingStaffStation] = useState<string>('');
   
   // --- Improved Staff Permission Management State ---
   const [selectedPermissionStaffId, setSelectedPermissionStaffId] = useState<string>('');
@@ -812,7 +859,10 @@ export default function BusinessOwnerView() {
   // Handle Menu submissions
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!catName || isSavingCat) return;
+    if (isSavingCat) return;
+    const nameCheck = sanitizeName(catName);
+    if (!nameCheck.valid) { setCatStatusMessage({ type: 'error', text: nameCheck.error || '' }); return; }
+
     setIsSavingCat(true);
     setCatStatusMessage(null);
 
@@ -877,7 +927,11 @@ export default function BusinessOwnerView() {
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!itemName || !itemCat || isSavingItem) return;
+    if (isSavingItem) return;
+    const nameCheck = sanitizeName(itemName);
+    if (!nameCheck.valid) { setItemStatusMessage({ type: 'error', text: nameCheck.error || '' }); return; }
+    const priceCheck = validateNumber(itemPrice.toString(), 0);
+    if (!priceCheck.valid) { setItemStatusMessage({ type: 'error', text: priceCheck.error || '' }); return; }
     setIsSavingItem(true);
     setItemStatusMessage(null);
 
@@ -895,6 +949,7 @@ export default function BusinessOwnerView() {
         allergenTags: itemAllergens ? itemAllergens.split(',').map(a => a.trim()) : [],
         dietaryTags: itemDietary ? itemDietary.split(',').map(d => d.trim()) : [],
         modifiers: itemModifiers,
+        portions: itemPortions,
         translations: itemAmName ? {
           am: {
             name: itemAmName,
@@ -925,6 +980,7 @@ export default function BusinessOwnerView() {
         setItemAmName('');
         setItemAmDesc('');
         setItemModifiers([]);
+        setItemPortions([]);
         setItemPhotoUrl('');
         setItemPrepTime(15);
         setItemAvailability('Available');
@@ -955,7 +1011,10 @@ export default function BusinessOwnerView() {
 
   const handleAddStaff = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!staffName || !staffEmail) return;
+    const nameCheck = sanitizeName(staffName);
+    if (!nameCheck.valid) { setPermStatusMessage({ type: 'error', text: nameCheck.error || '' }); return; }
+    const emailCheck = validateEmail(staffEmail);
+    if (!emailCheck.valid) { setPermStatusMessage({ type: 'error', text: emailCheck.error || '' }); return; }
     addStaffMember({
       name: staffName,
       email: staffEmail,
@@ -1042,7 +1101,7 @@ export default function BusinessOwnerView() {
 
       {/* Internal Subtabs Navigation */}
       <div className="flex border-b border-slate-100 overflow-x-auto gap-2 scrollbar-hide px-2">
-        {can('reports.view') && (
+        {can('reports.view') && isTabEnabled('dashboard') && (
           <button
             onClick={() => setActiveSubTab('dashboard')}
             className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
@@ -1061,7 +1120,7 @@ export default function BusinessOwnerView() {
           </button>
         )}
 
-        {can('orders.manage') && (
+        {can('orders.manage') && isTabEnabled('orders') && (
           <button
             onClick={() => setActiveSubTab('orders')}
             className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
@@ -1078,7 +1137,7 @@ export default function BusinessOwnerView() {
           </button>
         )}
 
-        {can('menu.create') && (
+        {can('menu.create') && isTabEnabled('menu') && (
           <button
             onClick={() => setActiveSubTab('menu')}
             className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
@@ -1175,7 +1234,7 @@ export default function BusinessOwnerView() {
           </button>
         )}
 
-        {can('reports.view') && (
+        {can('reports.view') && isTabEnabled('dashboard') && (
           <button
             onClick={() => setActiveSubTab('reports')}
             className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
@@ -1321,7 +1380,7 @@ export default function BusinessOwnerView() {
                     <input
                       type="text"
                       aria-label="Search orders"
-                      placeholder="Search #no or customer..."
+                      
                       value={orderSearchTerm}
                       onChange={(e) => setOrderSearchTerm(e.target.value)}
                       className="w-full rounded-lg border border-slate-200 pl-8 pr-2.5 py-1.5 text-xs font-semibold focus:outline-none"
@@ -1350,6 +1409,7 @@ export default function BusinessOwnerView() {
                     className="rounded-lg border border-slate-200 p-1.5 text-xs font-bold text-slate-700 bg-white"
                   >
                     <option value="all">All Statuses</option>
+                    <option value="pending_approval">Pending Approval</option>
                     <option value="pending">Pending</option>
                     <option value="accepted">Accepted</option>
                     <option value="preparing">Preparing</option>
@@ -1557,7 +1617,133 @@ export default function BusinessOwnerView() {
                       <div className="space-y-3">
                         <h5 className="font-sans font-extrabold text-xs text-slate-400 uppercase tracking-wider">Operational Action Board</h5>
                         <div className="flex flex-wrap gap-2">
-                          {selectedOrderDetail.status === 'pending' && (
+                          {/* DELIVERY-SPECIFIC DISPATCH CONTROLS */}
+                          {selectedOrderDetail.type === 'delivery' && (
+                            <div className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 mb-2 animate-in fade-in">
+                              <h6 className="font-sans font-bold text-[10px] text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                <span>🚴 Delivery Dispatch Center</span>
+                                <span className="bg-indigo-100 text-indigo-700 font-extrabold px-1.5 py-0.5 rounded text-[8px] uppercase">
+                                  {selectedOrderDetail.deliveryStatus || 'pending_approval'}
+                                </span>
+                              </h6>
+
+                              {selectedOrderDetail.deliveryStatus === 'pending_approval' && (
+                                <div className="space-y-3">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                    <div className="space-y-1">
+                                      <label className="text-[10px] text-slate-400 font-bold uppercase">Assign Delivery Staff</label>
+                                      <select
+                                        value={selectedRiderId}
+                                        onChange={(e) => setSelectedRiderId(e.target.value)}
+                                        className="w-full bg-white border border-slate-200 text-xs font-semibold rounded-lg p-2 focus:outline-none"
+                                      >
+                                        <option value="">-- Choose Courier --</option>
+                                        {branchStaff.filter(s => s.role === 'delivery').map(s => (
+                                          <option key={s.id} value={s.id}>{s.name} ({s.email})</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="text-[10px] text-slate-400 font-bold uppercase">Delivery Fee ({activeBusiness?.currency || tenant.currency})</label>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={deliveryFeeInput}
+                                        onChange={(e) => setDeliveryFeeInput(parseFloat(e.target.value) || 0)}
+                                        className="w-full bg-white border border-slate-200 text-xs font-semibold rounded-lg p-1.5 focus:outline-none"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const staffMember = branchStaff.find(s => s.id === selectedRiderId);
+                                      if (!staffMember) {
+                                        showToast('Please select a delivery rider first.', 'error');
+                                        return;
+                                      }
+                                      assignDelivery(selectedOrderDetail.id, staffMember.id, staffMember.name, deliveryFeeInput);
+                                      showToast('Delivery routed! Quote dispatched to customer.', 'success');
+                                      setSelectedOrderDetail(prev => prev ? {
+                                        ...prev,
+                                        deliveryStatus: 'pending_acceptance',
+                                        deliveryStaffId: staffMember.id,
+                                        deliveryStaffName: staffMember.name,
+                                        deliveryFee: deliveryFeeInput
+                                      } : null);
+                                    }}
+                                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 rounded-lg cursor-pointer transition-colors shadow-sm"
+                                  >
+                                    Approve Delivery & Send Quote to Customer
+                                  </button>
+                                </div>
+                              )}
+
+                              {selectedOrderDetail.deliveryStatus === 'pending_acceptance' && (
+                                <div className="text-xs bg-amber-50/50 p-3 rounded-lg border border-amber-100 space-y-1.5">
+                                  <p className="font-bold text-amber-900">Awaiting Customer Acceptance</p>
+                                  <p className="text-[10px] text-amber-700">
+                                    The customer has been notified of the total amount containing the <strong>{activeBusiness?.currency || tenant.currency} {selectedOrderDetail.deliveryFee}</strong> delivery fee. Preparation will begin as soon as they click "Accept".
+                                  </p>
+                                </div>
+                              )}
+
+                              {selectedOrderDetail.deliveryStatus === 'preparing' && (
+                                <div className="space-y-2">
+                                  <p className="text-xs text-slate-600">
+                                    Courier <strong>{selectedOrderDetail.deliveryStaffName}</strong> is assigned and standby. Preparation is underway.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      updateOrderStatus(selectedOrderDetail.id, 'ready', 'Owner');
+                                      showToast('Food is ready! Notifying rider for pick-up.', 'success');
+                                      setSelectedOrderDetail(prev => prev ? { ...prev, status: 'ready', deliveryStatus: 'preparing' } : null);
+                                    }}
+                                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 rounded-lg cursor-pointer transition-colors shadow-sm"
+                                  >
+                                    👨‍🍳 Mark Ready for Pickup
+                                  </button>
+                                </div>
+                              )}
+
+                              {selectedOrderDetail.deliveryStatus === 'out_for_delivery' && (
+                                <div className="text-xs bg-indigo-50/50 p-3 rounded-lg border border-indigo-100 space-y-1">
+                                  <p className="font-bold text-indigo-900">Rider Out on Route</p>
+                                  <p className="text-[10px] text-indigo-700">
+                                    Rider <strong>{selectedOrderDetail.deliveryStaffName}</strong> is actively delivering this order. Customer's address: <em className="block bg-white p-1.5 rounded border border-indigo-100 mt-1 font-sans">{selectedOrderDetail.deliveryAddress}</em>
+                                  </p>
+                                </div>
+                              )}
+
+                              {selectedOrderDetail.deliveryStatus === 'delivered' && (
+                                <div className="space-y-2 w-full">
+                                  <div className="text-xs bg-emerald-50 p-3 rounded-lg border border-emerald-100 space-y-1">
+                                    <p className="font-bold text-emerald-900">Delivered Successfully</p>
+                                    <p className="text-[10px] text-emerald-700">
+                                      The order was marked as delivered by rider <strong>{selectedOrderDetail.deliveryStaffName}</strong>.
+                                    </p>
+                                  </div>
+                                  {selectedOrderDetail.status !== 'completed' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        updateOrderStatus(selectedOrderDetail.id, 'completed', 'Owner');
+                                        showToast('Order completed & closed.', 'success');
+                                        setSelectedOrderDetail(prev => prev ? { ...prev, status: 'completed' } : null);
+                                      }}
+                                      className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-2 rounded-lg cursor-pointer transition-colors"
+                                    >
+                                      Settle & Close Ticket
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {selectedOrderDetail.type !== 'delivery' && selectedOrderDetail.status === 'pending' && (
                             <>
                               <button
                                 onClick={() => {
@@ -1582,7 +1768,7 @@ export default function BusinessOwnerView() {
                             </>
                           )}
 
-                          {selectedOrderDetail.status === 'accepted' && (
+                          {selectedOrderDetail.type !== 'delivery' && selectedOrderDetail.status === 'accepted' && (
                             <button
                               onClick={() => {
                                 updateOrderStatus(selectedOrderDetail.id, 'preparing', 'Owner');
@@ -1595,7 +1781,7 @@ export default function BusinessOwnerView() {
                             </button>
                           )}
 
-                          {selectedOrderDetail.status === 'preparing' && (
+                          {selectedOrderDetail.type !== 'delivery' && selectedOrderDetail.status === 'preparing' && (
                             <button
                               onClick={() => {
                                 updateOrderStatus(selectedOrderDetail.id, 'ready', 'Owner');
@@ -1608,7 +1794,7 @@ export default function BusinessOwnerView() {
                             </button>
                           )}
 
-                          {selectedOrderDetail.status === 'ready' && (
+                          {selectedOrderDetail.type !== 'delivery' && selectedOrderDetail.status === 'ready' && (
                             <button
                               onClick={() => {
                                 updateOrderStatus(selectedOrderDetail.id, 'served', 'Owner');
@@ -1621,7 +1807,7 @@ export default function BusinessOwnerView() {
                             </button>
                           )}
 
-                          {selectedOrderDetail.status === 'served' && (
+                          {selectedOrderDetail.type !== 'delivery' && selectedOrderDetail.status === 'served' && (
                             <button
                               onClick={() => {
                                 updateOrderStatus(selectedOrderDetail.id, 'completed', 'Owner');
@@ -1705,7 +1891,7 @@ export default function BusinessOwnerView() {
                             required
                             value={newOrderCustomer}
                             onChange={(e) => setNewOrderCustomer(e.target.value)}
-                            placeholder="Guest Customer"
+                            
                             className="w-full rounded-lg border border-slate-200 p-2 text-xs font-semibold focus:border-indigo-400 focus:outline-none"
                           />
                         </div>
@@ -1716,7 +1902,7 @@ export default function BusinessOwnerView() {
                             type="text"
                             value={newOrderPhone}
                             onChange={(e) => setNewOrderPhone(e.target.value)}
-                            placeholder="e.g. +251 912345678"
+                            
                             className="w-full rounded-lg border border-slate-200 p-2 text-xs font-semibold focus:border-indigo-400 focus:outline-none"
                           />
                         </div>
@@ -1924,7 +2110,7 @@ export default function BusinessOwnerView() {
                             type="text"
                             value={newOrderNotes}
                             onChange={(e) => setNewOrderNotes(e.target.value)}
-                            placeholder="e.g. No onion, fast prep"
+                            
                             className="w-full rounded-lg border border-slate-200 p-2 text-xs font-bold focus:outline-none"
                           />
                         </div>
@@ -2210,7 +2396,7 @@ export default function BusinessOwnerView() {
       {/* 2. MENU DESIGNER */}
       {activeSubTab === 'menu' && can('menu.create') && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
             <h3 className="font-sans font-bold text-sm text-slate-800">Branch Categories & Dishes</h3>
             <div className="flex gap-2">
               <button
@@ -2244,6 +2430,9 @@ export default function BusinessOwnerView() {
                   setItemAmName('');
                   setItemAmDesc('');
                   setItemModifiers([]);
+                  setItemPortions([]);
+                  setNewPortionName('');
+                  setNewPortionPrice(0);
                   setNewModName('');
                   setNewModOptionStr('');
                   setItemPhotoUrl('');
@@ -2440,6 +2629,7 @@ export default function BusinessOwnerView() {
                               setItemAmName(item.translations?.am?.name || '');
                               setItemAmDesc(item.translations?.am?.description || '');
                               setItemModifiers(item.modifiers || []);
+                              setItemPortions(item.portions || []);
                               setItemPhotoUrl(item.photoUrl || '');
                               setItemPrepTime(item.prepTime || 15);
                               setItemAvailability(item.availability || (item.isAvailable !== false ? 'Available' : 'Sold Out'));
@@ -2479,6 +2669,72 @@ export default function BusinessOwnerView() {
 
           </div>
 
+          
+      {/* SUBSCRIPTION CHECKOUT MODAL */}
+      {showSubscriptionModal && selectedUpgradePlan && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl border border-slate-100">
+            <h3 className="font-sans font-bold text-lg text-slate-900 mb-2">Subscribe to {pricingPlans.find(p => p.id === selectedUpgradePlan)?.name}</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Duration</label>
+                <select value={subDuration} onChange={(e) => setSubDuration(parseInt(e.target.value))} className="w-full mt-1 rounded-lg border border-slate-200 p-2 text-sm font-semibold">
+                  <option value={1}>1 Month</option>
+                  <option value={3}>3 Months</option>
+                  <option value={6}>6 Months</option>
+                  <option value={12}>1 Year</option>
+                  <option value={24}>2 Years</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Payment Method</label>
+                <select value={subMethod} onChange={(e) => setSubMethod(e.target.value)} className="w-full mt-1 rounded-lg border border-slate-200 p-2 text-sm font-semibold">
+                  <option value="bank_transfer">Bank Transfer</option>
+                </select>
+              </div>
+
+              {subMethod === 'bank_transfer' && (
+                <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg space-y-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Payment Information</label>
+                    <p className="text-xs font-mono text-slate-800 whitespace-pre-wrap">{superAdminPaymentInfo}</p>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Transaction ID</label>
+                    <input type="text" value={subTxId} onChange={(e) => setSubTxId(e.target.value)} className="w-full mt-1 rounded border border-slate-200 p-1.5 text-xs font-mono" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Upload Proof (Image URL/Base64)</label>
+                    <input type="text" value={subProof} onChange={(e) => setSubProof(e.target.value)} className="w-full mt-1 rounded border border-slate-200 p-1.5 text-xs font-mono" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => setShowSubscriptionModal(false)}
+                className="flex-1 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  requestSubscriptionUpgrade(activeTenantId, selectedUpgradePlan, subDuration, subMethod, subTxId, subProof);
+                  setShowSubscriptionModal(false);
+                  showToast('Subscription requested! Awaiting admin approval.', 'success');
+                }}
+                className="flex-1 py-2 text-xs font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+              >
+                Submit Request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
           {/* ADD/EDIT CATEGORY MODAL */}
           {showCatModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
@@ -2492,7 +2748,7 @@ export default function BusinessOwnerView() {
                     <label className="text-[10px] font-bold text-slate-400 uppercase">English Category Name</label>
                     <input
                       type="text"
-                      placeholder="e.g., Traditional Stews"
+                      
                       value={catName}
                       onChange={(e) => setCatName(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium focus:ring-1 focus:ring-slate-900"
@@ -2502,7 +2758,7 @@ export default function BusinessOwnerView() {
                     <label className="text-[10px] font-bold text-slate-400 uppercase">Amharic Translation (Optional)</label>
                     <input
                       type="text"
-                      placeholder="አማርኛ (e.g., ባህላዊ ወጦች)"
+                      
                       value={catAmharic}
                       onChange={(e) => setCatAmharic(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium focus:ring-1 focus:ring-slate-900 font-sans"
@@ -2552,7 +2808,7 @@ export default function BusinessOwnerView() {
                       <input
                         type="text"
                         required
-                        placeholder="e.g., Tibs Platter"
+                        
                         value={itemName}
                         onChange={(e) => setItemName(e.target.value)}
                         className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium"
@@ -2573,11 +2829,52 @@ export default function BusinessOwnerView() {
                   <div>
                     <label className="text-[10px] font-bold text-slate-400 uppercase">English Description</label>
                     <textarea
-                      placeholder="Describe flavors, ingredients..."
+                      
                       value={itemDesc}
                       onChange={(e) => setItemDesc(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium min-h-[50px]"
                     />
+                  </div>
+
+                  
+                  {/* Portions */}
+                  <div className="pt-2 border-t border-slate-100">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-2">Item Portions (Optional)</label>
+                    {itemPortions.length > 0 && (
+                      <div className="space-y-1.5 mb-3">
+                        {itemPortions.map((p, idx) => (
+                          <div key={idx} className="flex justify-between items-center bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs">
+                            <span className="font-semibold text-slate-800">{p.name} - {tenant.currencySymbol}{p.price}</span>
+                            <button type="button" onClick={() => setItemPortions(prev => prev.filter((_, i) => i !== idx))} className="text-rose-500 hover:text-rose-700">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2 items-end">
+                      <div className="flex-1">
+                        <label className="text-[9px] font-bold text-slate-400 uppercase">Portion Name (e.g. Small, Large)</label>
+                        <input type="text" value={newPortionName} onChange={e => setNewPortionName(e.target.value)} placeholder="e.g. Medium" className="w-full mt-1 rounded border border-slate-200 px-2 py-1.5 text-xs font-medium" />
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-[9px] font-bold text-slate-400 uppercase">Price ({tenant.currencySymbol})</label>
+                        <input type="number" value={newPortionPrice} onChange={e => setNewPortionPrice(Number(e.target.value))} placeholder="Price" className="w-full mt-1 rounded border border-slate-200 px-2 py-1.5 text-xs font-medium" />
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          if (newPortionName && newPortionPrice >= 0) {
+                            setItemPortions(prev => [...prev, { name: newPortionName, price: newPortionPrice }]);
+                            setNewPortionName('');
+                            setNewPortionPrice(0);
+                          }
+                        }}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 p-1.5 rounded"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Device Image Upload Component */}
@@ -2644,7 +2941,7 @@ export default function BusinessOwnerView() {
                       <label className="text-[10px] font-bold text-slate-400 uppercase">Amharic Title (አማርኛ)</label>
                       <input
                         type="text"
-                        placeholder="ልዩ ጥብስ"
+                        
                         value={itemAmName}
                         onChange={(e) => setItemAmName(e.target.value)}
                         className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium"
@@ -2654,7 +2951,7 @@ export default function BusinessOwnerView() {
                       <label className="text-[10px] font-bold text-slate-400 uppercase">Amharic Description</label>
                       <input
                         type="text"
-                        placeholder="በትኩስ መሶብ የሚቀርብ..."
+                        
                         value={itemAmDesc}
                         onChange={(e) => setItemAmDesc(e.target.value)}
                         className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium"
@@ -2695,7 +2992,7 @@ export default function BusinessOwnerView() {
                       <label className="text-[10px] font-bold text-slate-400 uppercase">Allergen Tags (comma-sep)</label>
                       <input
                         type="text"
-                        placeholder="Dairy, Gluten, Nuts"
+                        
                         value={itemAllergens}
                         onChange={(e) => setItemAllergens(e.target.value)}
                         className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium"
@@ -2705,7 +3002,7 @@ export default function BusinessOwnerView() {
                       <label className="text-[10px] font-bold text-slate-400 uppercase">Dietary Tags (comma-sep)</label>
                       <input
                         type="text"
-                        placeholder="Vegan, Halal, Spicy"
+                        
                         value={itemDietary}
                         onChange={(e) => setItemDietary(e.target.value)}
                         className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium"
@@ -2719,14 +3016,14 @@ export default function BusinessOwnerView() {
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="Option Name (e.g. Extra Teff)"
+                        
                         value={newModName}
                         onChange={(e) => setNewModName(e.target.value)}
                         className="w-1/3 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium"
                       />
                       <input
                         type="text"
-                        placeholder="Value list (Label:Price, Label2:Price)"
+                        
                         value={newModOptionStr}
                         onChange={(e) => setNewModOptionStr(e.target.value)}
                         className="w-2/3 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium"
@@ -2856,7 +3153,7 @@ export default function BusinessOwnerView() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g., Table 12, Patio Seat 2"
+                  
                   value={tableName}
                   onChange={(e) => setTableName(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium"
@@ -2982,6 +3279,16 @@ export default function BusinessOwnerView() {
             >
               Staff Permission Management
             </button>
+            <button
+              onClick={() => setStaffViewTab('users')}
+              className={`pb-2.5 text-xs font-bold border-b-2 transition-colors shrink-0 ${
+                staffViewTab === 'users' 
+                  ? 'border-indigo-600 text-indigo-600 font-extrabold' 
+                  : 'border-transparent text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              Registered Users & Customers
+            </button>
           </div>
 
           {staffViewTab === 'roster' ? (
@@ -2998,7 +3305,7 @@ export default function BusinessOwnerView() {
                     <input
                       type="text"
                       required
-                      placeholder="e.g., Samuel Abera"
+                      
                       value={staffName}
                       onChange={(e) => setStaffName(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-slate-400 focus:outline-none"
@@ -3010,7 +3317,7 @@ export default function BusinessOwnerView() {
                     <input
                       type="email"
                       required
-                      placeholder="staff@menuflow.com"
+                      
                       value={staffEmail}
                       onChange={(e) => setStaffEmail(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-slate-400 focus:outline-none"
@@ -3029,6 +3336,7 @@ export default function BusinessOwnerView() {
                         <option value="cashier">Cashier Operator</option>
                         <option value="kitchen">Kitchen Staff (KDS)</option>
                         <option value="manager">Branch Operations Manager</option>
+                        <option value="delivery">Delivery Staff</option>
                       </optgroup>
                       {customRoles.filter(cr => cr.businessId === activeTenantId).length > 0 && (
                         <optgroup label="Custom Access Roles (Dinex Core)">
@@ -3122,7 +3430,7 @@ export default function BusinessOwnerView() {
               </div>
 
             </div>
-          ) : (
+          ) : staffViewTab === 'roles' ? (
             /* Staff Permission Management Tab */
             <div>
               {!can('staff.manage') ? (
@@ -3167,7 +3475,7 @@ export default function BusinessOwnerView() {
                           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
                           <input
                             type="text"
-                            placeholder="Type to search staff..."
+                            
                             value={staffPermSearchQuery}
                             onChange={(e) => setStaffPermSearchQuery(e.target.value)}
                             className="w-full rounded-lg border border-slate-200 pl-8 pr-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 bg-slate-50/50"
@@ -3402,6 +3710,225 @@ export default function BusinessOwnerView() {
                 </div>
               )}
             </div>
+          ) : (
+            /* Registered Users / Customers Tab */
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="grid gap-6 lg:grid-cols-3">
+                {/* Manual User Registration Form */}
+                <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm space-y-4 h-fit">
+                  <h3 className="font-sans font-bold text-sm text-slate-800">Register New Customer</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">Manually register a user under your business. They will be immediately associated with your brand and loyalty system.</p>
+                  
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!registerUserEmail.trim()) return;
+                      const email = registerUserEmail.toLowerCase().trim();
+                      const name = registerUserName.trim();
+                      const phone = registerUserPhone.trim();
+                      
+                      updateCustomerProfile(email, {
+                        name,
+                        phone,
+                        tenantId: activeTenantId,
+                      });
+                      
+                      setRegisterUserName('');
+                      setRegisterUserEmail('');
+                      setRegisterUserPhone('');
+                      
+                      setPermStatusMessage({
+                        type: 'success',
+                        text: `Successfully registered customer ${name} under your business!`
+                      });
+                      setTimeout(() => setPermStatusMessage(null), 3500);
+                    }} 
+                    className="space-y-3"
+                  >
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Customer Name</label>
+                      <input
+                        type="text"
+                        required
+                        
+                        value={registerUserName}
+                        onChange={(e) => setRegisterUserName(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-slate-400 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Customer Email</label>
+                      <input
+                        type="email"
+                        required
+                        
+                        value={registerUserEmail}
+                        onChange={(e) => setRegisterUserEmail(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-slate-400 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Phone Number</label>
+                      <input
+                        type="text"
+                        
+                        value={registerUserPhone}
+                        onChange={(e) => setRegisterUserPhone(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-slate-400 focus:outline-none"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full rounded-lg bg-slate-950 text-white py-2 text-xs font-bold hover:bg-slate-800 transition-colors"
+                    >
+                      Register Customer
+                    </button>
+                  </form>
+                </div>
+
+                {/* Registered Customers List */}
+                <div className="lg:col-span-2 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-sans font-bold text-xs text-slate-400 uppercase tracking-wider">
+                      Associated Brand Customers ({(Object.values(customerProfiles || {}) as any[]).filter(p => p.tenantId === activeTenantId).length})
+                    </h4>
+                    {permStatusMessage && (
+                      <span className={`text-[10.5px] font-semibold px-2 py-0.5 rounded ${
+                        permStatusMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                      }`}>
+                        {permStatusMessage.text}
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="rounded-xl border border-slate-100 bg-white overflow-hidden shadow-sm">
+                    <div className="divide-y divide-slate-100">
+                      {(Object.values(customerProfiles || {}) as any[])
+                        .filter(profile => profile.tenantId === activeTenantId)
+                        .map((profile) => {
+                          const isPromoting = promotingUserEmail === profile.email;
+                          const hasBeenPromoted = staff.some(s => s.email.toLowerCase() === profile.email.toLowerCase() && s.tenantId === activeTenantId);
+                          
+                          return (
+                            <div key={profile.id} className="p-4 space-y-3.5 text-xs">
+                              <div className="flex items-center justify-between gap-3 flex-wrap">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-extrabold text-slate-950 text-sm">{profile.name}</span>
+                                    {hasBeenPromoted && (
+                                      <span className="rounded bg-teal-50 border border-teal-100 px-1.5 py-0.5 text-[8.5px] font-extrabold text-teal-700 uppercase tracking-wider">
+                                        Active Staff
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2.5 mt-1 text-slate-400 text-[10.5px]">
+                                    <span>{profile.email}</span>
+                                    {profile.phone && (
+                                      <>
+                                        <span>•</span>
+                                        <span>{profile.phone}</span>
+                                      </>
+                                    )}
+                                    <span>•</span>
+                                    <span className="text-amber-600 font-semibold">{profile.loyaltyPoints || 0} pts</span>
+                                  </div>
+                                </div>
+
+                                {!hasBeenPromoted && !isPromoting && (
+                                  <button
+                                    onClick={() => {
+                                      setPromotingUserEmail(profile.email);
+                                      setPromotingStaffRole('waiter');
+                                      setPromotingStaffStation('');
+                                    }}
+                                    className="bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-indigo-150 transition-colors px-3 py-1.5 rounded-lg text-[10.5px] font-bold cursor-pointer"
+                                  >
+                                    Promote to Staff
+                                  </button>
+                                )}
+                              </div>
+
+                              {isPromoting && (
+                                <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-xl space-y-3 animate-in slide-in-from-top-1">
+                                  <p className="text-[10.5px] font-extrabold text-slate-700">Promote {profile.name} to Crew operational staff role:</p>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">Staff Role</label>
+                                      <select
+                                        value={promotingStaffRole}
+                                        onChange={(e) => setPromotingStaffRole(e.target.value)}
+                                        className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold bg-white focus:outline-none"
+                                      >
+                                        <option value="waiter">Floor Waiter</option>
+                                        <option value="cashier">Cashier Operator</option>
+                                        <option value="kitchen">Kitchen Staff (KDS)</option>
+                                        <option value="manager">Branch Operations Manager</option>
+                                        <option value="delivery">Delivery Staff</option>
+                                      </select>
+                                    </div>
+
+                                    {promotingStaffRole === 'kitchen' && (
+                                      <div>
+                                        <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">Assign KDS Station</label>
+                                        <select
+                                          value={promotingStaffStation}
+                                          onChange={(e) => setPromotingStaffStation(e.target.value)}
+                                          className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold bg-white focus:outline-none"
+                                        >
+                                          <option value="">No specific station (All)</option>
+                                          {stations.filter(s => s.branchId === activeBranchId).map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="flex justify-end gap-2 text-[10px]">
+                                    <button
+                                      onClick={() => setPromotingUserEmail(null)}
+                                      className="rounded bg-white border border-slate-200 px-3 py-1.5 font-bold text-slate-500 hover:bg-slate-50"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        addStaffMember({
+                                          name: profile.name,
+                                          email: profile.email,
+                                          role: promotingStaffRole,
+                                          tenantId: activeTenantId,
+                                          branchId: activeBranchId,
+                                          stationId: promotingStaffRole === 'kitchen' && promotingStaffStation ? promotingStaffStation : undefined
+                                        });
+                                        setPromotingUserEmail(null);
+                                        setPermStatusMessage({
+                                          type: 'success',
+                                          text: `Successfully promoted ${profile.name} to ${promotingStaffRole}!`
+                                        });
+                                        setTimeout(() => setPermStatusMessage(null), 3500);
+                                      }}
+                                      className="rounded bg-indigo-600 text-white px-3 py-1.5 font-bold hover:bg-indigo-700 shadow-sm"
+                                    >
+                                      Confirm Promotion
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      {((Object.values(customerProfiles || {}) as any[]).filter(p => p.tenantId === activeTenantId)).length === 0 && (
+                        <p className="p-8 text-center text-xs text-slate-400 italic">No customers manually registered or signed up under this brand yet.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
         </div>
@@ -3410,7 +3937,66 @@ export default function BusinessOwnerView() {
       {/* 5. BILLING & SAAS SETTINGS */}
       {activeSubTab === 'settings' && can('business.edit') && (
         <div className="max-w-2xl mx-auto space-y-6">
-          
+
+          {/* General Configuration */}
+          <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm space-y-4">
+            <h3 className="font-sans font-bold text-sm text-slate-800 flex items-center gap-1.5">
+              <Settings className="h-4.5 w-4.5 text-indigo-600" />
+              <span>Business Identity</span>
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Business Type</label>
+                {isEditingBizType ? (
+                  <div className="flex gap-2 mt-1">
+                    <select 
+                      value={editingBusinessType} 
+                      onChange={e => setEditingBusinessType(e.target.value)}
+                      className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="">Select type...</option>
+                      <option value="Restaurant">Restaurant</option>
+                      <option value="Cafe">Cafe / Coffee Shop</option>
+                      <option value="Bar">Bar / Lounge</option>
+                      <option value="Hotel">Hotel Dining</option>
+                      <option value="Fast Food">Fast Food</option>
+                    </select>
+                    <button 
+                      onClick={() => {
+                        updateTenantType(activeTenantId, editingBusinessType);
+                        setIsEditingBizType(false);
+                        showToast('Business type updated.', 'success');
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 text-xs font-bold transition-all"
+                    >
+                      Save
+                    </button>
+                    <button 
+                      onClick={() => setIsEditingBizType(false)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg px-3 py-1.5 text-xs font-bold transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-sm font-semibold text-slate-800">{tenant.businessType || 'Not specified'}</span>
+                    <button 
+                      onClick={() => {
+                        setEditingBusinessType(tenant.businessType || '');
+                        setIsEditingBizType(true);
+                      }}
+                      className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline"
+                    >
+                      Change
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm space-y-4">
             <h3 className="font-sans font-bold text-sm text-slate-800 flex items-center gap-1.5">
               <Award className="h-4.5 w-4.5 text-yellow-500" />
@@ -3421,19 +4007,19 @@ export default function BusinessOwnerView() {
               {pricingPlans.map(plan => {
                 const isCurrent = tenant.subscriptionPlan === plan.id;
                 const isPending = tenant.subscriptionStatus === 'pending_approval' && isCurrent;
-                const displayPrice = tenant.currency === 'ETB' ? `${plan.priceETB} ETB` : `$${plan.priceUSD}`;
+                const displayPrice = tenant.currency === 'ETB' ? `${plan.priceETB} ETB` : `${plan.priceUSD}`;
+                const isSelected = selectedUpgradePlan === plan.id;
                 
                 return (
-                  <button
+                  <div
                     key={plan.id}
-                    type="button"
-                    disabled={isCurrent}
                     onClick={() => {
-                      if (plan.id === 'free') {
-                        updateTenantPlan(activeTenantId, 'free');
-                      } else {
-                        requestTenantUpgrade(activeTenantId, plan.id);
-                        showToast(`Upgrade request submitted! Awaiting admin approval.`);
+                      if (!isCurrent) {
+                        if (plan.id === 'free') {
+                          updateTenantPlan(activeTenantId, 'free');
+                        } else {
+                          setSelectedUpgradePlan(plan.id);
+                        }
                       }
                     }}
                     className={`relative rounded-xl border p-3.5 text-left transition-all ${
@@ -3441,7 +4027,9 @@ export default function BusinessOwnerView() {
                         ? isPending
                           ? 'border-amber-400 bg-amber-50/20 ring-1 ring-amber-400'
                           : 'border-slate-900 bg-slate-50 ring-1 ring-slate-900'
-                        : 'border-slate-100 hover:bg-slate-50 cursor-pointer'
+                        : isSelected
+                          ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500 cursor-pointer'
+                          : 'border-slate-100 hover:bg-slate-50 cursor-pointer'
                     }`}
                   >
                     <div className="flex justify-between items-center gap-1.5 flex-wrap">
@@ -3459,7 +4047,19 @@ export default function BusinessOwnerView() {
                     </div>
                     <p className="text-[10px] text-slate-400 mt-1">{plan.features.join(', ')}</p>
                     <p className="text-xs font-bold text-slate-800 mt-3">{displayPrice} / mo</p>
-                  </button>
+                    
+                    {isSelected && !isCurrent && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowSubscriptionModal(true);
+                        }}
+                        className="w-full mt-3 rounded-lg bg-indigo-600 py-1.5 text-white text-[10px] font-bold hover:bg-indigo-700"
+                      >
+                        Subscribe
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -3537,6 +4137,64 @@ export default function BusinessOwnerView() {
                 );
               })}
             </div>
+
+            {localDinexSettings.deliveryEnabled && (
+              <div className="mt-4 p-4 rounded-xl border border-indigo-100 bg-indigo-50/20 space-y-4 animate-in fade-in">
+                <h4 className="font-sans font-bold text-xs text-indigo-950 flex items-center gap-1.5">
+                  <Bike className="h-4 w-4 text-indigo-600" />
+                  <span>Direct Delivery Config</span>
+                </h4>
+                
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-indigo-900/60 uppercase">Delivery Dispatch Approval Mode</label>
+                    <div className="mt-2 flex gap-4">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="deliveryApprovalMode"
+                          value="manual"
+                          checked={localDinexSettings.deliveryApprovalMode === 'manual'}
+                          onChange={() => setLocalDinexSettings(prev => ({ ...prev, deliveryApprovalMode: 'manual' }))}
+                          className="text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Manual Assignment</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="deliveryApprovalMode"
+                          value="automatic"
+                          checked={localDinexSettings.deliveryApprovalMode === 'automatic'}
+                          onChange={() => setLocalDinexSettings(prev => ({ ...prev, deliveryApprovalMode: 'automatic' }))}
+                          className="text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Auto Dispatch</span>
+                      </label>
+                    </div>
+                    <p className="text-[9px] text-slate-400 mt-1 leading-normal">
+                      Manual puts deliveries in 'pending_approval' for manual pricing & routing. Auto accepts and routes instantly.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-indigo-900/60 uppercase">Base/Predefined Delivery Fee</label>
+                    <div className="mt-1 relative rounded-lg shadow-sm max-w-[200px]">
+                      <input
+                        type="number"
+                        min="0"
+                        value={localDinexSettings.predefinedDeliveryFee ?? 0}
+                        onChange={(e) => setLocalDinexSettings(prev => ({ ...prev, predefinedDeliveryFee: parseFloat(e.target.value) || 0 }))}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-400"
+                      />
+                    </div>
+                    <p className="text-[9px] text-slate-400 mt-1 leading-normal">
+                      Default fee added automatically to all customer delivery orders.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Feature Status Alerts */}
             {featuresStatusMessage && (
@@ -3626,7 +4284,7 @@ export default function BusinessOwnerView() {
                 <label className="text-[10px] font-bold text-slate-400 uppercase">Pre-arrival Advance Payment Bank Account (CBE)</label>
                 <input 
                   type="text" 
-                  placeholder="e.g. 1000123456789"
+                  
                   value={localSettings.bankAccount} 
                   onChange={(e) => setLocalSettings(prev => ({ ...prev, bankAccount: e.target.value }))}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -3808,7 +4466,7 @@ export default function BusinessOwnerView() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Gursha Habesha, Café Joy"
+                  
                   value={newBizName}
                   onChange={(e) => setNewBizName(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none"
@@ -3844,7 +4502,7 @@ export default function BusinessOwnerView() {
                   <input
                     type="text"
                     required
-                    placeholder="+251 911..."
+                    
                     value={newBizPhone}
                     onChange={(e) => setNewBizPhone(e.target.value)}
                     className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none"
@@ -3880,7 +4538,7 @@ export default function BusinessOwnerView() {
                 <input
                   type="email"
                   required
-                  placeholder="contact@mybrand.com"
+                  
                   value={newBizEmail}
                   onChange={(e) => setNewBizEmail(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none"

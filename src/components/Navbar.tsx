@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { UserRole, SubscriptionPlan } from '../types';
 import { 
   ChefHat, Coffee, QrCode, Shield, Utensils, CreditCard, Globe, Wifi, WifiOff, Bell, LogOut, User, RefreshCw,
-  PlusCircle, Lock, Mail, Building2, Landmark, HelpCircle, Check, ArrowRight, AlertTriangle
+  PlusCircle, Lock, Mail, Building2, Landmark, HelpCircle, Check, ArrowRight, AlertTriangle, Bike
 } from 'lucide-react';
 import { signInWithGoogle, logOut } from '../lib/firebase';
 
@@ -40,7 +40,7 @@ export default function Navbar() {
   };
 
   // Clear notice whenever the tab changes
-  const [activeModalTab, setActiveModalTab] = useState<'signin' | 'signup' | 'demo'>('signin');
+  const [activeModalTab, setActiveModalTab] = useState<'signin' | 'signup' >('signin');
   useEffect(() => {
     setLocalNotice(null);
   }, [activeModalTab]);
@@ -56,16 +56,7 @@ export default function Navbar() {
   const activeTenant = tenants.find(t => t.id === activeTenantId) || tenants[0];
 
   // List of easy login targets for evaluation
-  const demoUsers = [
-    { email: 'naolnigatu2025@gmail.com', name: 'Naol Nigatu', desc: 'Platform Admin / Super Admin Overview', icon: Shield, color: 'text-indigo-600 bg-indigo-50 border-indigo-100' },
-    { email: 'admin@menuflow.com', name: 'Super Admin', desc: 'Platform Overview & Tenant Controls', icon: Shield, color: 'text-indigo-600 bg-indigo-50 border-indigo-100' },
-    { email: 'aisha@menuflow.com', name: 'Aisha (Owner)', desc: "Aisha's Traditional Kitchen", icon: ChefHat, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
-    { email: 'carlos@menuflow.com', name: 'Carlos (Owner)', desc: "Carlos's Specialty Espresso", icon: Coffee, color: 'text-amber-600 bg-amber-50 border-amber-100' },
-    { email: 'fatima@menuflow.com', name: 'Fatima (Waiter)', desc: 'Table status grid & tables placement', icon: Utensils, color: 'text-pink-600 bg-pink-50 border-pink-100' },
-    { email: 'yohannes@menuflow.com', name: 'Yohannes (Kitchen)', desc: 'Hot Stews Station KDS View', icon: ChefHat, color: 'text-orange-600 bg-orange-50 border-orange-100' },
-    { email: 'cashier@menuflow.com', name: 'Kebron (Cashier)', desc: 'Bill split & payment recording', icon: CreditCard, color: 'text-cyan-600 bg-cyan-50 border-cyan-100' },
-    { email: 'guest@menuflow.com', name: 'Customer Scan (QR)', desc: 'Self-serve Table Ordering & Tracking', icon: QrCode, color: 'text-slate-600 bg-slate-50 border-slate-100' }
-  ];
+  
 
   const handleRoleSelect = (email: string) => {
     if (email === 'guest@menuflow.com') {
@@ -121,7 +112,7 @@ export default function Navbar() {
       const isConfigError = error?.message?.includes('API key') || error?.code?.includes('api-key') || error?.message?.includes('invalid-api-key');
       if (isConfigError) {
         showNotice("Firebase is not fully configured (missing API key). Please use 'Demo Accounts' tab below to log in instantly!", "error");
-      } else {
+      } else if (error?.code !== 'auth/popup-closed-by-user') {
         showNotice(`Google Sign-In Error: ${error?.message || 'Check network or try again.'}`, "error");
       }
     } finally {
@@ -149,7 +140,7 @@ export default function Navbar() {
       const isConfigError = error?.message?.includes('API key') || error?.code?.includes('api-key') || error?.message?.includes('invalid-api-key');
       if (isConfigError) {
         showNotice("Firebase is not fully configured. Please register your brand by filling out the email/name fields manually below!", "info");
-      } else {
+      } else if (error?.code !== 'auth/popup-closed-by-user') {
         showNotice(`Google Authentication Error: ${error?.message || 'Please fill in details manually.'}`, "error");
       }
     } finally {
@@ -196,31 +187,48 @@ export default function Navbar() {
   return (
     <>
       <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white shadow-sm backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-2 sm:px-4 lg:px-8">
         
         {/* Brand Logo & Name */}
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white shadow-sm">
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+          <div 
+            onClick={() => {
+              logout();
+              window.location.hash = '';
+              window.location.reload();
+            }}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white shadow-sm cursor-pointer hover:opacity-90"
+            title="Go to Landing Page"
+          >
             M
           </div>
-          <div className="flex items-center gap-2.5">
-            <div>
+          <div className="flex items-center gap-1 sm:gap-2.5 min-w-0">
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-sans font-extrabold text-base tracking-tight text-slate-900">MenuFlow</span>
-                <span className="hidden rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-extrabold text-slate-500 sm:inline-block uppercase tracking-wider">PWA SaaS</span>
+                <span 
+                  onClick={() => {
+                    logout();
+                    window.location.hash = '';
+                    window.location.reload();
+                  }}
+                  className="font-sans font-extrabold text-base tracking-tight text-slate-900 cursor-pointer hover:opacity-80 truncate"
+                >
+                  MenuFlow
+                </span>
+                <span className="hidden rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-extrabold text-slate-500 lg:inline-block uppercase tracking-wider">PWA SaaS</span>
               </div>
-              <p className="hidden text-[10px] font-bold text-slate-400 md:block uppercase tracking-wide">
+              <p className="hidden text-[10px] font-bold text-slate-400 lg:block uppercase tracking-wide">
                 {currentUser?.role === 'super_admin' ? 'Platform Central' : `${activeTenant?.name}`}
               </p>
             </div>
-            <span className="hidden px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-extrabold rounded uppercase tracking-wider md:inline-block">
+            <span className="hidden px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-extrabold rounded uppercase tracking-wider lg:inline-block">
               Operational
             </span>
           </div>
         </div>
 
         {/* Action Controls & Info */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           
           {/* Simulated PWA Offline Toggle */}
           <button 
@@ -239,12 +247,12 @@ export default function Navbar() {
             {simulatedOffline ? (
               <>
                 <WifiOff className="h-3.5 w-3.5 animate-pulse text-amber-600" />
-                <span className="hidden sm:inline">PWA Offline Mode</span>
+                <span className="hidden lg:inline">PWA Offline Mode</span>
               </>
             ) : (
               <>
                 <Wifi className="h-3.5 w-3.5 text-emerald-600" />
-                <span className="hidden sm:inline">PWA Live Sync</span>
+                <span className="hidden lg:inline">PWA Live Sync</span>
               </>
             )}
           </button>
@@ -254,7 +262,7 @@ export default function Navbar() {
             <button 
               id="nav-lang-btn"
               onClick={() => setLanguage(currentLanguage === 'en' ? 'am' : 'en')}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+              className="flex items-center gap-1 sm:gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-1.5 sm:px-2.5 py-1 sm:py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
               title="Toggle Multi-lingual Localization (English / Amharic)"
             >
               <Globe className="h-3.5 w-3.5 text-slate-500" />
@@ -315,10 +323,10 @@ export default function Navbar() {
                 setActiveModalTab('signin');
                 setShowRoleModal(true);
               }}
-              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 text-white px-3.5 py-1.5 text-xs font-extrabold hover:bg-indigo-700 transition-colors cursor-pointer shadow-sm"
+              className="flex items-center gap-1 sm:gap-1.5 rounded-lg bg-indigo-600 text-white px-2 sm:px-3.5 py-1 sm:py-1.5 text-[10px] sm:text-xs font-extrabold hover:bg-indigo-700 transition-colors cursor-pointer shadow-sm"
             >
               <User className="h-3.5 w-3.5" />
-              <span>Log In / Register</span>
+              <span className="hidden md:inline">Log In / Register</span>
             </button>
           ) : (
             <div className="flex items-center gap-2">
@@ -328,7 +336,7 @@ export default function Navbar() {
                   setActiveModalTab('demo');
                   setShowRoleModal(true);
                 }}
-                className="flex items-center gap-1.5 rounded-lg bg-indigo-50 text-indigo-700 px-3 py-1.5 text-xs font-extrabold border border-indigo-100 hover:bg-indigo-100 transition-colors cursor-pointer shadow-sm"
+                className="flex items-center gap-1 sm:gap-1.5 rounded-lg bg-indigo-50 text-indigo-700 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-extrabold border border-indigo-100 hover:bg-indigo-100 transition-colors cursor-pointer shadow-sm"
               >
                 <RefreshCw className="h-3.5 w-3.5 text-indigo-500 animate-spin-slow" />
                 <span>Switch Account</span>
@@ -354,7 +362,7 @@ export default function Navbar() {
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 font-bold text-xs border border-indigo-100">
               {currentUser ? currentUser.name.charAt(0) : <User className="h-4 w-4" />}
             </div>
-            <div className="text-left">
+            <div className="text-left hidden md:block">
               <p className="text-xs font-bold text-slate-800 leading-tight">
                 {currentUser ? currentUser.name : 'Guest Customer'}
               </p>
@@ -417,7 +425,7 @@ export default function Navbar() {
                 type="button"
                 onClick={() => setActiveModalTab('demo')}
                 className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                  activeModalTab === 'demo'
+                  false
                     ? 'bg-white text-indigo-600 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
@@ -488,7 +496,7 @@ export default function Navbar() {
                           required
                           value={loginEmail}
                           onChange={(e) => setLoginEmail(e.target.value)}
-                          placeholder="e.g. naolnigatu2025@gmail.com"
+                          
                           className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none"
                         />
                       </div>
@@ -502,7 +510,7 @@ export default function Navbar() {
                           type="password"
                           value={loginPassword}
                           onChange={(e) => setLoginPassword(e.target.value)}
-                          placeholder="Enter your password (optional for demo)"
+                          
                           className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none"
                         />
                       </div>
@@ -563,7 +571,7 @@ export default function Navbar() {
                         required
                         value={signupOwnerName}
                         onChange={(e) => setSignupOwnerName(e.target.value)}
-                        placeholder="e.g. Naol Nigatu"
+                        
                         className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
@@ -575,7 +583,7 @@ export default function Navbar() {
                         required
                         value={signupOwnerEmail}
                         onChange={(e) => setSignupOwnerEmail(e.target.value)}
-                        placeholder="e.g. naol@menuflow.com"
+                        
                         className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
@@ -584,7 +592,7 @@ export default function Navbar() {
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Choose Password</label>
                       <input
                         type="password"
-                        placeholder="Enter a secure password (optional)"
+                        
                         className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
@@ -605,45 +613,6 @@ export default function Navbar() {
                 </div>
               )}
 
-              {/* TAB 3: DEMO ACCOUNT SWAPPER */}
-              {activeModalTab === 'demo' && (
-                <div className="grid gap-2 max-h-[300px] overflow-y-auto pr-1">
-                  {demoUsers.map((user) => {
-                    const Icon = user.icon;
-                    const isCurrent = currentUser 
-                      ? (currentUser.email || '').toLowerCase() === (user.email || '').toLowerCase()
-                      : user.email === 'guest@menuflow.com';
-
-                    return (
-                      <button
-                        key={user.email}
-                        onClick={() => handleRoleSelect(user.email)}
-                        className={`flex items-center justify-between rounded-xl border p-2.5 text-left transition-all duration-200 hover:border-slate-300 hover:shadow-sm cursor-pointer ${
-                          isCurrent 
-                            ? 'border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600' 
-                            : 'border-slate-100 bg-white'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${user.color}`}>
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <p className="text-xs font-extrabold text-slate-900">{user.name}</p>
-                              <span className="text-[9px] text-slate-400 font-bold">{user.email}</span>
-                            </div>
-                            <p className="text-[10px] text-slate-500 mt-0.5">{user.desc}</p>
-                          </div>
-                        </div>
-                        {isCurrent && (
-                          <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[8px] font-bold text-white">Active</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
 
             </div>
             

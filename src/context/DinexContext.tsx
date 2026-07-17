@@ -238,6 +238,8 @@ const DEFAULT_SETTINGS: Record<string, BusinessSettings> = {
     kitchenEnabled: true,
     takeawayEnabled: true,
     deliveryEnabled: false,
+    deliveryApprovalMode: 'manual',
+    predefinedDeliveryFee: 150,
   },
   'biz-02': {
     orderingEnabled: true,
@@ -249,6 +251,8 @@ const DEFAULT_SETTINGS: Record<string, BusinessSettings> = {
     kitchenEnabled: true,
     takeawayEnabled: true,
     deliveryEnabled: true,
+    deliveryApprovalMode: 'automatic',
+    predefinedDeliveryFee: 120,
   },
 };
 
@@ -268,7 +272,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       else if (currentUser.email === 'yohannes@menuflow.com') setUserId('u-yohannes');
       else if (currentUser.email === 'fatima@menuflow.com') setUserId('u-fatima');
       else if (currentUser.email === 'cashier@menuflow.com') setUserId('u-kebron');
-      else if (currentUser.email === 'naolnigatu2025@gmail.com' || currentUser.email === 'admin@menuflow.com') setUserId('u-admin');
+      else if (currentUser.email === 'naolnigatu2025@gmail.com' ) setUserId('u-admin');
       else setUserId(`u-${currentUser.email.split('@')[0]}`);
     } else {
       setUserId(null);
@@ -349,7 +353,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
           email: tenant.ownerEmail,
           currency: tenant.currency,
           language: 'en',
-          ownerId: tenant.ownerEmail === 'admin@menuflow.com' ? 'u-admin' : `u-${tenant.ownerEmail.split('@')[0]}`,
+          ownerId: tenant.ownerEmail === 'naolnigatu2025@gmail.com' ? 'u-admin' : `u-${tenant.ownerEmail.split('@')[0]}`,
           createdAt: tenant.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           status: tenant.subscriptionStatus === 'active' ? 'active' : tenant.subscriptionStatus === 'suspended' ? 'suspended' : tenant.subscriptionStatus === 'rejected' ? 'rejected' : 'pending_approval'
@@ -671,6 +675,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     kitchenEnabled: true,
     takeawayEnabled: true,
     deliveryEnabled: true,
+    deliveryApprovalMode: 'manual',
+    predefinedDeliveryFee: 150,
   }) : null;
 
   const updateSettings = (businessId: string, newSettings: BusinessSettings) => {
@@ -744,6 +750,8 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
         return ['orders.manage'];
       case 'kitchen':
         return ['orders.manage'];
+      case 'delivery':
+        return ['delivery.view', 'delivery.accept', 'delivery.update', 'payments.collect'];
       default:
         return [];
     }
@@ -802,7 +810,7 @@ export function FeatureProvider({ children }: { children: React.ReactNode }) {
     if (!activeBusiness) return false;
 
     // Plan limits
-    const plan: string = activeBusiness.ownerId === 'u-aisha' ? 'growth' : 'free'; // Custom simulation parity
+    const plan = activeBusiness.subscriptionPlan || 'free';
     
     // settings checks
     if (featureName === 'ordering' && activeSettings && !activeSettings.orderingEnabled) return false;

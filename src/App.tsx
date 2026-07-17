@@ -12,7 +12,10 @@ import WaiterView from './views/WaiterView';
 import KDSView from './views/KDSView';
 import CashierView from './views/CashierView';
 import CustomerView from './views/CustomerView';
+import DeliveryStaffView from './views/DeliveryStaffView';
 import OnboardingView from './views/OnboardingView';
+import LandingPageView from './views/LandingPageView';
+import { useState, useEffect } from 'react';
 import { 
   Building, LayoutGrid, CheckCircle2, ShieldCheck, RefreshCw, AlertTriangle
 } from 'lucide-react';
@@ -88,6 +91,8 @@ function DashboardShell() {
         return <KDSView />;
       case 'cashier':
         return <CashierView />;
+      case 'delivery':
+        return <DeliveryStaffView />;
       default:
         return <CustomerView />;
     }
@@ -98,21 +103,6 @@ function DashboardShell() {
       <Navbar />
       
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Banner highlighting multi-role integration and simulation flow */}
-        <div className="mb-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-4 text-white shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex gap-2.5 items-start">
-            <div className="h-9 w-9 bg-white/10 rounded-lg flex items-center justify-center text-indigo-400 shrink-0 mt-0.5">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-100">Evaluator Interactive Sandbox</p>
-              <p className="text-[10px] text-slate-300 leading-normal">
-                MenuFlow is a stateful multi-role SaaS. Set categories and modifiers as <strong>Owner</strong>, order on Table 1 as <strong>Customer</strong>, cook as <strong>Kitchen</strong>, deliver as <strong>Waiter</strong>, and bill as <strong>Cashier</strong>!
-              </p>
-            </div>
-          </div>
-        </div>
-
         {/* Dynamic Workspace Container */}
         <div id="app-workspace-body" className="rounded-2xl bg-white p-5 sm:p-6 border border-slate-100/80 shadow-sm min-h-[500px]">
           {renderView()}
@@ -122,13 +112,34 @@ function DashboardShell() {
   );
 }
 
+
+function AppRouter() {
+  const { currentUser } = useApp();
+  const [showApp, setShowApp] = useState(window.location.hash === '#app' || window.location.hash === '#demo');
+
+  useEffect(() => {
+    const handleHash = () => {
+      if (window.location.hash === '#app' || window.location.hash === '#demo') {
+        setShowApp(true);
+      }
+    };
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
+
+  if (!currentUser && !showApp) {
+    return <LandingPageView onEnterApp={() => { window.location.hash = 'app'; setShowApp(true); }} />;
+  }
+
+  return <DashboardShell />;
+}
+
 export default function App() {
   return (
     <AppProvider>
       <DinexProvider>
-        <DashboardShell />
+        <AppRouter />
       </DinexProvider>
     </AppProvider>
   );
 }
-

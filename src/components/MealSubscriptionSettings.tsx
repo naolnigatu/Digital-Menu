@@ -18,10 +18,12 @@ export default function MealSubscriptionSettings({ tenantId, onClose }: MealSubs
     tenants
   } = useApp();
 
-  const tenant = tenants.find(t => t.id === tenantId) || tenants[0];
+  const tenant = tenants?.find(t => t.id === tenantId) || tenants?.[0];
   const currencySymbol = tenant?.currencySymbol || '$';
-  const plansList = mealSubscriptionPlans[tenantId] || [];
-  const tenantMenuItems = menuItems.filter(item => item.tenantId === tenantId);
+  const plansList = (mealSubscriptionPlans && Array.isArray(mealSubscriptionPlans[tenantId])) 
+    ? mealSubscriptionPlans[tenantId] 
+    : [];
+  const tenantMenuItems = menuItems?.[tenantId] || [];
 
   // Editing state
   const [editingPlan, setEditingPlan] = useState<MealSubscriptionPlan | null>(null);
@@ -245,7 +247,7 @@ export default function MealSubscriptionSettings({ tenantId, onClose }: MealSubs
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-sm text-gray-900"
-                  placeholder="e.g. Daily Power Lunch Sub"
+                  
                 />
               </div>
 
@@ -330,7 +332,7 @@ export default function MealSubscriptionSettings({ tenantId, onClose }: MealSubs
                   value={allowedOrderingTimes}
                   onChange={(e) => setAllowedOrderingTimes(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-sm text-gray-900 font-mono"
-                  placeholder="e.g. 11:30-14:30, 18:00-21:00"
+                  
                 />
               </div>
             </div>

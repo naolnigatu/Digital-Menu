@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { validateMultilineText } from '../utils/validation';
 import { useApp } from '../context/AppContext';
 import { Order } from '../types';
 import { X, RefreshCcw, AlertTriangle } from 'lucide-react';
@@ -30,6 +31,8 @@ export default function RefundModal({ order, onClose }: RefundModalProps) {
       setError(`Refund amount cannot exceed the order total of ${currencySymbol}${order.total}.`);
       return;
     }
+        const reasonCheck = validateMultilineText(reason);
+    if (!reasonCheck.valid) { setError(reasonCheck.error || 'Invalid characters.'); return; }
     if (!reason.trim()) {
       setError('A valid reason for the refund is required.');
       return;
@@ -85,7 +88,7 @@ export default function RefundModal({ order, onClose }: RefundModalProps) {
                 value={amount}
                 onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:outline-hidden focus:ring-2 focus:ring-red-500 focus:border-transparent font-mono text-gray-950 font-medium"
-                placeholder="Enter refund amount"
+                
               />
             </div>
 
@@ -99,7 +102,7 @@ export default function RefundModal({ order, onClose }: RefundModalProps) {
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:outline-hidden focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-950 text-sm"
-                placeholder="Required. Describe why this order is being refunded..."
+                
               />
             </div>
 

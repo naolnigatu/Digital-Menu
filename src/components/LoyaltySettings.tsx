@@ -155,7 +155,7 @@ export default function LoyaltySettings({ tenantId, onClose }: LoyaltySettingsPr
                   value={discountPercentage}
                   onChange={(e) => setDiscountPercentage(parseInt(e.target.value) || 0)}
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 focus:border-transparent text-gray-900 font-mono text-sm"
-                  placeholder="e.g. 10"
+                  
                 />
               </div>
             </div>
@@ -190,7 +190,7 @@ export default function LoyaltySettings({ tenantId, onClose }: LoyaltySettingsPr
                           value={tier.name}
                           onChange={(e) => handleTierChange(idx, 'name', e.target.value)}
                           className="w-full px-2.5 py-1.5 text-xs rounded-md border border-gray-200 bg-white font-medium text-gray-900 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
-                          placeholder="Tier Name (e.g., Gold VIP)"
+                          
                         />
                       </div>
                       
@@ -200,7 +200,7 @@ export default function LoyaltySettings({ tenantId, onClose }: LoyaltySettingsPr
                           value={tier.minPoints}
                           onChange={(e) => handleTierChange(idx, 'minPoints', parseInt(e.target.value) || 0)}
                           className="w-full px-2.5 py-1.5 text-xs rounded-md border border-gray-200 bg-white font-mono text-gray-900 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
-                          placeholder="Min Points"
+                          
                         />
                       </div>
 
@@ -210,7 +210,7 @@ export default function LoyaltySettings({ tenantId, onClose }: LoyaltySettingsPr
                           value={tier.discountBonus}
                           onChange={(e) => handleTierChange(idx, 'discountBonus', parseInt(e.target.value) || 0)}
                           className="w-full px-2.5 py-1.5 text-xs rounded-md border border-gray-200 bg-white font-mono text-gray-900 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
-                          placeholder="Bonus Discount %"
+                          
                         />
                         <span className="text-xs text-gray-400">%</span>
                       </div>

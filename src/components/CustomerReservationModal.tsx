@@ -95,7 +95,7 @@ export const CustomerReservationModal = ({ tenantId, branchId, onClose }: { tena
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Special Requests (Optional)</label>
-                  <textarea value={form.specialRequests} onChange={e => setForm({...form, specialRequests: e.target.value})} rows={3} className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold" placeholder="e.g. Allergy, Window seat..."></textarea>
+                  <textarea value={form.specialRequests} onChange={e => setForm({...form, specialRequests: e.target.value})} rows={3} className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold" ></textarea>
                 </div>
                 <button type="submit" className="w-full py-4 mt-2 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-transform active:scale-[0.98]">
                   Request Reservation

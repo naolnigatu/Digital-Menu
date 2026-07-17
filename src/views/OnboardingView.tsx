@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { sanitizeName } from '../utils/validation';
 import { useApp } from '../context/AppContext';
 import { SubscriptionPlan } from '../types';
 import { 
@@ -22,10 +23,9 @@ export default function OnboardingView() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!businessName) {
-      showToast('Please fill in your restaurant or business name.', 'error');
-      return;
-    }
+        const nameCheck = sanitizeName(businessName);
+    if (!nameCheck.valid) { showToast(nameCheck.error || 'Invalid business name.', 'error'); return; }
+    setBusinessName(nameCheck.value);
     if (!currentUser || !currentUser.email) {
       showToast('You must be signed in to create a business profile.', 'error');
       return;
@@ -86,7 +86,7 @@ export default function OnboardingView() {
                     required
                     value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
-                    placeholder="e.g. Habesha Gourmet, Carlos Bistro"
+                    
                     className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none transition-all"
                   />
                 </div>
@@ -114,7 +114,7 @@ export default function OnboardingView() {
                     type="text"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="e.g. Premium traditional coffee & delicacies"
+                    
                     className="w-full rounded-xl border border-slate-200 p-3 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none transition-all"
                   />
                 </div>

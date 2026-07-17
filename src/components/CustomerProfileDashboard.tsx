@@ -19,7 +19,9 @@ export default function CustomerProfileDashboard({ customerEmail, onAddFavoriteT
     addSavedAddress,
     removeSavedAddress,
     removeFavoriteItem,
-    loyaltyConfigs
+    loyaltyConfigs,
+    placeOrder,
+    logMealService
   } = useApp();
 
   // Get active profile, or fallback to default
@@ -193,14 +195,14 @@ export default function CustomerProfileDashboard({ customerEmail, onAddFavoriteT
                   <div className="grid grid-cols-3 gap-2">
                     <input
                       type="text"
-                      placeholder="e.g. Home"
+                      
                       value={newAddressName}
                       onChange={(e) => setNewAddressName(e.target.value)}
                       className="px-2.5 py-1.5 text-xs rounded-md border border-gray-200 bg-white text-gray-900 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 font-semibold"
                     />
                     <input
                       type="text"
-                      placeholder="Address coordinates"
+                      
                       value={newAddressValue}
                       onChange={(e) => setNewAddressValue(e.target.value)}
                       className="col-span-2 px-2.5 py-1.5 text-xs rounded-md border border-gray-200 bg-white text-gray-900 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
@@ -346,16 +348,50 @@ export default function CustomerProfileDashboard({ customerEmail, onAddFavoriteT
                         </div>
                       </div>
 
+
                       <div className="text-[10px] text-gray-400 space-y-1 font-mono">
                         <div className="flex justify-between">
-                          <span>Active Period:</span>
-                          <span className="text-gray-600">{new Date(sub.startDate).toLocaleDateString()} - {new Date(sub.endDate).toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Next Renewal Date:</span>
-                          <span className="text-gray-600">{new Date(sub.nextRenewalDate).toLocaleDateString()}</span>
+                          <span>Start Date: {new Date(sub.startDate).toLocaleDateString()}</span>
+                          <span>End Date: {new Date(sub.endDate).toLocaleDateString()}</span>
                         </div>
                       </div>
+                      {sub.status === 'active' && sub.mealsUsedToday < sub.mealsPerDay && sub.mealsRemainingTotal > 0 && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Request a meal from this subscription to the kitchen?')) {
+                              logMealService(sub.id);
+                              
+                              const tenantItems = menuItems[sub.tenantId] || [];
+                              const selectedItems = tenantItems.filter(i => sub.menuItemIds?.includes(i.id));
+                              
+                              const itemsToOrder = selectedItems.length > 0 ? selectedItems : [tenantItems[0]].filter(Boolean);
+                              
+                              placeOrder({
+                                customerName: profile.name || customerEmail,
+                                customerEmail: customerEmail,
+                                tenantId: sub.tenantId,
+                                orderType: 'dine_in',
+                                paymentMethod: 'cash', // Prepaid
+                                paymentVerificationStatus: 'approved',
+                                discount: 0,
+                                items: itemsToOrder.map(i => ({
+                                  menuItemId: i.id,
+                                  name: i.name,
+                                  price: 0, // Prepaid
+                                  quantity: 1,
+                                  status: 'received',
+                                  assignedStationId: i.preparationStationId
+                                }))
+                              });
+                              alert('Meal requested! Sent to Kitchen.');
+                            }
+                          }}
+                          className="w-full mt-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                        >
+                          <Zap className="w-3.5 h-3.5" />
+                          Request Meal Now
+                        </button>
+                      )}
                     </div>
                   );
                 })}

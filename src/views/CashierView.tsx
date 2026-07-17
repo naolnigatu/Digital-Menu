@@ -39,6 +39,8 @@ export default function CashierView() {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'mobile_money'>('cash');
   const [loyaltyPointsRedeem, setLoyaltyPointsRedeem] = useState<number>(0);
 
+  const [viewTab, setViewTab] = useState<'open' | 'paid'>('open');
+
   // Receipt Modal State
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
@@ -167,44 +169,123 @@ export default function CashierView() {
             </div>
           )}
 
-          <h3 className="font-sans font-bold text-xs text-slate-400 uppercase tracking-wider">Unresolved checks ({activeUnpaidOrders.length})</h3>
-          
-          {activeUnpaidOrders.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 py-16 text-center bg-white shadow-sm space-y-3">
-              <CheckCircle className="h-10 w-10 text-emerald-500 mx-auto" />
-              <h4 className="font-sans font-bold text-sm text-slate-800">No Unpaid Checks!</h4>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">All active dine-in table balances are settled. Order meals from the customer portal to populate checks here.</p>
-            </div>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {activeUnpaidOrders.map((ord) => (
-                <button
-                  key={ord.id}
-                  onClick={() => setSelectedOrder(ord)}
-                  className={`rounded-xl border p-4 text-left transition-all duration-200 cursor-pointer ${
-                    selectedOrder?.id === ord.id
-                      ? 'border-indigo-600 bg-indigo-50/10 ring-1 ring-indigo-600 shadow-md'
-                      : 'border-slate-200 bg-white hover:border-slate-400 shadow-sm'
-                  }`}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">{getTableLabel(ord.tableId)}</span>
-                      <h4 className="font-sans font-extrabold text-base text-slate-900 leading-none mt-1">{ord.orderNum}</h4>
+          {/* Tabs for Open vs Paid Orders */}
+          <div className="flex gap-4 border-b border-slate-200">
+            <button
+              onClick={() => setViewTab('open')}
+              className={`pb-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                viewTab === 'open' 
+                  ? 'border-indigo-600 text-indigo-600 font-extrabold' 
+                  : 'border-transparent text-slate-450 hover:text-slate-600'
+              }`}
+            >
+              <span>Unresolved Open Checks ({activeUnpaidOrders.length})</span>
+            </button>
+            <button
+              onClick={() => setViewTab('paid')}
+              className={`pb-2.5 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                viewTab === 'paid' 
+                  ? 'border-indigo-600 text-indigo-600 font-extrabold' 
+                  : 'border-transparent text-slate-450 hover:text-slate-600'
+              }`}
+            >
+              <span>Confirmed Paid Orders ({orders.filter(o => o.branchId === activeBranchId && o.paymentStatus === 'paid').length})</span>
+            </button>
+          </div>
+
+          {viewTab === 'open' ? (
+            activeUnpaidOrders.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 py-16 text-center bg-white shadow-sm space-y-3">
+                <CheckCircle className="h-10 w-10 text-emerald-500 mx-auto" />
+                <h4 className="font-sans font-bold text-sm text-slate-800">No Unpaid Checks!</h4>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">All active dine-in table balances are settled. Order meals from the customer portal to populate checks here.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {activeUnpaidOrders.map((ord) => (
+                  <button
+                    key={ord.id}
+                    onClick={() => setSelectedOrder(ord)}
+                    className={`rounded-xl border p-4 text-left transition-all duration-200 cursor-pointer ${
+                      selectedOrder?.id === ord.id
+                        ? 'border-indigo-600 bg-indigo-50/10 ring-1 ring-indigo-600 shadow-md'
+                        : 'border-slate-200 bg-white hover:border-slate-400 shadow-sm'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">{getTableLabel(ord.tableId)}</span>
+                        <h4 className="font-sans font-extrabold text-base text-slate-900 leading-none mt-1">{ord.orderNum}</h4>
+                      </div>
+                      <span className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2.5 py-1 rounded">
+                        Unpaid
+                      </span>
                     </div>
-                    <span className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2.5 py-1 rounded">
-                      Unpaid
-                    </span>
-                  </div>
 
-                  <p className="text-[11px] text-slate-500 mt-2 line-clamp-1">Items: {ord.items.map(it => `${it.quantity}x ${it.name}`).join(', ')}</p>
+                    <p className="text-[11px] text-slate-500 mt-2 line-clamp-1">Items: {ord.items.map(it => `${it.quantity}x ${it.name}`).join(', ')}</p>
 
-                  <div className="mt-4 pt-2 border-t border-slate-50 flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Time: {new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    <span className="font-bold text-slate-800">{tenant.currencySymbol} {ord.total.toLocaleString()}</span>
-                  </div>
-                </button>
-              ))}
+                    <div className="mt-4 pt-2 border-t border-slate-50 flex items-center justify-between text-xs">
+                      <span className="text-slate-400">Time: {new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span className="font-bold text-slate-800">{tenant.currencySymbol} {ord.total.toLocaleString()}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )
+          ) : (
+            /* Paid Orders List Panel */
+            <div className="space-y-3.5">
+              {orders.filter(o => o.branchId === activeBranchId && o.paymentStatus === 'paid').length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 py-16 text-center bg-white shadow-sm space-y-3">
+                  <CheckCircle className="h-10 w-10 text-slate-300 mx-auto" />
+                  <h4 className="font-sans font-bold text-sm text-slate-800">No Paid Orders Confirmed Yet</h4>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">Settle open checks or approve advance transfers to build your transactional history ledger here.</p>
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {orders
+                    .filter(o => o.branchId === activeBranchId && o.paymentStatus === 'paid')
+                    .map((ord) => (
+                      <div
+                        key={ord.id}
+                        className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between shadow-xs text-xs space-y-3"
+                      >
+                        <div>
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">{getTableLabel(ord.tableId)}</span>
+                              <h4 className="font-sans font-extrabold text-sm text-slate-900 leading-tight mt-0.5">{ord.orderNum}</h4>
+                              <p className="text-[10px] text-slate-400 mt-0.5">Settle Time: {ord.paymentSettleTime ? new Date(ord.paymentSettleTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            </div>
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded-full uppercase shrink-0">
+                              Paid
+                            </span>
+                          </div>
+
+                          <p className="text-[10.5px] text-slate-500 mt-2 line-clamp-1">Items: {ord.items.map(it => `${it.quantity}x ${it.name}`).join(', ')}</p>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] text-slate-400">Total: </span>
+                            <span className="font-extrabold text-slate-900">{tenant.currencySymbol} {ord.total.toLocaleString()}</span>
+                          </div>
+                          
+                          <button
+                            onClick={() => {
+                              setReceiptOrder(ord);
+                              setShowReceipt(true);
+                            }}
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-1 rounded-lg text-[10.5px] cursor-pointer flex items-center gap-1 transition-colors"
+                          >
+                            <Printer className="h-3 w-3" />
+                            <span>View Receipt</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -287,7 +368,7 @@ export default function CashierView() {
                   <div className="flex gap-2">
                     <input 
                       type="number"
-                      placeholder="Enter points (e.g. 50)"
+                      
                       value={loyaltyPointsRedeem || ''}
                       onChange={(e) => setLoyaltyPointsRedeem(Number(e.target.value))}
                       className="w-2/3 rounded-lg border border-slate-200 px-3 py-1 text-xs"

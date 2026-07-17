@@ -127,7 +127,7 @@ export default function WaiterView() {
         <div className="lg:col-span-2 space-y-4">
           <h3 className="font-sans font-bold text-xs text-slate-400 uppercase tracking-wider">Table Floor Grid</h3>
           
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
             {branchTables.map((table) => {
               const hasOrder = orders.some(o => o.tableId === table.id && o.status !== 'completed' && o.status !== 'cancelled');
               const activeTblOrder = orders.find(o => o.tableId === table.id && o.status !== 'completed' && o.status !== 'cancelled');
@@ -195,11 +195,36 @@ export default function WaiterView() {
               {/* Show Active Order info if table has check */}
               {activeOrder ? (
                 <div className="space-y-4">
-                  <div className="flex justify-between text-xs border-b border-slate-50 pb-2">
+                  <div className="flex justify-between items-center text-xs border-b border-slate-50 pb-2 flex-wrap gap-2">
                     <span className="text-slate-400">Order ID: <strong className="font-mono text-slate-800">{activeOrder.orderNum}</strong></span>
-                    <span className="rounded bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 uppercase">
-                      {activeOrder.status}
-                    </span>
+                    <div className="flex gap-1">
+                      {activeOrder.status !== 'completed' && activeOrder.status !== 'cancelled' && (
+                        <button
+                          onClick={() => {
+                            const conf = window.confirm("Mark this entire order as COMPLETED?");
+                            if (conf) {
+                              updateOrderStatus(activeOrder.id, 'completed');
+                              showToast(`Order ${activeOrder.orderNum} marked as completed.`);
+                            }
+                          }}
+                          className="bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-bold text-[9px] px-2 py-0.5 rounded cursor-pointer"
+                        >
+                          Complete Order
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          const conf = window.confirm("Are you sure you want to CANCEL this order?");
+                          if (conf) {
+                            updateOrderStatus(activeOrder.id, 'cancelled');
+                            showToast(`Order ${activeOrder.orderNum} cancelled.`, 'error');
+                          }
+                        }}
+                        className="bg-rose-50 border border-rose-250 text-rose-750 hover:bg-rose-100 font-bold text-[9px] px-2 py-0.5 rounded cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
 
                   {/* Order items status tracker */}
@@ -207,34 +232,82 @@ export default function WaiterView() {
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Item Preparation Checklist</p>
                     
                     {activeOrder.items.map((it) => (
-                      <div key={it.id} className="rounded-lg bg-slate-50 p-2 text-xs space-y-2">
-                        <div className="flex justify-between items-start">
+                      <div key={it.id} className="rounded-lg bg-slate-50 p-2 text-xs space-y-2.5 border border-slate-100 shadow-2xs">
+                        <div className="flex justify-between items-start gap-2">
                           <div>
-                            <span className="font-bold text-slate-800">{it.quantity}x {it.name}</span>
+                            <span className="font-extrabold text-slate-800">{it.quantity}x {it.name}</span>
                             {it.notes && <p className="text-[10px] text-slate-400 mt-0.5">Note: "{it.notes}"</p>}
                           </div>
                           
-                          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+                          <span className={`rounded px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase shrink-0 ${
                             it.status === 'delivered' 
-                              ? 'bg-slate-200 text-slate-600' 
+                              ? 'bg-slate-200 text-slate-650' 
                               : it.status === 'ready' 
                               ? 'bg-emerald-100 text-emerald-800 animate-pulse' 
-                              : 'bg-amber-50 text-amber-700'
+                              : it.status === 'cooking'
+                              ? 'bg-indigo-50 text-indigo-700'
+                              : 'bg-amber-50 text-amber-750'
                           }`}>
                             {it.status}
                           </span>
                         </div>
 
-                        {/* Deliver button if cooking is finished */}
-                        {it.status === 'ready' && (
-                          <button
-                            onClick={() => updateOrderItemStatus(activeOrder.id, it.id, 'delivered', 'Waiter')}
-                            className="w-full flex items-center justify-center gap-1 rounded bg-emerald-600 text-white text-[10px] font-bold py-1 hover:bg-emerald-500 transition-colors cursor-pointer"
-                          >
-                            <Check className="h-3 w-3" />
-                            <span>Deliver to Customer</span>
-                          </button>
-                        )}
+                        {/* Waiter Actions based on Item Status */}
+                        <div className="flex gap-1.5 pt-1">
+                          {it.status === 'received' && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  updateOrderItemStatus(activeOrder.id, it.id, 'cooking', 'Waiter');
+                                  showToast(`Item ${it.name} marked as cooking.`);
+                                }}
+                                className="flex-1 py-1 rounded bg-indigo-50 hover:bg-indigo-100 border border-indigo-150 text-indigo-700 font-bold text-[9.5px] text-center cursor-pointer"
+                              >
+                                Start Cooking
+                              </button>
+                              <button
+                                onClick={() => {
+                                  updateOrderItemStatus(activeOrder.id, it.id, 'ready', 'Waiter');
+                                  showToast(`Item ${it.name} marked as ready.`);
+                                }}
+                                className="flex-1 py-1 rounded bg-emerald-55 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 font-bold text-[9.5px] text-center cursor-pointer"
+                              >
+                                Mark Ready
+                              </button>
+                            </>
+                          )}
+
+                          {it.status === 'cooking' && (
+                            <button
+                              onClick={() => {
+                                updateOrderItemStatus(activeOrder.id, it.id, 'ready', 'Waiter');
+                                showToast(`Item ${it.name} marked as ready.`);
+                              }}
+                              className="w-full py-1.5 rounded bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 font-bold text-[9.5px] text-center cursor-pointer"
+                            >
+                              ✓ Finish & Mark Ready
+                            </button>
+                          )}
+
+                          {it.status === 'ready' && (
+                            <button
+                              onClick={() => {
+                                updateOrderItemStatus(activeOrder.id, it.id, 'delivered', 'Waiter');
+                                showToast(`Item ${it.name} delivered to customer.`);
+                              }}
+                              className="w-full py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] text-center cursor-pointer shadow-sm flex items-center justify-center gap-1"
+                            >
+                              <Check className="h-3 w-3" />
+                              <span>Confirm Delivery to Table</span>
+                            </button>
+                          )}
+
+                          {it.status === 'delivered' && (
+                            <div className="text-[10px] text-slate-400 font-semibold italic flex items-center gap-1">
+                              <Check className="h-3.5 w-3.5 text-emerald-500 stroke-[3]" /> Served & Delivered
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -349,7 +422,7 @@ export default function WaiterView() {
                       <div className="grid gap-2 text-xs">
                         <input
                           type="text"
-                          placeholder="Guest Name (Optional)"
+                          
                           value={guestName}
                           onChange={(e) => setGuestName(e.target.value)}
                           className="w-full rounded-lg border border-slate-200 px-3 py-1.5"

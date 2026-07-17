@@ -1,12 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
-  Tenant, Branch, PreparationStation, Category, MenuItem, Table, Order, Staff, SystemLog, UserRole, OrderStatus, OrderItem, SubscriptionPlan, PlatformAd, PlanPricing, TimelineEvent, KitchenNote,
-  PaymentMethodConfig, LoyaltyConfig, MealSubscriptionPlan, CustomerMealSubscription, CustomerProfile, RefundDetails, LoyaltyHistoryEntry,
-  Reservation, Ingredient, StockMovement, MarketplaceExtension, InstalledExtension, DinexNotification, GlobalSettings
+  Tenant, Branch, PreparationStation, Category, MenuItem, Table, Order, Staff, SystemLog, UserRole, OrderStatus, OrderItem, SubscriptionPlan, PlatformAd, PlanPricing, TimelineEvent, KitchenNote, 
+  PaymentMethodConfig, LoyaltyConfig, MealSubscriptionPlan, CustomerMealSubscription, CustomerProfile, RefundDetails, LoyaltyHistoryEntry, 
+  Reservation, Ingredient, StockMovement, MarketplaceExtension, InstalledExtension, DinexNotification, GlobalSettings, SubscriptionRequest
 } from '../types';
-import { 
-  mockTenants, mockBranches, mockStations, mockCategories, mockMenuItems, mockTables, mockStaff, mockOrders, mockSystemLogs 
-} from '../data/mockData';
+
 
 interface AppContextType {
   tenants: Tenant[];
@@ -88,9 +86,13 @@ interface AppContextType {
   placeOrder: (order: Omit<Order, 'id' | 'orderNum' | 'createdAt' | 'status' | 'paymentStatus' | 'subtotal' | 'tax' | 'serviceCharge' | 'total' | 'timeline' | 'kitchenNotes'> & { tip?: number }) => Order;
   updateOrderStatus: (orderId: string, status: OrderStatus, actor?: string) => void;
   updateOrderItemStatus: (orderId: string, itemId: string, status: OrderItem['status'], actor?: string) => void;
+  reportOrderItemIssue: (orderId: string, itemId: string, reason: string) => void;
+  resolveOrderItemIssue: (orderId: string, itemId: string, approved: boolean) => void;
   processPayment: (orderId: string, paymentMethod: Order['paymentMethod'], discountPercentage: number, redeemPoints?: number, tipAmount?: number) => void;
   rateAndFeedback: (orderId: string, rating: number, feedback: string) => void;
   cancelOrder: (orderId: string, reason: string) => void;
+  assignDelivery: (orderId: string, staffId: string, staffName: string, deliveryFee: number) => void;
+  acceptDeliveryFee: (orderId: string) => void;
   verifyAdvancePayment: (orderId: string, approve: boolean, rejectionReason?: string) => void;
   addKitchenNote: (orderId: string, text: string) => void;
   approveKitchenNote: (orderId: string, noteId: string, approve: boolean) => void;
@@ -107,6 +109,7 @@ interface AppContextType {
   updateTenantPlan: (tenantId: string, plan: Tenant['subscriptionPlan']) => void;
   requestTenantUpgrade: (tenantId: string, plan: Tenant['subscriptionPlan']) => void;
   updateTenantCurrency: (tenantId: string, currency: string, currencySymbol: string) => void;
+  updateTenantType: (tenantId: string, businessType: string) => void;
   updateTenantProfile: (tenantId: string, logoUrl: string, bankAccount: string) => void;
   approveTenantStatus: (tenantId: string) => void;
   rejectTenantStatus: (tenantId: string) => void;
@@ -120,6 +123,7 @@ interface AppContextType {
   // Pricing Actions
   pricingPlans: PlanPricing[];
   updatePlanPrice: (planId: SubscriptionPlan, newPriceUSD: number, newPriceETB: number) => void;
+  updatePlanTabs: (planId: string, enabledTabs: string[]) => void;
 
   // Register Tenant Action
   registerTenant: (tenantData: {
@@ -173,6 +177,49 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const CACHE_VERSION = 'v5_order_engine';
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+
+  const [subscriptionRequests, setSubscriptionRequests] = useState<SubscriptionRequest[]>([]);
+  const [superAdminPaymentInfo, setSuperAdminPaymentInfo] = useState<string>("CBE Account: 1000123456789 (Dinex Inc)\nPlease transfer and upload receipt.");
+
+  const requestSubscriptionUpgrade = (tenantId: string, planId: string, duration: number, paymentMethod: string, transactionId?: string, proofImageUrl?: string) => {
+    const newReq: SubscriptionRequest = {
+      id: Math.random().toString(36).substr(2, 9),
+      tenantId,
+      planId,
+      duration,
+      paymentMethod,
+      transactionId,
+      proofImageUrl,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    setSubscriptionRequests(prev => [newReq, ...prev]);
+  };
+
+  const approveSubscriptionRequest = (reqId: string) => {
+    setSubscriptionRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'approved' } : r));
+    const req = subscriptionRequests.find(r => r.id === reqId);
+    if (req) {
+      setTenants(prev => prev.map(t => {
+        if (t.id === req.tenantId) {
+          const now = new Date();
+          now.setMonth(now.getMonth() + req.duration);
+          return {
+            ...t,
+            subscriptionPlan: req.planId,
+            subscriptionStatus: 'active',
+            subscriptionExpiry: now.toISOString()
+          };
+        }
+        return t;
+      }));
+    }
+  };
+
+  const rejectSubscriptionRequest = (reqId: string) => {
+    setSubscriptionRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'rejected' } : r));
+  };
+
   // Clear cache if version mismatch to purge old KSh mock data
   useEffect(() => {
     const ver = localStorage.getItem('mf_version');
@@ -196,47 +243,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Load state from local storage or fallback to mock data
   const [tenants, setTenants] = useState<Tenant[]>(() => {
     const local = localStorage.getItem('mf_tenants');
-    return local ? JSON.parse(local) : mockTenants;
+    return local ? JSON.parse(local) : [];
   });
 
   const [branches, setBranches] = useState<Branch[]>(() => {
     const local = localStorage.getItem('mf_branches');
-    return local ? JSON.parse(local) : mockBranches;
+    return local ? JSON.parse(local) : [];
   });
 
   const [stations, setStations] = useState<PreparationStation[]>(() => {
     const local = localStorage.getItem('mf_stations');
-    return local ? JSON.parse(local) : mockStations;
+    return local ? JSON.parse(local) : [];
   });
 
   const [categories, setCategories] = useState<Record<string, Category[]>>(() => {
     const local = localStorage.getItem('mf_categories');
-    return local ? JSON.parse(local) : mockCategories;
+    return local ? JSON.parse(local) : {};
   });
 
   const [menuItems, setMenuItems] = useState<Record<string, MenuItem[]>>(() => {
     const local = localStorage.getItem('mf_menu_items');
-    return local ? JSON.parse(local) : mockMenuItems;
+    return local ? JSON.parse(local) : {};
   });
 
   const [tables, setTables] = useState<Table[]>(() => {
     const local = localStorage.getItem('mf_tables');
-    return local ? JSON.parse(local) : mockTables;
+    return local ? JSON.parse(local) : [];
   });
 
   const [orders, setOrders] = useState<Order[]>(() => {
     const local = localStorage.getItem('mf_orders');
-    return local ? JSON.parse(local) : mockOrders;
+    return local ? JSON.parse(local) : [];
   });
 
   const [staff, setStaff] = useState<Staff[]>(() => {
     const local = localStorage.getItem('mf_staff');
-    return local ? JSON.parse(local) : mockStaff;
+    return local ? JSON.parse(local) : [];
   });
 
   const [logs, setLogs] = useState<SystemLog[]>(() => {
     const local = localStorage.getItem('mf_logs');
-    return local ? JSON.parse(local) : mockSystemLogs;
+    return local ? JSON.parse(local) : [];
   });
 
   const [pricingPlans, setPricingPlans] = useState<PlanPricing[]>(() => {
@@ -249,7 +296,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         priceUSD: 0,
         priceETB: 0,
         description: 'Get menu service for free! Basic digital menu, QR scanning, and self-serve dine-in ordering.',
-        features: ['1 branch', 'digital menus & QR scans']
+        features: ['1 branch', 'digital menus & QR scans'],
+        enabledTabs: ['dashboard', 'orders', 'menu', 'tables', 'settings']
       },
       {
         id: 'growth',
@@ -257,7 +305,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         priceUSD: 29,
         priceETB: 1500,
         description: 'Unlock multi-branch sync, interactive kitchen/waiter stations, detailed reporting & CRM.',
-        features: ['Multi-branch', 'full KDS', 'automated metrics']
+        features: ['Multi-branch', 'full KDS', 'automated metrics'],
+        enabledTabs: ['dashboard', 'orders', 'menu', 'tables', 'staff', 'settings', 'payments', 'loyalty', 'reports', 'reservations', 'ads']
       },
       {
         id: 'enterprise',
@@ -677,8 +726,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const login = (email: string): boolean => {
     // 1. Check Super Admin
-    const cleanEmail = (email || '').toLowerCase().trim();
-    if (cleanEmail === 'admin@menuflow.com' || cleanEmail === 'naolnigatu2025@gmail.com') {
+    const cleanEmail = (typeof email === 'string' ? email : '').toLowerCase().trim();
+    if (cleanEmail === 'naolnigatu2025@gmail.com') {
       const name = cleanEmail === 'naolnigatu2025@gmail.com' ? 'Naol Nigatu (Platform Admin)' : 'Super Administrator';
       const user = { email: cleanEmail, role: 'super_admin' as const, name };
       setCurrentUser(user);
@@ -722,6 +771,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (tenantBranch) setActiveBranchId(tenantBranch.id);
       addLog('Login', `Tenant Owner (${email}) logged in.`);
       return true;
+    }
+
+    // 4. Hardcoded Fallbacks for Demo Users (in case Firestore is missing them)
+    if (cleanEmail === 'aisha@menuflow.com') {
+      setCurrentUser({ id: 's-01', email: cleanEmail, role: 'owner', name: 'Aisha Jafar', tenantId: 't-01', branchId: 'b-01' });
+      setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
+    }
+    if (cleanEmail === 'carlos@menuflow.com') {
+      setCurrentUser({ id: 's-02', email: cleanEmail, role: 'owner', name: 'Carlos Mwangi', tenantId: 't-02', branchId: 'b-03' });
+      setActiveTenantId('t-02'); setActiveBranchId('b-03'); return true;
+    }
+    if (cleanEmail === 'fatima@menuflow.com') {
+      setCurrentUser({ id: 's-03', email: cleanEmail, role: 'waiter', name: 'Fatima Ahmed', tenantId: 't-01', branchId: 'b-01' });
+      setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
+    }
+    if (cleanEmail === 'yohannes@menuflow.com') {
+      setCurrentUser({ id: 's-04', email: cleanEmail, role: 'kitchen', name: 'Yohannes Bekele', tenantId: 't-01', branchId: 'b-01', stationId: 'st-01' });
+      setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
+    }
+    if (cleanEmail === 'cashier@menuflow.com') {
+      setCurrentUser({ id: 's-05', email: cleanEmail, role: 'cashier', name: 'Kebron Abera', tenantId: 't-01', branchId: 'b-01' });
+      setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
+    }
+    if (cleanEmail === 'delivery@menuflow.com') {
+      setCurrentUser({ id: 's-08', email: cleanEmail, role: 'delivery', name: 'Dan (Delivery Staff)', tenantId: 't-01', branchId: 'b-01' });
+      setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
+    }
+    if (cleanEmail === 'manager@menuflow.com') {
+      setCurrentUser({ id: 's-09', email: cleanEmail, role: 'manager', name: 'Manager Demo', tenantId: 't-01', branchId: 'b-01' });
+      setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
     }
 
     return false;
@@ -870,7 +949,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Orders
   const placeOrder = (orderData: Omit<Order, 'id' | 'orderNum' | 'createdAt' | 'status' | 'paymentStatus' | 'subtotal' | 'tax' | 'serviceCharge' | 'total' | 'timeline' | 'kitchenNotes'> & { tip?: number }) => {
-    const tenant = tenants.find(t => t.id === orderData.tenantId) || mockTenants[0];
+    const tenant = tenants.find(t => t.id === orderData.tenantId) || [][0];
     
     // Calculate financial subtotals
     let subtotal = 0;
@@ -885,12 +964,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const taxAmount = parseFloat(((subtotal * tenant.baseTaxRate) / 100).toFixed(2));
     const serviceChargeAmount = parseFloat(((subtotal * tenant.serviceCharge) / 100).toFixed(2));
     const tipAmount = orderData.tip || 0;
-    const totalAmount = parseFloat((subtotal + taxAmount + serviceChargeAmount + tipAmount - orderData.discount).toFixed(2));
+    const deliveryFeeAmount = (orderData as any).deliveryFee || 0;
+    const totalAmount = parseFloat((subtotal + taxAmount + serviceChargeAmount + tipAmount + deliveryFeeAmount - orderData.discount).toFixed(2));
 
     const hrId = `MF-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const initialPaymentStatus = orderData.paymentVerificationStatus === 'approved' ? ('paid' as const) : ('pending' as const);
-    const initialStatus = orderData.paymentVerificationStatus === 'approved' ? ('accepted' as const) : ('pending' as const);
+    const initialStatus = (orderData as any).status || (orderData.paymentVerificationStatus === 'approved' ? ('accepted' as const) : ('pending' as const));
 
     const newOrder: Order = {
       ...orderData,
@@ -979,6 +1059,83 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     syncToFirestore('orders', orderId, updated);
   };
 
+  const assignDelivery = (orderId: string, staffId: string, staffName: string, deliveryFee: number) => {
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
+
+    const deliveryFeeAmount = deliveryFee || 0;
+    const newTotal = parseFloat((existing.subtotal + existing.tax + existing.serviceCharge + (existing.tip || 0) + deliveryFeeAmount - existing.discount).toFixed(2));
+
+    const newEvent = {
+      id: `ev-${Date.now()}`,
+      time: new Date().toISOString(),
+      label: 'Delivery Assigned',
+      desc: `Assigned to ${staffName} with delivery fee ${deliveryFee}`,
+      actor: 'Manager'
+    };
+
+    const updated: Order = {
+      ...existing,
+      deliveryStatus: 'pending_acceptance',
+      deliveryStaffId: staffId,
+      deliveryStaffName: staffName,
+      deliveryFee: deliveryFeeAmount,
+      total: newTotal,
+      timeline: [...(existing.timeline || []), newEvent]
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    addLog('Assign Delivery', `Order ${existing.orderNum} assigned to ${staffName} (Fee: ${deliveryFee})`);
+    syncToFirestore('orders', orderId, updated);
+  };
+
+  const acceptDeliveryFee = (orderId: string) => {
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
+
+    const newEvent = {
+      id: `ev-${Date.now()}`,
+      time: new Date().toISOString(),
+      label: 'Delivery Accepted',
+      desc: 'Customer accepted the delivery fee and confirmed the order.',
+      actor: 'Customer'
+    };
+
+    const updated: Order = {
+      ...existing,
+      status: 'accepted',
+      deliveryStatus: 'preparing',
+      timeline: [...(existing.timeline || []), newEvent]
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    addLog('Accept Delivery Fee', `Customer accepted delivery fee for order ${existing.orderNum}`);
+    syncToFirestore('orders', orderId, updated);
+  };
+
+  const reportOrderItemIssue = (orderId: string, itemId: string, reason: string) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      return {
+        ...o,
+        items: o.items.map(it => it.id === itemId ? { ...it, status: 'issue_reported', issueReason: reason } : it)
+      };
+    }));
+  };
+
+  const resolveOrderItemIssue = (orderId: string, itemId: string, approved: boolean) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      return {
+        ...o,
+        items: o.items.map(it => {
+          if (it.id !== itemId) return it;
+          return { ...it, status: approved ? 'cancelled' : 'received', issueReason: undefined };
+        })
+      };
+    }));
+  };
+
   const updateOrderItemStatus = (orderId: string, itemId: string, itemStatus: OrderItem['status'], actor?: string) => {
     const existing = orders.find(o => o.id === orderId);
     if (!existing) return;
@@ -1035,7 +1192,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const targetOrder = orders.find(o => o.id === orderId);
     if (!targetOrder) return;
 
-    const tenant = tenants.find(t => t.id === targetOrder.tenantId) || mockTenants[0];
+    const tenant = tenants.find(t => t.id === targetOrder.tenantId) || [][0];
     const discountVal = parseFloat(((targetOrder.subtotal * discountPercentage) / 100).toFixed(2));
     const pointsDiscount = redeemPoints * tenant.loyaltyRedeemValue;
     const finalDiscount = discountVal + pointsDiscount;
@@ -1339,6 +1496,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
+  
+  const updateTenantType = (tenantId: string, businessType: string) => {
+    setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, businessType } : t));
+  };
+
   const updateTenantCurrency = (tenantId: string, currency: string, currencySymbol: string) => {
     setTenants(prev => prev.map(t => {
       if (t.id !== tenantId) return t;
@@ -1414,6 +1576,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+    const updatePlanTabs = (planId: string, enabledTabs: string[]) => {
+    setPricingPlans(prev => prev.map(p => p.id === planId ? { ...p, enabledTabs } : p));
+  };
   const updatePlanPrice = (planId: SubscriptionPlan, newPriceUSD: number, newPriceETB: number) => {
     setPricingPlans(prev => prev.map(p => {
       if (p.id !== planId) return p;
@@ -2058,7 +2223,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addStation,
       placeOrder,
       updateOrderStatus,
+      assignDelivery,
+      acceptDeliveryFee,
       updateOrderItemStatus,
+      reportOrderItemIssue,
+      resolveOrderItemIssue,
       processPayment,
       rateAndFeedback,
       cancelOrder,
@@ -2072,8 +2241,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateStaffPermissions,
       toggleTenantStatus,
       updateTenantPlan,
+      subscriptionRequests,
+      superAdminPaymentInfo,
+      setSuperAdminPaymentInfo,
+      requestSubscriptionUpgrade,
+      approveSubscriptionRequest,
+      rejectSubscriptionRequest,
       requestTenantUpgrade,
       updateTenantCurrency,
+      updateTenantType,
       updateTenantProfile,
       approveTenantStatus,
       rejectTenantStatus,
@@ -2083,6 +2259,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteAd,
       pricingPlans,
       updatePlanPrice,
+      updatePlanTabs,
       registerTenant,
       signUpOwnerOnly,
       addLog,

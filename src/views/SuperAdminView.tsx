@@ -27,8 +27,14 @@ export default function SuperAdminView() {
     deleteAd,
     pricingPlans,
     updatePlanPrice,
+    updatePlanTabs,
     addLog,
-    staff
+    staff,
+    subscriptionRequests,
+    approveSubscriptionRequest,
+    rejectSubscriptionRequest,
+    superAdminPaymentInfo,
+    setSuperAdminPaymentInfo
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<string>('health');
@@ -303,6 +309,7 @@ export default function SuperAdminView() {
     { id: 'analytics', label: 'Growth Analytics', icon: TrendingUp, emoji: '📈' },
     { id: 'feature_manager', label: 'Feature Manager', icon: Layers, emoji: '📦' },
     { id: 'advertisements', label: 'Ads Manager', icon: Megaphone, emoji: '📣' },
+    { id: 'subscriptions', label: 'Subscription Approvals', icon: ShieldCheck, emoji: '💳' },
     { id: 'marketplace', label: 'Marketplace', icon: ExternalLink, emoji: '🛒' },
     { id: 'security', label: 'Security Center', icon: ShieldCheck, emoji: '🛡' },
     { id: 'audit_logs', label: 'Audit Logs', icon: History, emoji: '📜' },
@@ -938,16 +945,17 @@ export default function SuperAdminView() {
       )}
 
       {/* 5. FEATURE MANAGER TAB */}
+      
       {activeTab === 'feature_manager' && (
         <div className="space-y-4 animate-in fade-in duration-150">
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
             <div>
               <h3 className="font-sans font-bold text-sm text-slate-800 flex items-center gap-1.5">
                 <Settings className="h-4.5 w-4.5 text-indigo-600" />
-                <span>Granular Feature Access Matrix</span>
+                <span>Granular Tab Access by Plan</span>
               </h3>
               <p className="text-xs text-slate-400 mt-1">
-                Toggle platform capabilities across Free, Growth, and Enterprise subscription levels. Merchant accounts are restricted in real-time.
+                Toggle tabs that businesses can access according to their plans.
               </p>
             </div>
 
@@ -955,74 +963,61 @@ export default function SuperAdminView() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-slate-400 font-bold uppercase tracking-wider text-[10px] border-b border-slate-150">
-                    <th className="p-3">Feature Indicator</th>
-                    <th className="p-3 text-center">Free Tier</th>
-                    <th className="p-3 text-center">Growth Plan</th>
-                    <th className="p-3 text-center">Enterprise</th>
+                    <th className="p-3">Tab Module</th>
+                    {pricingPlans.map(plan => (
+                      <th key={plan.id} className="p-3 text-center">{plan.name}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                   {[
-                    { key: 'orderingEnabled', label: 'Core Digital Table Ordering System' },
-                    { key: 'tableManagementEnabled', label: 'Dynamic Branch Table Mapping' },
-                    { key: 'reservationEnabled', label: 'Advance Reservations Booking' },
-                    { key: 'loyaltyEnabled', label: 'Gamified Loyalty points matrix' },
-                    { key: 'tipsEnabled', label: 'Diner waitstaff gratuity stream' },
-                    { key: 'customerAccountsEnabled', label: 'Customer accounts profiles' },
-                    { key: 'kitchenEnabled', label: 'Real-time Kitchen Display (KDS)' },
-                    { key: 'takeawayEnabled', label: 'Pre-order takeaway pickup' },
-                    { key: 'deliveryEnabled', label: 'Merchant direct delivery tracking' }
-                  ].map((feat) => (
-                    <tr key={feat.key} className="hover:bg-slate-50/40 transition-colors">
-                      <td className="p-3 font-bold text-slate-900">{feat.label}</td>
-                      <td className="p-3 text-center">
-                        <button 
-                          onClick={() => handleToggleFeature(feat.key, 'free')}
-                          className={`mx-auto rounded px-2.5 py-1 text-[10px] font-bold ${
-                            featureMatrix[feat.key].free 
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
-                              : 'bg-rose-50 text-rose-600 border border-rose-100'
-                          }`}
-                        >
-                          {featureMatrix[feat.key].free ? 'STANDARD' : 'LOCKED'}
-                        </button>
-                      </td>
-                      <td className="p-3 text-center">
-                        <button 
-                          onClick={() => handleToggleFeature(feat.key, 'growth')}
-                          className={`mx-auto rounded px-2.5 py-1 text-[10px] font-bold ${
-                            featureMatrix[feat.key].growth 
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
-                              : 'bg-rose-50 text-rose-600 border border-rose-100'
-                          }`}
-                        >
-                          {featureMatrix[feat.key].growth ? 'STANDARD' : 'LOCKED'}
-                        </button>
-                      </td>
-                      <td className="p-3 text-center">
-                        <button 
-                          onClick={() => handleToggleFeature(feat.key, 'enterprise')}
-                          className={`mx-auto rounded px-2.5 py-1 text-[10px] font-bold ${
-                            featureMatrix[feat.key].enterprise 
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
-                              : 'bg-rose-50 text-rose-600 border border-rose-100'
-                          }`}
-                        >
-                          {featureMatrix[feat.key].enterprise ? 'STANDARD' : 'LOCKED'}
-                        </button>
-                      </td>
+                    { id: 'dashboard', label: 'Dashboard / Reports' },
+                    { id: 'orders', label: 'Order Manager' },
+                    { id: 'menu', label: 'Menu Designer' },
+                    { id: 'tables', label: 'QR Tables' },
+                    { id: 'staff', label: 'Staff' },
+                    { id: 'payments', label: 'Payments' },
+                    { id: 'loyalty', label: 'Loyalty' },
+                    { id: 'subscriptions', label: 'Subscriptions' },
+                    { id: 'reservations', label: 'Reservations' },
+                    { id: 'inventory', label: 'Inventory' },
+                    { id: 'ads', label: 'Marketing Ads' },
+                    { id: 'marketplace', label: 'Marketplace' },
+                    { id: 'settings', label: 'SaaS Plan Settings' }
+                  ].map(tab => (
+                    <tr key={tab.id} className="hover:bg-slate-50/40 transition-colors">
+                      <td className="p-3 font-bold text-slate-900">{tab.label}</td>
+                      {pricingPlans.map(plan => {
+                        const isEnabled = plan.enabledTabs?.includes(tab.id);
+                        return (
+                          <td key={plan.id} className="p-3 text-center">
+                            <button 
+                              onClick={() => {
+                                const newTabs = isEnabled 
+                                  ? (plan.enabledTabs || []).filter(t => t !== tab.id)
+                                  : [...(plan.enabledTabs || []), tab.id];
+                                updatePlanTabs(plan.id, newTabs);
+                              }}
+                              className={`mx-auto rounded px-2.5 py-1 text-[10px] font-bold ${
+                                isEnabled 
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
+                                  : 'bg-rose-50 text-rose-600 border border-rose-100'
+                              }`}
+                            >
+                              {isEnabled ? 'ENABLED' : 'HIDDEN'}
+                            </button>
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-[11px] text-amber-800 leading-relaxed">
-              ⚠️ <strong>Warning:</strong> Disallowing standard features from active subscription levels will degrade active restaurant menus immediately. Always verify customer impact before toggling live access bounds.
-            </div>
           </div>
         </div>
       )}
+
 
       {/* 8. SECURITY CENTER TAB */}
       {activeTab === 'security' && (
@@ -1103,7 +1098,7 @@ export default function SuperAdminView() {
                   </h4>
                   <input
                     type="text"
-                    placeholder="Search users..."
+                    
                     value={userSearchTerm}
                     onChange={(e) => setUserSearchTerm(e.target.value)}
                     className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold bg-white focus:outline-none"
@@ -1276,7 +1271,7 @@ export default function SuperAdminView() {
                   required
                   value={adTitle}
                   onChange={(e) => setAdTitle(e.target.value)}
-                  placeholder="e.g. 20% Off Weekend Espresso!"
+                  
                   className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none bg-white"
                 />
               </div>
@@ -1288,7 +1283,7 @@ export default function SuperAdminView() {
                   rows={2}
                   value={adSubtitle}
                   onChange={(e) => setAdSubtitle(e.target.value)}
-                  placeholder="e.g. Try Carlos fine espresso with amazing discount this weekend."
+                  
                   className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none bg-white"
                 />
               </div>
@@ -1299,7 +1294,7 @@ export default function SuperAdminView() {
                   type="url"
                   value={adImageUrl}
                   onChange={(e) => setAdImageUrl(e.target.value)}
-                  placeholder="e.g. https://images.unsplash.com/... or blank"
+                  
                   className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none bg-white"
                 />
               </div>

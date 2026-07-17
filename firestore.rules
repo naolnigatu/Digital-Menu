@@ -1,0 +1,120 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users & Authentication
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+    
+    // Business Entities
+    match /businesses/{businessId} {
+      allow read, write: if true;
+    }
+    
+    // Memberships & Roles
+    match /memberships/{membershipId} {
+      allow read, write: if true;
+    }
+    
+    // Branch Locations
+    match /branches/{branchId} {
+      allow read, write: if true;
+    }
+    
+    // Core Settings
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+    
+    // System Plans
+    match /plans/{planId} {
+      allow read, write: if true;
+    }
+    
+    // Categories
+    match /categories/{categoryId} {
+      allow read, write: if true;
+    }
+    
+    // Menu Items
+    match /menu_items/{itemId} {
+      allow read, write: if true;
+    }
+    
+    // Tables
+    match /tables/{tableId} {
+      allow read, write: if true;
+    }
+    
+    // Stations
+    match /stations/{stationId} {
+      allow read, write: if true;
+    }
+    
+    // Orders
+    match /orders/{orderId} {
+      allow read, write: if true;
+    }
+    
+    // Advertisements
+    match /ads/{adId} {
+      allow read, write: if true;
+    }
+    
+    // Pricing Plans
+    match /pricing_plans/{planId} {
+      allow read, write: if true;
+    }
+    
+    // Meal Subscription Plans
+    match /meal_subscription_plans/{planId} {
+      allow read, write: if true;
+    }
+    
+    // Customer Subscriptions
+    match /customer_subscriptions/{subId} {
+      allow read, write: if true;
+    }
+    
+    // Reservations
+    match /reservations/{reservationId} {
+      allow read, write: if true;
+    }
+    
+    // Ingredients
+    match /ingredients/{ingredientId} {
+      allow read, write: if true;
+    }
+    
+    // Stock Movements
+    match /stock_movements/{movementId} {
+      allow read, write: if true;
+    }
+    
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
+    
+    // Installed Extensions
+    match /installed_extensions/{extensionId} {
+      allow read, write: if true;
+    }
+    
+    // System & Global Settings
+    match /system_settings/{settingId} {
+      allow read, write: if true;
+    }
+    
+    // Marketplace Extensions
+    match /marketplace_extensions/{extensionId} {
+      allow read, write: if true;
+    }
+  }
+}

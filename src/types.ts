@@ -1,8 +1,9 @@
 export type SubscriptionPlan = 'free' | 'growth' | 'enterprise';
 
-export type UserRole = 'super_admin' | 'owner' | 'manager' | 'cashier' | 'waiter' | 'kitchen' | 'customer';
+export type UserRole = 'super_admin' | 'owner' | 'manager' | 'cashier' | 'waiter' | 'kitchen' | 'customer' | 'delivery';
 
 export interface Tenant {
+  businessType?: string;
   id: string;
   name: string;
   slug: string;
@@ -20,6 +21,7 @@ export interface Tenant {
   loyaltyMinRedeemPoints: number; // minimum points to start redeeming
   loyaltyRedeemValue: number; // value of 1 point in currency
   bankAccount?: string; // Bank details for advance payment
+  mealSubscriptionDiscountPercent?: number;
 }
 
 export interface Branch {
@@ -63,6 +65,7 @@ export interface MenuItem {
   isAvailable: boolean;
   preparationStationId: string;
   modifiers: ModifierGroup[];
+  portions?: { name: string; price: number }[];
   translations?: Record<string, { name: string; description: string }>; // e.g., 'am' for Amharic
   prepTime?: number; // prep time in minutes
   availability?: 'Available' | 'Sold Out' | 'Hidden';
@@ -86,6 +89,7 @@ export interface Table {
   number: string;
   section: 'Indoor' | 'Outdoor' | 'Terrace';
   status: 'empty' | 'waiting' | 'eating' | 'dirty';
+  issueReason?: string;
   qrUrl: string; // encoded link
 }
 
@@ -100,7 +104,8 @@ export interface OrderItem {
     optionName: string;
     price: number;
   }[];
-  status: 'received' | 'cooking' | 'ready' | 'delivered';
+  status: 'received' | 'cooking' | 'ready' | 'delivered' | 'issue_reported' | 'cancelled';
+  issueReason?: string;
   notes?: string;
   assignedStationId: string;
 }
@@ -136,6 +141,7 @@ export interface Order {
   customerAccount?: boolean;
   items: OrderItem[];
   status: OrderStatus;
+  issueReason?: string;
   paymentStatus: PaymentStatus;
   paymentMethod?: 'cash' | 'card' | 'mobile_money' | 'bank_transfer' | string;
   discount: number; // Absolute value
@@ -161,6 +167,21 @@ export interface Order {
   timeline: TimelineEvent[];
   kitchenNotes?: KitchenNote[];
   refundDetails?: RefundDetails;
+  
+  // Delivery Module fields
+  deliveryAddress?: string;
+  deliveryLandmark?: string;
+  deliveryInstructions?: string;
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
+  deliveryFee?: number;
+  deliveryStatus?: 'pending_approval' | 'pending_acceptance' | 'accepted' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'received' | 'issue' | string;
+  deliveryStaffId?: string;
+  deliveryStaffName?: string;
+  deliveryRating?: number;
+  deliveryComment?: string;
+  deliveryPaymentCollected?: boolean;
+  deliveryPaymentNote?: string;
 }
 
 export interface Staff {
@@ -227,6 +248,7 @@ export interface PlatformAd {
   actionUrl?: string;
   active: boolean;
   status: 'pending' | 'approved' | 'rejected' | 'disabled' | 'removed';
+  issueReason?: string;
   startDate?: string;
   endDate?: string;
   targetAudience?: string;
@@ -243,6 +265,7 @@ export interface Reservation {
   time: string;
   guests: number;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'completed';
+  issueReason?: string;
   tableId?: string;
   specialRequests?: string;
   timeline: TimelineEvent[];
@@ -281,6 +304,7 @@ export interface MarketplaceExtension {
   category: 'Integration' | 'Premium Feature' | 'Hardware';
   developer: string;
   status: 'active' | 'deprecated';
+  issueReason?: string;
 }
 
 export interface InstalledExtension {
@@ -288,6 +312,7 @@ export interface InstalledExtension {
   tenantId: string;
   installedAt: string;
   status: 'active' | 'suspended';
+  issueReason?: string;
 }
 
 export interface DinexNotification {
@@ -324,6 +349,7 @@ export interface Business {
   createdAt: string;
   updatedAt: string;
   status: 'active' | 'suspended' | 'pending_approval' | 'rejected';
+  issueReason?: string;
 }
 
 export interface Membership {
@@ -333,6 +359,7 @@ export interface Membership {
   branchIds: string[];
   permissions: string[];
   status: 'active' | 'pending' | 'suspended';
+  issueReason?: string;
   createdAt: string;
 }
 
@@ -343,6 +370,7 @@ export interface DinexBranch {
   location: string;
   phone: string;
   status: 'active' | 'inactive';
+  issueReason?: string;
   createdAt: string;
 }
 
@@ -356,6 +384,8 @@ export interface BusinessSettings {
   kitchenEnabled: boolean;
   takeawayEnabled: boolean;
   deliveryEnabled: boolean;
+  deliveryApprovalMode?: 'manual' | 'automatic';
+  predefinedDeliveryFee?: number;
 }
 
 export interface CustomRole {
@@ -419,7 +449,8 @@ export interface CustomerMealSubscription {
   startDate: string;
   endDate: string;
   nextRenewalDate: string;
-  status: 'active' | 'expired' | 'cancelled';
+  status: 'active' | 'expired' | 'cancelled' | 'pending_approval';
+  issueReason?: string;
 }
 
 export interface SavedAddress {
@@ -433,6 +464,7 @@ export interface CustomerProfile {
   email: string;
   name: string;
   phone?: string;
+  tenantId?: string; // Associated business
   savedAddresses: SavedAddress[];
   savedFavorites: string[];
   loyaltyPoints: number;
@@ -447,3 +479,15 @@ export interface RefundDetails {
 }
 
 
+
+export interface SubscriptionRequest {
+  id: string;
+  tenantId: string;
+  planId: string;
+  duration: number; // in months: 1, 3, 6, 12, 24
+  paymentMethod: string;
+  transactionId?: string;
+  proofImageUrl?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+}
