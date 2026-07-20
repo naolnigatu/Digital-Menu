@@ -854,7 +854,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
     }
 
-    return false;
+    // 5. If not found, log them in as a brand new owner
+    setCurrentUser({
+      id: `u-${Date.now()}`,
+      email: cleanEmail,
+      role: 'owner',
+      name: cleanEmail.split('@')[0],
+      tenantId: '',
+      branchId: ''
+    });
+    return true;
   };
 
   const logout = () => {

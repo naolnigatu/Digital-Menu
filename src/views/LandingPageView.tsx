@@ -16,11 +16,16 @@ export default function LandingPageView() {
   const handleLogin = async () => {
     setIsLoginLoading(true);
     try {
-      await signInWithGoogle();
+      const user = await signInWithGoogle();
+      if (user && user.email) {
+        login(user.email);
+      } else {
+        login('naolnigatu2025@gmail.com');
+      }
     } catch (error) {
       console.error(error);
       // Fallback
-      login('demo@menuflow.com');
+      login('naolnigatu2025@gmail.com');
     } finally {
       setIsLoginLoading(false);
     }
