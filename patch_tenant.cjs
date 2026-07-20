@@ -1,9 +1,19 @@
 const fs = require('fs');
-let code = fs.readFileSync('src/types.ts', 'utf8');
+let code = fs.readFileSync('src/context/AppContext.tsx', 'utf8');
 
 code = code.replace(
-  '  bankAccount?: string; // Bank details for advance payment\n}',
-  '  bankAccount?: string; // Bank details for advance payment\n  mealSubscriptionDiscountPercent?: number;\n}'
+  "updateTenantProfile: (tenantId: string, logoUrl: string, bankAccount: string) => void;",
+  "updateTenantProfile: (tenantId: string, logoUrl: string, bankAccount: string, mealSubscriptionDiscountPercent?: number) => void;"
 );
 
-fs.writeFileSync('src/types.ts', code);
+code = code.replace(
+  "const updateTenantProfile = (tenantId: string, logoUrl: string, bankAccount: string) => {",
+  "const updateTenantProfile = (tenantId: string, logoUrl: string, bankAccount: string, mealSubscriptionDiscountPercent?: number) => {"
+);
+
+code = code.replace(
+  "const updated = { ...t, logoUrl, bankAccount };",
+  "const updated = { ...t, logoUrl, bankAccount, mealSubscriptionDiscountPercent };"
+);
+
+fs.writeFileSync('src/context/AppContext.tsx', code);

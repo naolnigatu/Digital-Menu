@@ -22,6 +22,7 @@ export interface Tenant {
   loyaltyRedeemValue: number; // value of 1 point in currency
   bankAccount?: string; // Bank details for advance payment
   mealSubscriptionDiscountPercent?: number;
+  mealSubscriptionConfig?: SubscriptionConfig;
 }
 
 export interface Branch {
@@ -326,12 +327,29 @@ export interface DinexNotification {
   link?: string;
 }
 
+
+export interface LandingPageConfig {
+  heroTitle: string;
+  heroSubtitle: string;
+  heroBackgroundType: 'image' | 'video' | 'color';
+  heroBackgroundUrl: string;
+  aboutTitle: string;
+  aboutText: string;
+  featuresTitle: string;
+  featuresSubtitle: string;
+  contactEmail: string;
+}
+
 export interface GlobalSettings {
+  landingPageConfig?: LandingPageConfig;
   supportedCountries: string[];
   supportedCurrencies: string[];
   maintenanceMode: boolean;
   announcements: string[];
   globalFeatureFlags: Record<string, boolean>;
+  allowedDiningServiceTypes?: string[];
+  allowedSubscriptionDurations?: number[];
+  allowedPaymentMethods?: string[];
 }
 
 export interface Business {
@@ -350,6 +368,7 @@ export interface Business {
   updatedAt: string;
   status: 'active' | 'suspended' | 'pending_approval' | 'rejected';
   issueReason?: string;
+  subscriptionPlan?: SubscriptionPlan;
 }
 
 export interface Membership {
@@ -386,6 +405,8 @@ export interface BusinessSettings {
   deliveryEnabled: boolean;
   deliveryApprovalMode?: 'manual' | 'automatic';
   predefinedDeliveryFee?: number;
+  enabledDiningServiceTypes?: string[];
+  subscriptionDurations?: number[];
 }
 
 export interface CustomRole {
@@ -421,37 +442,67 @@ export interface LoyaltyHistoryEntry {
   description: string;
 }
 
-export interface MealSubscriptionPlan {
+export interface MealSubscriptionPackage {
   id: string;
   tenantId: string;
   name: string;
-  monthlyPrice: number;
-  discountPercentage: number;
+  description: string;
+  type: 'fixed' | 'build_your_own';
   durationDays: number;
-  mealsPerDay: number;
-  mealsPerWeek: number;
-  allowedOrderingTimes: string;
-  menuItemIds: string[];
+  
+  // Fixed Package Rules
+  price: number;
+  items?: { menuItemId: string, quantity: number }[]; // Array of items and their bundled quantities
+  
+  // Build Your Own Rules
+  maxCredits?: number;
+  pricePerCredit?: number; // E.g., if 1 credit = $5
+  eligibleMenuItemIds?: string[]; // Empty means all allowed
+  
+  isActive: boolean;
 }
 
 export interface CustomerMealSubscription {
   id: string;
   customerId: string;
   tenantId: string;
-  planId: string;
-  menuItemIds: string[];
-  mealsPerDay: number;
-  mealsPerWeek: number;
-  mealsUsedToday: number;
-  mealsUsedThisWeek: number;
-  mealsUsedTotal: number;
-  mealsRemainingTotal: number;
+  packageId: string;
+  
+  credits: {
+    menuItemId: string;
+    total: number;
+    used: number;
+    remaining: number;
+  }[];
+  totalCreditsRemaining: number;
+  
   startDate: string;
   endDate: string;
-  nextRenewalDate: string;
   status: 'active' | 'expired' | 'cancelled' | 'pending_approval';
-  issueReason?: string;
+  
+  redemptionsToday: number; // calculated transiently or stored
+  lastRedemptionDate?: string; 
+  
+  issueReason?: string; // e.g. for rejected approvals
 }
+
+export interface MealRedemptionHistory {
+  id: string;
+  tenantId: string;
+  subscriptionId: string;
+  customerId: string;
+  menuItemId: string;
+  orderId: string;
+  redeemedAt: string;
+}
+
+export interface SubscriptionConfig {
+  flexibleRedemption: boolean; // default true
+  dailyRedemptionLimit?: number; // max meals per day
+  allowedRedemptionHours?: { start: string; end: string }; // e.g. "09:00", "17:00"
+  allowedOrderTypes: ('dine_in' | 'takeaway' | 'pickup' | 'delivery' | 'drive_through')[];
+}
+
 
 export interface SavedAddress {
   id: string;

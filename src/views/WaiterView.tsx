@@ -43,7 +43,7 @@ export default function WaiterView() {
   // Active Order for selected table (if exists)
   const activeOrder = useMemo(() => {
     if (!selectedTable) return undefined;
-    return orders.find(o => o.tableId === selectedTable.id && o.status !== 'completed' && o.status !== 'cancelled');
+    return orders.find(o => o.tableId === selectedTable.id && o.status !== 'completed' && o.status !== 'cancelled' && o.paymentVerificationStatus !== 'pending' && o.paymentVerificationStatus !== 'rejected');
   }, [orders, selectedTable]);
 
   const handleClearTable = (tableId: string) => {
@@ -55,11 +55,7 @@ export default function WaiterView() {
 
   const handleAddToCart = (item: MenuItem) => {
     // Basic defaults for simplicity
-    const defaultMods = item.modifiers.map(g => ({
-      groupName: g.name,
-      optionName: g.options[0].name,
-      price: g.options[0].price
-    }));
+    const defaultMods: {groupName: string, optionName: string, price: number}[] = [];
 
     setCart(prev => {
       const existing = prev.find(i => i.item.id === item.id);
@@ -129,8 +125,8 @@ export default function WaiterView() {
           
           <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
             {branchTables.map((table) => {
-              const hasOrder = orders.some(o => o.tableId === table.id && o.status !== 'completed' && o.status !== 'cancelled');
-              const activeTblOrder = orders.find(o => o.tableId === table.id && o.status !== 'completed' && o.status !== 'cancelled');
+              const hasOrder = orders.some(o => o.tableId === table.id && o.status !== 'completed' && o.status !== 'cancelled' && o.paymentVerificationStatus !== 'pending' && o.paymentVerificationStatus !== 'rejected');
+              const activeTblOrder = orders.find(o => o.tableId === table.id && o.status !== 'completed' && o.status !== 'cancelled' && o.paymentVerificationStatus !== 'pending' && o.paymentVerificationStatus !== 'rejected');
 
               return (
                 <button

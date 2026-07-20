@@ -8,8 +8,8 @@ import {
 import { useApp } from '../context/AppContext';
 import { signInWithGoogle } from '../lib/firebase';
 
-export default function LandingPageView({ onEnterApp }: { onEnterApp: () => void }) {
-  const { login } = useApp();
+export default function LandingPageView() {
+  const { login, pricingPlans, marketplaceExtensions, globalSettings } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoginLoading, setIsLoginLoading] = useState(false);
   
@@ -26,9 +26,21 @@ export default function LandingPageView({ onEnterApp }: { onEnterApp: () => void
     }
   };
 
+  const config = globalSettings.landingPageConfig || {
+    heroTitle: "Run Your Restaurant Business with AI",
+    heroSubtitle: "Dinex is the ultimate all-in-one platform for modern restaurants, cafes, and multi-branch food chains.",
+    heroBackgroundType: 'video',
+    heroBackgroundUrl: 'https://cdn.pixabay.com/video/2015/09/25/744-139366606_tiny.mp4',
+    aboutTitle: "Why businesses choose Dinex",
+    aboutText: "Join thousands of restaurants that have transformed their operations, increased revenue, and delighted customers using our platform.",
+    featuresTitle: "Everything you need to succeed",
+    featuresSubtitle: "From digital menus to kitchen displays, we've got your entire restaurant operation covered.",
+    contactEmail: "{config.contactEmail}"
+  };
+  
   const navLinks = [
     { name: 'Features', href: '#features' },
-    { name: 'Solutions', href: '#solutions' },
+    { name: 'About', href: '#about' },
     { name: 'Pricing', href: '#pricing' },
     { name: 'Marketplace', href: '#marketplace' },
     { name: 'FAQ', href: '#faq' },
@@ -51,20 +63,15 @@ export default function LandingPageView({ onEnterApp }: { onEnterApp: () => void
                 {navLinks.map((link) => (
                   <a key={link.name} href={link.href} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">
                     {link.name}
+                  
                   </a>
                 ))}
               </div>
             </div>
             <div className="hidden lg:flex items-center space-x-4">
-              <button 
-                onClick={handleLogin}
-                disabled={isLoginLoading}
-                className="text-sm font-semibold text-slate-700 hover:text-indigo-600 transition-colors"
-              >
-                {isLoginLoading ? 'Logging in...' : 'Login'}
-              </button>
+              <button onClick={handleLogin} disabled={isLoginLoading} className="text-sm font-semibold text-slate-700 hover:text-indigo-600 transition-colors">{isLoginLoading ? 'Logging in...' : 'Login'}</button>
               <button
-                onClick={onEnterApp}
+                
                 className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition-all hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
               >
                 View Demo
@@ -83,8 +90,9 @@ export default function LandingPageView({ onEnterApp }: { onEnterApp: () => void
             <div className="lg:hidden py-4 border-t border-slate-100 space-y-4">
               {navLinks.map((link) => (
                 <a key={link.name} href={link.href} className="block text-base font-medium text-slate-600 hover:text-indigo-600 py-2">
-                  {link.name}
-                </a>
+                    {link.name}
+                
+                  </a>
               ))}
               <div className="pt-4 flex flex-col gap-3">
                 <button 
@@ -94,7 +102,7 @@ export default function LandingPageView({ onEnterApp }: { onEnterApp: () => void
                   Login
                 </button>
                 <button
-                  onClick={onEnterApp}
+                  
                   className="w-full text-center py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-500"
                 >
                   View Demo
@@ -108,31 +116,40 @@ export default function LandingPageView({ onEnterApp }: { onEnterApp: () => void
       <main>
         {/* Hero Section */}
         <div className="relative pt-32 pb-20 sm:pt-40 sm:pb-24 lg:pb-32 overflow-hidden">
-          <div className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80" aria-hidden="true">
-            <div className="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-[#ff80b5] to-[#9089fc] opacity-20 sm:left-[calc(50%-30rem)] sm:w-[72.1875rem]" style={{ clipPath: 'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)' }}></div>
-          </div>
+          {/* Background */}
+          {config.heroBackgroundType === 'video' && config.heroBackgroundUrl ? (
+            <>
+              <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover -z-20">
+                <source src={config.heroBackgroundUrl} type="video/mp4" />
+              </video>
+              <div className="absolute inset-0 bg-slate-900/60 -z-10"></div>
+            </>
+          ) : config.heroBackgroundType === 'image' && config.heroBackgroundUrl ? (
+            <>
+              <img src={config.heroBackgroundUrl} alt="Background" className="absolute inset-0 w-full h-full object-cover -z-20" />
+              <div className="absolute inset-0 bg-slate-900/60 -z-10"></div>
+            </>
+          ) : (
+            <div className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80" aria-hidden="true">
+              <div className="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-[#ff80b5] to-[#9089fc] opacity-20 sm:left-[calc(50%-30rem)] sm:w-[72.1875rem]" style={{ clipPath: 'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)' }}></div>
+            </div>
+          )}
+          
           
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-            <h1 className="mx-auto max-w-4xl font-display text-5xl font-extrabold tracking-tight text-slate-900 sm:text-7xl">
-              Modern Digital Restaurant & <br className="hidden sm:block" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">Business Management Platform</span>
+            <h1 className={`mx-auto max-w-4xl font-display text-5xl font-extrabold tracking-tight sm:text-7xl ${config.heroBackgroundType === 'color' || !config.heroBackgroundUrl ? 'text-slate-900' : 'text-white drop-shadow-lg'}`}>
+              {config.heroTitle}
             </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-              Manage menus, orders, staff, kitchen, reservations, delivery, customers, payments, analytics, and more—all from one platform.
+            <p className={`mx-auto mt-6 max-w-2xl text-lg leading-8 ${config.heroBackgroundType === 'color' || !config.heroBackgroundUrl ? 'text-slate-600' : 'text-slate-200 drop-shadow-md'}`}>
+              {config.heroSubtitle}
             </p>
             <div className="mt-10 flex items-center justify-center gap-x-6">
-              <button 
-                onClick={handleLogin}
-                className="rounded-full bg-indigo-600 px-8 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all hover:scale-105 hover:shadow-lg hover:shadow-indigo-500/25"
-              >
+              <button onClick={handleLogin} className="rounded-full bg-indigo-600 px-8 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all hover:scale-105 hover:shadow-lg hover:shadow-indigo-500/25">
                 Get Started
               </button>
-              <button 
-                onClick={onEnterApp}
-                className="text-sm font-semibold leading-6 text-slate-900 group flex items-center gap-2"
-              >
+              <a href="#demo-video" className={`text-sm font-semibold leading-6 group flex items-center gap-2 ${config.heroBackgroundType === 'color' || !config.heroBackgroundUrl ? 'text-slate-900' : 'text-white'}`}>
                 View Demo <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </button>
+              </a>
             </div>
           </div>
 
@@ -188,7 +205,7 @@ export default function LandingPageView({ onEnterApp }: { onEnterApp: () => void
         </div>
 
         {/* Trust Section */}
-        <div className="py-12 bg-white sm:py-16">
+        <div id="about" className="py-12 bg-white sm:py-16">
           <div className="mx-auto max-w-7xl px-6 lg:px-8">
             <p className="text-center text-sm font-semibold leading-8 text-slate-500 uppercase tracking-wider mb-8">
               Why businesses choose Dinex
@@ -307,41 +324,71 @@ export default function LandingPageView({ onEnterApp }: { onEnterApp: () => void
             </div>
             
             <div className="mx-auto grid max-w-md grid-cols-1 gap-8 lg:max-w-5xl lg:grid-cols-3">
-              {[
-                { name: 'Free', price: '$0', features: ['1 Branch', 'Basic Menu Design', 'QR Ordering', 'Community Support'] },
-                { name: 'Pro', price: '$49', popular: true, features: ['3 Branches', 'Advanced Menu Modifiers', 'Kitchen Display System', 'Priority Support', 'Staff Management'] },
-                { name: 'Enterprise', price: 'Custom', features: ['Unlimited Branches', 'White-labeling', 'Custom Integrations', 'Dedicated Account Manager', 'SLA Agreement'] }
-              ].map((tier) => (
-                <div key={tier.name} className={`flex flex-col justify-between rounded-3xl bg-white p-8 xl:p-10 ring-1 ${tier.popular ? 'ring-indigo-600 shadow-xl relative z-10' : 'ring-slate-200'}`}>
-                  {tier.popular && (
+              {pricingPlans.map((tier, idx) => {
+                const isPopular = idx === 1; // Middle plan is popular
+                return (
+                <div key={tier.id} className={`flex flex-col justify-between rounded-3xl bg-white p-8 xl:p-10 ring-1 ${isPopular ? 'ring-indigo-600 shadow-xl relative z-10' : 'ring-slate-200'}`}>
+                  {isPopular && (
                     <div className="absolute top-0 right-6 -translate-y-1/2 rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold leading-5 text-white">Recommended</div>
                   )}
                   <div>
                     <div className="flex items-center justify-between gap-x-4">
-                      <h3 className={`text-lg font-semibold leading-8 ${tier.popular ? 'text-indigo-600' : 'text-slate-900'}`}>{tier.name}</h3>
+                      <h3 className={`text-lg font-semibold leading-8 ${isPopular ? 'text-indigo-600' : 'text-slate-900'}`}>{tier.name}</h3>
                     </div>
+                    <p className="mt-4 text-sm text-slate-500 line-clamp-2 h-10">{tier.description}</p>
                     <p className="mt-6 flex items-baseline gap-x-1">
-                      <span className="text-4xl font-bold tracking-tight text-slate-900">{tier.price}</span>
-                      {tier.price !== 'Custom' && <span className="text-sm font-semibold leading-6 text-slate-600">/month</span>}
+                      <span className="text-4xl font-bold tracking-tight text-slate-900">${tier.priceUSD}</span>
+                      <span className="text-sm font-semibold leading-6 text-slate-600">/month</span>
                     </p>
                     <ul className="mt-8 space-y-3 text-sm leading-6 text-slate-600">
-                      {tier.features.map((feature) => (
-                        <li key={feature} className="flex gap-x-3">
+                      {tier.features.map((feature, i) => (
+                        <li key={i} className="flex gap-x-3">
                           <CheckCircle2 className="h-6 w-5 flex-none text-indigo-600" aria-hidden="true" />
                           {feature}
                         </li>
                       ))}
                     </ul>
                   </div>
-                  <button className={`mt-8 block rounded-md px-3 py-2 text-center text-sm font-semibold leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${tier.popular ? 'bg-indigo-600 text-white hover:bg-indigo-500 focus-visible:outline-indigo-600' : 'bg-slate-50 text-slate-900 ring-1 ring-inset ring-slate-200 hover:ring-slate-300'}`}>
-                    {tier.price === 'Custom' ? 'Contact Sales' : 'Get Started'}
-                  </button>
+                  <button onClick={handleLogin} className={`mt-8 block w-full rounded-md px-3 py-2 text-center text-sm font-semibold leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-colors ${isPopular ? 'bg-indigo-600 text-white hover:bg-indigo-500 focus-visible:outline-indigo-600' : 'bg-slate-50 text-slate-900 ring-1 ring-inset ring-slate-200 hover:ring-slate-300'}`}>Get Started</button>
                 </div>
-              ))}
+              )})}
             </div>
             
             <div className="mt-10 text-center">
                <button className="text-sm font-semibold text-indigo-600 hover:text-indigo-500">Compare all plan features <span aria-hidden="true">&rarr;</span></button>
+            </div>
+          </div>
+        </div>
+
+                {/* Marketplace Section */}
+        <div id="marketplace" className="py-24 bg-white">
+          <div className="mx-auto max-w-7xl px-6 lg:px-8">
+            <div className="mx-auto max-w-2xl sm:text-center mb-16">
+              <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Platform Integrations</h2>
+              <p className="mt-6 text-lg leading-8 text-slate-600">Extend your Dinex capabilities with third-party tools and plugins from our marketplace.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              {(marketplaceExtensions && marketplaceExtensions.length > 0 ? marketplaceExtensions : [
+                { id: 'ext-stripe', name: 'Stripe Payments', description: 'Accept credit card payments globally.', provider: 'Stripe', price: 'Free', iconUrl: '' },
+                { id: 'ext-chapa', name: 'Chapa Integration', description: 'Local payment gateway integration.', provider: 'Chapa', price: 'Free', iconUrl: '' },
+                { id: 'ext-whatsapp', name: 'WhatsApp Bot', description: 'Automated order notifications via WhatsApp.', provider: 'Dinex Auth', price: '$9/mo', iconUrl: '' }
+              ]).map((ext) => (
+                <div key={ext.id} className="bg-slate-50 border border-slate-100 rounded-2xl p-6 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="w-12 h-12 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center text-indigo-600">
+                      {ext.iconUrl ? <img src={ext.iconUrl} alt={ext.name} className="w-8 h-8 rounded" /> : <Cloud className="w-6 h-6" />}
+                    </div>
+                    <span className="text-xs font-bold text-slate-500 bg-slate-200/50 px-2.5 py-1 rounded-full">{ext.price === '0' ? 'Free' : (ext.price || 'Free')}</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900">{ext.name}</h3>
+                  <p className="text-xs text-slate-500 mb-4 mt-1">by {ext.provider}</p>
+                  <p className="text-sm text-slate-600 line-clamp-2">{ext.description}</p>
+                  <button onClick={handleLogin} className="mt-6 w-full text-center text-sm font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 py-2 rounded-lg transition-colors">
+                    Add Integration
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -397,9 +444,7 @@ export default function LandingPageView({ onEnterApp }: { onEnterApp: () => void
               >
                 Get Started
               </button>
-              <button onClick={onEnterApp} className="text-sm font-semibold leading-6 text-white group flex items-center gap-2">
-                View Demo <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </button>
+              <a href="#demo-video" className="text-sm font-semibold leading-6 text-white group flex items-center gap-2">View Demo <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></a>
             </div>
           </div>
         </div>
@@ -420,9 +465,9 @@ export default function LandingPageView({ onEnterApp }: { onEnterApp: () => void
               <a href="#features" className="hover:text-indigo-600">Features</a>
               <a href="#pricing" className="hover:text-indigo-600">Pricing</a>
               <a href="#marketplace" className="hover:text-indigo-600">Marketplace</a>
-              <a href="#" className="hover:text-indigo-600">Privacy Policy</a>
-              <a href="#" className="hover:text-indigo-600">Terms</a>
-              <a href="#" className="hover:text-indigo-600">Contact</a>
+              <a href="#privacy" className="hover:text-indigo-600">Privacy Policy</a>
+              <a href="#terms" className="hover:text-indigo-600">Terms</a>
+              <a href="mailto:{config.contactEmail}" className="hover:text-indigo-600">Contact</a>
             </div>
             
             <div className="text-sm text-slate-500">

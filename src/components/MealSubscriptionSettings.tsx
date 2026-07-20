@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { MealSubscriptionPlan, MenuItem } from '../types';
-import { Check, Save, X, Plus, Trash2, Calendar, Clock, DollarSign, ListPlus, Edit3 } from 'lucide-react';
+import { MealSubscriptionPackage, MenuItem, SubscriptionConfig } from '../types';
+import { Check, Save, X, Plus, Trash2, Calendar, Clock, DollarSign, ListPlus, Edit3, Settings } from 'lucide-react';
 
 interface MealSubscriptionSettingsProps {
   tenantId: string;
@@ -11,124 +11,145 @@ interface MealSubscriptionSettingsProps {
 export default function MealSubscriptionSettings({ tenantId, onClose }: MealSubscriptionSettingsProps) {
   const { 
     mealSubscriptionPlans, 
-    addMealSubscriptionPlan, 
-    updateMealSubscriptionPlan, 
-    deleteMealSubscriptionPlan,
+    addMealSubscriptionPackage, 
+    updateMealSubscriptionPackage, 
+    deleteMealSubscriptionPackage,
     menuItems,
-    tenants
+    tenants,
+    updateTenant
   } = useApp();
 
-  const tenant = tenants?.find(t => t.id === tenantId) || tenants?.[0];
+  const tenant = tenants?.find(t => t.id === tenantId);
   const currencySymbol = tenant?.currencySymbol || '$';
-  const plansList = (mealSubscriptionPlans && Array.isArray(mealSubscriptionPlans[tenantId])) 
+  
+  const packagesList = (mealSubscriptionPlans && Array.isArray(mealSubscriptionPlans[tenantId])) 
     ? mealSubscriptionPlans[tenantId] 
     : [];
+
   const tenantMenuItems = menuItems?.[tenantId] || [];
 
-  // Editing state
-  const [editingPlan, setEditingPlan] = useState<MealSubscriptionPlan | null>(null);
+  const [activeTab, setActiveTab] = useState<'packages' | 'config'>('packages');
+
+  // Config State
+  const [flexibleRedemption, setFlexibleRedemption] = useState(tenant?.mealSubscriptionConfig?.flexibleRedemption ?? true);
+  const [dailyRedemptionLimit, setDailyRedemptionLimit] = useState(tenant?.mealSubscriptionConfig?.dailyRedemptionLimit || 0);
+  const [allowedOrderTypes, setAllowedOrderTypes] = useState<string[]>(tenant?.mealSubscriptionConfig?.allowedOrderTypes || ['dine_in', 'takeaway', 'pickup', 'delivery', 'drive_through']);
+
+  // Package Form State
+  const [editingPackage, setEditingPackage] = useState<MealSubscriptionPackage | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
 
-  // Form Fields State
   const [name, setName] = useState('');
-  const [monthlyPrice, setMonthlyPrice] = useState<number>(100);
-  const [discountPercentage, setDiscountPercentage] = useState<number>(20);
-  const [durationDays, setDurationDays] = useState<number>(30);
-  const [mealsPerDay, setMealsPerDay] = useState<number>(1);
-  const [mealsPerWeek, setMealsPerWeek] = useState<number>(5);
-  const [allowedOrderingTimes, setAllowedOrderingTimes] = useState('11:00-14:30');
-  const [selectedMenuItemIds, setSelectedMenuItemIds] = useState<string[]>([]);
-  
+  const [description, setDescription] = useState('');
+  const [type, setType] = useState<'fixed' | 'build_your_own'>('fixed');
+  const [durationDays, setDurationDays] = useState(30);
+  const [price, setPrice] = useState(0);
+  const [isActive, setIsActive] = useState(true);
+
+  // Fixed specific
+  const [fixedItems, setFixedItems] = useState<{menuItemId: string, quantity: number}[]>([]);
+  // BYO specific
+  const [maxCredits, setMaxCredits] = useState(30);
+  const [pricePerCredit, setPricePerCredit] = useState(10);
+  const [eligibleMenuItemIds, setEligibleMenuItemIds] = useState<string[]>([]);
+
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const resetForm = () => {
     setName('');
-    setMonthlyPrice(100);
-    setDiscountPercentage(20);
+    setDescription('');
+    setType('fixed');
     setDurationDays(30);
-    setMealsPerDay(1);
-    setMealsPerWeek(5);
-    setAllowedOrderingTimes('11:00-14:30');
-    setSelectedMenuItemIds([]);
+    setPrice(0);
+    setIsActive(true);
+    setFixedItems([]);
+    setMaxCredits(30);
+    setPricePerCredit(10);
+    setEligibleMenuItemIds([]);
     setError('');
   };
 
   const handleStartAdd = () => {
     resetForm();
-    setEditingPlan(null);
+    setEditingPackage(null);
     setIsAddingNew(true);
   };
 
-  const handleStartEdit = (plan: MealSubscriptionPlan) => {
-    setEditingPlan(plan);
-    setName(plan.name);
-    setMonthlyPrice(plan.monthlyPrice);
-    setDiscountPercentage(plan.discountPercentage);
-    setDurationDays(plan.durationDays);
-    setMealsPerDay(plan.mealsPerDay);
-    setMealsPerWeek(plan.mealsPerWeek);
-    setAllowedOrderingTimes(plan.allowedOrderingTimes);
-    setSelectedMenuItemIds(plan.menuItemIds || []);
+  const handleStartEdit = (pkg: MealSubscriptionPackage) => {
+    setEditingPackage(pkg);
+    setName(pkg.name);
+    setDescription(pkg.description);
+    setType(pkg.type);
+    setDurationDays(pkg.durationDays);
+    setPrice(pkg.price);
+    setIsActive(pkg.isActive);
+    setFixedItems(pkg.items || []);
+    setMaxCredits(pkg.maxCredits || 30);
+    setPricePerCredit(pkg.pricePerCredit || 10);
+    setEligibleMenuItemIds(pkg.eligibleMenuItemIds || []);
     setIsAddingNew(false);
   };
 
-  const handleToggleMenuItem = (itemId: string) => {
-    setSelectedMenuItemIds(prev => 
-      prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]
-    );
+  const handleSaveConfig = () => {
+    if (tenant) {
+      updateTenant({
+        ...tenant,
+        mealSubscriptionConfig: {
+          flexibleRedemption,
+          dailyRedemptionLimit: dailyRedemptionLimit > 0 ? dailyRedemptionLimit : undefined,
+          allowedOrderTypes: allowedOrderTypes as any
+        }
+      });
+      showToast('Global settings updated!');
+    }
   };
 
-  const handleSavePlan = (e: React.FormEvent) => {
+  const handleSavePackage = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!name.trim()) {
-      setError('Plan name is required.');
-      return;
-    }
-    if (selectedMenuItemIds.length === 0) {
-      setError('Please select at least one menu item for this subscription plan.');
-      return;
+    if (!name.trim()) return setError('Name is required.');
+    
+    if (type === 'fixed' && fixedItems.length === 0) {
+      return setError('Fixed packages require at least one item.');
     }
 
-    if (editingPlan) {
-      updateMealSubscriptionPlan({
-        ...editingPlan,
-        name,
-        monthlyPrice,
-        discountPercentage,
-        durationDays,
-        mealsPerDay,
-        mealsPerWeek,
-        allowedOrderingTimes,
-        menuItemIds: selectedMenuItemIds
-      });
-      showToast('Subscription plan updated successfully!');
+    if (type === 'build_your_own' && maxCredits <= 0) {
+      return setError('Max credits must be greater than 0.');
+    }
+
+    const payload: Omit<MealSubscriptionPackage, 'id'> = {
+      tenantId,
+      name,
+      description,
+      type,
+      durationDays,
+      price,
+      isActive,
+      items: type === 'fixed' ? fixedItems : undefined,
+      maxCredits: type === 'build_your_own' ? maxCredits : undefined,
+      pricePerCredit: type === 'build_your_own' ? pricePerCredit : undefined,
+      eligibleMenuItemIds: type === 'build_your_own' ? eligibleMenuItemIds : undefined
+    };
+
+    if (editingPackage) {
+      updateMealSubscriptionPackage({ ...payload, id: editingPackage.id });
+      showToast('Package updated successfully!');
     } else {
-      addMealSubscriptionPlan({
-        tenantId,
-        name,
-        monthlyPrice,
-        discountPercentage,
-        durationDays,
-        mealsPerDay,
-        mealsPerWeek,
-        allowedOrderingTimes,
-        menuItemIds: selectedMenuItemIds
-      });
-      showToast('Subscription plan created successfully!');
+      addMealSubscriptionPackage(payload);
+      showToast('Package created successfully!');
     }
 
-    setEditingPlan(null);
+    setEditingPackage(null);
     setIsAddingNew(false);
     resetForm();
   };
 
-  const handleDelete = (planId: string) => {
-    if (confirm('Are you sure you want to delete this meal subscription plan?')) {
-      deleteMealSubscriptionPlan(tenantId, planId);
-      showToast('Subscription plan deleted!');
+  const handleDelete = (pkgId: string) => {
+    if (confirm('Are you sure you want to delete this subscription package?')) {
+      deleteMealSubscriptionPackage(tenantId, pkgId);
+      showToast('Package deleted!');
     }
   };
 
@@ -137,266 +158,357 @@ export default function MealSubscriptionSettings({ tenantId, onClose }: MealSubs
     setTimeout(() => setToast(null), 3000);
   };
 
+  const toggleEligibleItem = (id: string) => {
+    setEligibleMenuItemIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const addFixedItem = (menuItemId: string) => {
+    setFixedItems(prev => {
+      const exists = prev.find(i => i.menuItemId === menuItemId);
+      if (exists) {
+        return prev.map(i => i.menuItemId === menuItemId ? { ...i, quantity: i.quantity + 1 } : i);
+      }
+      return [...prev, { menuItemId, quantity: 1 }];
+    });
+  };
+
+  const updateFixedItemQty = (menuItemId: string, delta: number) => {
+    setFixedItems(prev => {
+      return prev.map(i => {
+        if (i.menuItemId === menuItemId) {
+          const newQ = i.quantity + delta;
+          return { ...i, quantity: newQ };
+        }
+        return i;
+      }).filter(i => i.quantity > 0);
+    });
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden">
       <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/70">
         <div>
           <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
             <Calendar className="w-5 h-5 text-indigo-600" />
-            Meal Subscription Architect
+            Meal Credit Subscription System
           </h3>
-          <p className="text-xs text-gray-500 mt-1">Design recurring meal plans with daily/weekly limits and eligible menu items for corporate or routine patrons.</p>
+          <p className="text-xs text-gray-500 mt-1">Configure meal packages, flexible credits, and redemption settings.</p>
         </div>
         {onClose && (
-          <button 
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors p-1.5 rounded-full hover:bg-gray-100"
-          >
+          <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full text-gray-400 transition-colors">
             <X className="w-5 h-5" />
           </button>
         )}
       </div>
 
-      <div className="p-6">
-        {!isAddingNew && !editingPlan ? (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-900 font-semibold text-sm">Active Subscription Plans ({plansList.length})</span>
-              <button
-                onClick={handleStartAdd}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
-              >
-                <Plus className="w-4 h-4" />
-                Create New Plan
-              </button>
+      <div className="flex border-b border-gray-100">
+        <button 
+          onClick={() => setActiveTab('packages')} 
+          className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'packages' ? 'border-b-2 border-indigo-600 text-indigo-700 bg-indigo-50/30' : 'text-gray-500 hover:bg-gray-50'}`}
+        >
+          Packages
+        </button>
+        <button 
+          onClick={() => setActiveTab('config')} 
+          className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'config' ? 'border-b-2 border-indigo-600 text-indigo-700 bg-indigo-50/30' : 'text-gray-500 hover:bg-gray-50'}`}
+        >
+          Global Settings
+        </button>
+      </div>
+
+      {toast && (
+        <div className="bg-emerald-50 text-emerald-700 px-4 py-2 text-xs font-bold text-center border-b border-emerald-100 animate-in slide-in-from-top-2">
+          {toast}
+        </div>
+      )}
+
+      {activeTab === 'config' && (
+        <div className="p-6 space-y-6">
+          <div className="space-y-4 max-w-2xl">
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold text-gray-700">Redemption Rules</label>
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input type="checkbox" checked={flexibleRedemption} onChange={e => setFlexibleRedemption(e.target.checked)} className="rounded text-indigo-600" />
+                Flexible Redemption (Customers can redeem multiple meals at once)
+              </label>
             </div>
-
-            {plansList.length === 0 ? (
-              <div className="p-8 text-center text-xs text-gray-400 italic border border-dashed border-gray-200 rounded-xl bg-gray-50/50">
-                No meal subscription plans configured. Create a subscription plan to allow regular customers to pre-purchase dining slots.
+            {!flexibleRedemption && (
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase">Daily Redemption Limit</label>
+                <input 
+                  type="number" min="0" 
+                  value={dailyRedemptionLimit} 
+                  onChange={e => setDailyRedemptionLimit(Number(e.target.value))}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">Set to 0 for no limit</p>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {plansList.map(plan => (
-                  <div key={plan.id} className="p-4 rounded-xl border border-gray-200 bg-white shadow-xs hover:shadow-md transition-all flex flex-col justify-between">
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-start">
-                        <h4 className="font-bold text-gray-900 text-sm">{plan.name}</h4>
-                        <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
-                          {currencySymbol}{plan.monthlyPrice}/mo
-                        </span>
-                      </div>
-                      
-                      <div className="space-y-1.5 text-xs text-gray-500">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                          <span>{plan.durationDays} Days Duration | {plan.mealsPerDay} meal/day | {plan.mealsPerWeek} meals/week</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                          <span>Ordering Windows: <strong className="font-medium text-gray-700">{plan.allowedOrderingTimes}</strong></span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <ListPlus className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                          <span>Eligible Items: <strong className="font-medium text-indigo-600">{plan.menuItemIds?.length || 0} items attached</strong></span>
-                        </div>
-                      </div>
-                    </div>
+            )}
+            
+            <button onClick={handleSaveConfig} className="bg-indigo-600 text-white font-bold text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
+              Save Settings
+            </button>
+          </div>
+        </div>
+      )}
 
-                    <div className="flex gap-2 pt-4 border-t border-gray-50 mt-4 justify-end">
-                      <button
-                        onClick={() => handleStartEdit(plan)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-md transition-colors border border-gray-200"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(plan.id)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-md transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        Delete
-                      </button>
+      {activeTab === 'packages' && (
+        <div className="p-6">
+          {(isAddingNew || editingPackage) ? (
+            <div className="space-y-6 max-w-3xl">
+              <div className="flex justify-between items-center pb-4 border-b border-gray-100">
+                <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-indigo-500" />
+                  {isAddingNew ? 'Create New Package' : 'Edit Package'}
+                </h4>
+                <button 
+                  type="button"
+                  onClick={() => { setIsAddingNew(false); setEditingPackage(null); resetForm(); }}
+                  className="text-xs text-gray-400 hover:text-gray-600 font-bold bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              {error && (
+                <div className="bg-rose-50 text-rose-700 p-3 rounded-lg text-xs font-semibold border border-rose-100">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleSavePackage} className="space-y-5">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Package Name</label>
+                    <input 
+                      type="text" required 
+                      value={name} onChange={e => setName(e.target.value)}
+                      placeholder="e.g. Monthly Lunch Bundle"
+                      className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Description</label>
+                    <input 
+                      type="text" 
+                      value={description} onChange={e => setDescription(e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Package Type</label>
+                    <select 
+                      value={type} onChange={e => setType(e.target.value as any)}
+                      className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium"
+                    >
+                      <option value="fixed">Fixed Package (Preset Items)</option>
+                      <option value="build_your_own">Build Your Own (Credit System)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Duration (Days)</label>
+                    <input 
+                      type="number" min="1" required 
+                      value={durationDays} onChange={e => setDurationDays(Number(e.target.value))}
+                      className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium"
+                    />
+                  </div>
+                </div>
+
+                {type === 'fixed' && (
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Total Package Price ({currencySymbol})</label>
+                      <input 
+                        type="number" min="0" required 
+                        value={price} onChange={e => setPrice(Number(e.target.value))}
+                        className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium bg-white"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-2">Included Items</label>
+                      <div className="grid grid-cols-2 gap-2 mb-3 max-h-48 overflow-y-auto pr-2">
+                        {tenantMenuItems.map(item => (
+                          <button
+                            key={item.id} type="button"
+                            onClick={() => addFixedItem(item.id)}
+                            className="text-left text-xs p-2 rounded-lg border border-slate-200 bg-white hover:border-indigo-300 transition-colors truncate"
+                          >
+                            + {item.name}
+                          </button>
+                        ))}
+                      </div>
+
+                      {fixedItems.length > 0 && (
+                        <div className="space-y-2">
+                          {fixedItems.map(fi => {
+                            const mi = tenantMenuItems.find(i => i.id === fi.menuItemId);
+                            if (!mi) return null;
+                            return (
+                              <div key={fi.menuItemId} className="flex justify-between items-center bg-white p-2 rounded-lg border border-slate-200 text-sm">
+                                <span className="font-bold text-slate-800">{mi.name}</span>
+                                <div className="flex items-center gap-3">
+                                  <button type="button" onClick={() => updateFixedItemQty(fi.menuItemId, -1)} className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center font-bold text-slate-600 hover:bg-slate-200">-</button>
+                                  <span className="font-mono font-bold">{fi.quantity}</span>
+                                  <button type="button" onClick={() => updateFixedItemQty(fi.menuItemId, 1)} className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center font-bold text-slate-600 hover:bg-slate-200">+</button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <form onSubmit={handleSavePlan} className="space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <h4 className="font-bold text-gray-900 text-sm">
-              {editingPlan ? `Edit Subscription Plan: ${editingPlan.name}` : 'Create Brand New Meal Plan'}
-            </h4>
+                )}
 
-            {error && (
-              <div className="p-3 bg-red-50 rounded-lg text-xs font-semibold text-red-600 border border-red-100">
-                {error}
-              </div>
-            )}
+                {type === 'build_your_own' && (
+                  <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-100 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Max Total Credits</label>
+                        <input 
+                          type="number" min="1" required 
+                          value={maxCredits} onChange={e => setMaxCredits(Number(e.target.value))}
+                          className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Price Per Credit ({currencySymbol})</label>
+                        <input 
+                          type="number" min="0" required 
+                          value={pricePerCredit} onChange={e => setPricePerCredit(Number(e.target.value))}
+                          className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium bg-white"
+                        />
+                      </div>
+                    </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="plan-name" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Plan Name
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-2">Eligible Items (Leave empty for all)</label>
+                      <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                        {tenantMenuItems.map(item => {
+                          const isSelected = eligibleMenuItemIds.includes(item.id);
+                          return (
+                            <button
+                              key={item.id} type="button"
+                              onClick={() => toggleEligibleItem(item.id)}
+                              className={`text-left text-xs p-2 rounded-lg border transition-colors truncate ${isSelected ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                            >
+                              {item.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer pt-2">
+                  <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="rounded text-indigo-600" />
+                  Package is Active (Visible to Customers)
                 </label>
-                <input
-                  id="plan-name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-sm text-gray-900"
-                  
-                />
-              </div>
 
-              <div>
-                <label htmlFor="monthly-price" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Monthly Subscription Fee ({currencySymbol})
-                </label>
-                <input
-                  id="monthly-price"
-                  type="number"
-                  min="0"
-                  value={monthlyPrice}
-                  onChange={(e) => setMonthlyPrice(parseFloat(e.target.value) || 0)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-sm text-gray-900 font-mono"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="discount-pct" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Order Discount (%)
-                </label>
-                <input
-                  id="discount-pct"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={discountPercentage}
-                  onChange={(e) => setDiscountPercentage(parseInt(e.target.value) || 0)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-sm text-gray-900 font-mono"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="duration-days" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Duration (Days)
-                </label>
-                <input
-                  id="duration-days"
-                  type="number"
-                  min="1"
-                  value={durationDays}
-                  onChange={(e) => setDurationDays(parseInt(e.target.value) || 30)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-sm text-gray-900 font-mono"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="meals-per-day" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Meals Allowed Per Day
-                </label>
-                <input
-                  id="meals-per-day"
-                  type="number"
-                  min="1"
-                  value={mealsPerDay}
-                  onChange={(e) => setMealsPerDay(parseInt(e.target.value) || 1)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-sm text-gray-900 font-mono"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="meals-per-week" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Meals Allowed Per Week
-                </label>
-                <input
-                  id="meals-per-week"
-                  type="number"
-                  min="1"
-                  value={mealsPerWeek}
-                  onChange={(e) => setMealsPerWeek(parseInt(e.target.value) || 5)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-sm text-gray-900 font-mono"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label htmlFor="ordering-hours" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Allowed Order Hours (e.g. 11:30-14:30)
-                </label>
-                <input
-                  id="ordering-hours"
-                  type="text"
-                  value={allowedOrderingTimes}
-                  onChange={(e) => setAllowedOrderingTimes(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-sm text-gray-900 font-mono"
-                  
-                />
-              </div>
+                <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                  <button 
+                    type="submit"
+                    className="bg-indigo-600 text-white hover:bg-indigo-700 px-6 py-2.5 rounded-xl font-bold text-sm shadow-sm transition-colors flex items-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save Package
+                  </button>
+                </div>
+              </form>
             </div>
-
-            {/* Menu Items eligible */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                Eligible Menu Items (Attached list)
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 p-3 rounded-xl border border-gray-100 max-h-[160px] overflow-y-auto bg-gray-50/50">
-                {tenantMenuItems.map(item => {
-                  const isChecked = selectedMenuItemIds.includes(item.id);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => handleToggleMenuItem(item.id)}
-                      className={`px-3 py-2 text-left rounded-lg text-xs font-medium border flex items-center gap-2 transition-all ${
-                        isChecked 
-                          ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-2xs' 
-                          : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                      }`}
-                    >
-                      <span className={`w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 text-white ${isChecked ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-gray-300'}`}>
-                        {isChecked && <Check className="w-3 h-3" />}
-                      </span>
-                      <span className="truncate">{item.name}</span>
-                    </button>
-                  );
-                })}
+          ) : (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center mb-6">
+                <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                  <ListPlus className="w-5 h-5 text-gray-400" />
+                  Configured Packages
+                </h4>
+                <button 
+                  onClick={handleStartAdd}
+                  className="bg-gray-900 text-white hover:bg-gray-800 px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Create Package
+                </button>
               </div>
-            </div>
 
-            <div className="flex gap-3 pt-4 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAddingNew(false);
-                  setEditingPlan(null);
-                  resetForm();
-                }}
-                className="flex-1 py-2.5 rounded-lg border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                Go Back
-              </button>
-              <button
-                type="submit"
-                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs hover:shadow-md flex items-center justify-center gap-1.5"
-              >
-                <Save className="w-4 h-4" />
-                {editingPlan ? 'Update Plan' : 'Save Plan'}
-              </button>
-            </div>
-          </form>
-        )}
+              {packagesList.length === 0 ? (
+                <div className="text-center py-10 bg-gray-50 rounded-2xl border border-gray-100 border-dashed">
+                  <Calendar className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 font-medium text-sm">No packages created yet.</p>
+                  <p className="text-xs text-gray-400 mt-1">Start by creating a fixed or build-your-own package.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {packagesList.map(pkg => (
+                    <div key={pkg.id} className={`border rounded-2xl p-5 relative overflow-hidden group ${pkg.isActive ? 'border-gray-200 bg-white shadow-xs' : 'border-gray-200 bg-gray-50 opacity-80'}`}>
+                      {!pkg.isActive && (
+                        <div className="absolute top-0 right-0 bg-gray-200 text-gray-600 text-[9px] font-bold px-2 py-0.5 rounded-bl-lg uppercase tracking-wider">
+                          Inactive
+                        </div>
+                      )}
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h5 className="font-bold text-gray-900 text-base">{pkg.name}</h5>
+                          <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{pkg.description}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-extrabold text-indigo-700 text-lg">
+                            {pkg.type === 'fixed' ? `${currencySymbol}${pkg.price}` : `${currencySymbol}${pkg.pricePerCredit}/cr`}
+                          </p>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">
+                            {pkg.durationDays} Days
+                          </p>
+                        </div>
+                      </div>
 
-        {/* Success Toast */}
-        {toast && (
-          <div className="p-3 mt-4 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200 flex items-center gap-2 animate-in fade-in zoom-in-95 duration-200">
-            <Check className="w-4 h-4 bg-emerald-500 text-white rounded-full p-0.5" />
-            <span>{toast}</span>
-          </div>
-        )}
-      </div>
+                      <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-600 space-y-1.5 border border-gray-100 mb-4">
+                        <div className="flex justify-between">
+                          <span className="font-semibold text-gray-500">Type</span>
+                          <span className="font-bold text-gray-800">{pkg.type === 'fixed' ? 'Fixed Bundle' : 'Build Your Own'}</span>
+                        </div>
+                        {pkg.type === 'fixed' ? (
+                          <div className="flex justify-between">
+                            <span className="font-semibold text-gray-500">Items</span>
+                            <span className="font-bold text-gray-800">{pkg.items?.reduce((a, b) => a + b.quantity, 0)} meals</span>
+                          </div>
+                        ) : (
+                          <div className="flex justify-between">
+                            <span className="font-semibold text-gray-500">Max Credits</span>
+                            <span className="font-bold text-gray-800">{pkg.maxCredits}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-5 right-5">
+                        <button 
+                          onClick={() => handleStartEdit(pkg)}
+                          className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors"
+                          title="Edit Plan"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(pkg.id)}
+                          className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors"
+                          title="Delete Plan"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

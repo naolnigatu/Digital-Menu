@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { CustomerProfile, MenuItem, CustomerMealSubscription, MealSubscriptionPlan } from '../types';
+import { CustomerProfile, MenuItem, CustomerMealSubscription, MealSubscriptionPackage } from '../types';
 import { Award, Heart, MapPin, ClipboardList, Check, Trash2, Plus, Zap, Calendar, Clock, DollarSign, UserCheck } from 'lucide-react';
 
 interface CustomerProfileDashboardProps {
@@ -16,19 +16,20 @@ export default function CustomerProfileDashboard({ customerEmail, onAddFavoriteT
     mealSubscriptionPlans, 
     menuItems, 
     tenants,
-    addSavedAddress,
+    updateCustomerMealSubscription, addSavedAddress,
     removeSavedAddress,
     removeFavoriteItem,
     loyaltyConfigs,
     placeOrder,
-    logMealService
+    logMealService,
+    updateOrderStatus
   } = useApp();
 
   // Get active profile, or fallback to default
   const profile: CustomerProfile = customerProfiles[customerEmail] || {
     id: `cust-temp-${Date.now()}`,
     email: customerEmail,
-    name: customerEmail.split('@')[0],
+    name: (customerEmail || '').split('@')[0] || 'Guest',
     phone: '',
     savedAddresses: [],
     savedFavorites: [],
@@ -231,53 +232,117 @@ export default function CustomerProfileDashboard({ customerEmail, onAddFavoriteT
         {activeTab === 'orders' && (
           <div className="space-y-4 animate-in fade-in duration-200">
             <h4 className="font-bold text-gray-900 text-sm">Order receipts telemetry ({customerOrders.length})</h4>
-            <div className="space-y-3.5 max-h-[360px] overflow-y-auto pr-1">
+
+            <div className="space-y-6 max-h-[360px] overflow-y-auto pr-1">
               {customerOrders.length === 0 ? (
                 <p className="text-xs text-gray-400 italic py-8 text-center bg-gray-50 rounded-2xl">No orders have been recorded under your email.</p>
               ) : (
-                customerOrders.map(order => (
-                  <div key={order.id} className="p-4 bg-white border border-gray-200 rounded-2xl shadow-2xs space-y-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-900 text-sm">{order.orderNum}</span>
-                          <span className="text-[10px] text-gray-400 font-mono">{new Date(order.createdAt).toLocaleDateString()}</span>
-                        </div>
-                        <p className="text-[10px] text-gray-400 font-mono mt-0.5">Type: <span className="capitalize font-semibold text-gray-600">{order.type.replace('_', ' ')}</span></p>
-                      </div>
-                      
-                      <div className="text-right">
-                        <span className="font-bold font-mono text-gray-900 text-sm block">{currencySymbol}{order.total}</span>
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold mt-1 uppercase tracking-wider ${
-                          order.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                          order.status === 'cancelled' ? 'bg-gray-100 text-gray-500' :
-                          order.status === 'refunded' ? 'bg-red-50 text-red-600 border border-red-100' :
-                          'bg-amber-50 text-amber-700 border border-amber-200'
-                        }`}>
-                          {order.status}
-                        </span>
-                      </div>
-                    </div>
+                <>
+                  {customerOrders.filter(o => o.type !== 'subscription_redemption').length > 0 && (
+                    <div className="space-y-3.5">
+                      <h5 className="font-bold text-gray-600 text-xs border-b border-gray-100 pb-1">Regular Orders</h5>
+                      {customerOrders.filter(o => o.type !== 'subscription_redemption').map(order => (
+                        <div key={order.id} className="p-4 bg-white border border-gray-200 rounded-2xl shadow-2xs space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-gray-900 text-sm">{order.orderNum}</span>
+                                <span className="text-[10px] text-gray-400 font-mono">{new Date(order.createdAt).toLocaleDateString()}</span>
+                              </div>
+                              <p className="text-[10px] text-gray-400 font-mono mt-0.5">Type: <span className="capitalize font-semibold text-gray-600">{order.type.replace('_', ' ')}</span></p>
+                            </div>
+                            
+                            <div className="text-right">
+                              <span className="font-bold font-mono text-gray-900 text-sm block">{currencySymbol}{order.total}</span>
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold mt-1 uppercase tracking-wider ${
+                                order.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                order.status === 'cancelled' ? 'bg-gray-100 text-gray-500' :
+                                order.status === 'refunded' ? 'bg-red-50 text-red-600 border border-red-100' :
+                                'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}>
+                                {order.status}
+                              </span>
+                            </div>
+                          </div>
 
-                    <div className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100/60 divide-y divide-slate-100/40 text-[11px]">
-                      {order.items.map((it, idx) => (
-                        <div key={idx} className="py-1.5 flex justify-between text-gray-700">
-                          <span>{it.quantity}x {it.name}</span>
-                          <span className="font-mono text-gray-500">{currencySymbol}{(it.price * it.quantity).toFixed(2)}</span>
+                          <div className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100/60 divide-y divide-slate-100/40 text-[11px]">
+                            {order.items.map((it, idx) => (
+                              <div key={idx} className="py-1.5 flex justify-between text-gray-700">
+                                <span>{it.quantity}x {it.name}</span>
+                                <span className="font-mono text-gray-500">{currencySymbol}{(it.price * it.quantity).toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {order.refundDetails && (
+                            <div className="p-2 bg-red-50 text-red-700 rounded-lg text-[10px] border border-red-100 flex justify-between">
+                              <span>Refunded: -{currencySymbol}{order.refundDetails.refundAmount}</span>
+                              <span className="italic">Reason: {order.refundDetails.refundReason}</span>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
+                  )}
 
-                    {order.refundDetails && (
-                      <div className="p-2 bg-red-50 text-red-700 rounded-lg text-[10px] border border-red-100 flex justify-between">
-                        <span>Refunded: -{currencySymbol}{order.refundDetails.refundAmount}</span>
-                        <span className="italic">Reason: {order.refundDetails.refundReason}</span>
-                      </div>
-                    )}
-                  </div>
-                ))
+                  {customerOrders.filter(o => o.type === 'subscription_redemption').length > 0 && (
+                    <div className="space-y-3.5 mt-4">
+                      <h5 className="font-bold text-indigo-600 text-xs border-b border-indigo-100 pb-1">Subscription Meal Requests</h5>
+                      {customerOrders.filter(o => o.type === 'subscription_redemption').map(order => (
+                        <div key={order.id} className="p-4 bg-indigo-50/30 border border-indigo-100 rounded-2xl shadow-2xs space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-gray-900 text-sm">{order.orderNum}</span>
+                                <span className="text-[10px] text-gray-400 font-mono">{new Date(order.createdAt).toLocaleDateString()}</span>
+                              </div>
+                              <p className="text-[10px] text-indigo-400 font-mono mt-0.5">Type: <span className="capitalize font-semibold text-indigo-600">Meal Plan Delivery</span></p>
+                            </div>
+                            
+                            <div className="text-right">
+                              <span className="font-bold font-mono text-gray-900 text-sm block">Prepaid</span>
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold mt-1 uppercase tracking-wider ${
+                                order.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                order.status === 'served' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
+                                order.status === 'cancelled' ? 'bg-gray-100 text-gray-500' :
+                                'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}>
+                                {order.status}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="bg-white p-2.5 rounded-xl border border-indigo-50 divide-y divide-slate-100/40 text-[11px]">
+                            {order.items.map((it, idx) => (
+                              <div key={idx} className="py-1.5 flex justify-between text-gray-700">
+                                <span>{it.quantity}x {it.name}</span>
+                                <span className="font-mono text-gray-500">Plan</span>
+                              </div>
+                            ))}
+                          </div>
+                          {order.status === 'served' && (
+                            <button
+                              onClick={() => {
+                                updateOrderStatus(order.id, 'completed');
+                                if (order.advancePaymentRef) {
+                                  logMealService(order.advancePaymentRef);
+                                }
+                                alert('Completion marked for the day!');
+                              }}
+                              className="w-full mt-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              Mark Completion For Today
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
+
           </div>
         )}
 
@@ -317,7 +382,10 @@ export default function CustomerProfileDashboard({ customerEmail, onAddFavoriteT
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {subscriptions.map(sub => {
-                  const plan = mealSubscriptionPlans[sub.tenantId]?.find(p => p.id === sub.planId);
+                  const plan = mealSubscriptionPlans[sub.tenantId]?.find(p => p.id === sub.packageId);
+                  const tenantItems = menuItems[sub.tenantId] || [];
+                  const activeCredits = sub.credits || [];
+                  
                   return (
                     <div key={sub.id} className="p-4 bg-white border border-indigo-100 rounded-2xl shadow-xs space-y-4">
                       <div className="flex justify-between items-start">
@@ -328,26 +396,82 @@ export default function CustomerProfileDashboard({ customerEmail, onAddFavoriteT
                           </span>
                         </div>
                         <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded-lg">
-                          Remaining: {sub.mealsRemainingTotal} meals
+                          Remaining: {sub.totalCreditsRemaining} credits
                         </span>
                       </div>
 
-                      {/* Statistics Metrics */}
-                      <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl text-center border border-slate-100">
-                        <div>
-                          <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Served Today</span>
-                          <span className="block text-sm font-bold font-mono text-gray-900 mt-0.5">{sub.mealsUsedToday}/{sub.mealsPerDay}</span>
-                        </div>
-                        <div>
-                          <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Served Week</span>
-                          <span className="block text-sm font-bold font-mono text-gray-900 mt-0.5">{sub.mealsUsedThisWeek}/{sub.mealsPerWeek}</span>
-                        </div>
-                        <div>
-                          <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Total Used</span>
-                          <span className="block text-sm font-bold font-mono text-gray-900 mt-0.5">{sub.mealsUsedTotal}</span>
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
+                        <h6 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Available Credits</h6>
+                        <div className="space-y-2">
+                          {activeCredits.map(c => {
+                            const mi = tenantItems.find(i => i.id === c.menuItemId);
+                            if (!mi) return null;
+                            return (
+                              <div key={c.menuItemId} className="flex justify-between items-center text-xs">
+                                <span className="font-semibold text-gray-700">{mi.name}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-gray-500">{c.remaining} rem</span>
+                                  
+                                  {(() => {
+                                    const subConfig = tenants.find(t => t.id === sub.tenantId)?.mealSubscriptionConfig;
+                                    const isFlexible = subConfig?.flexibleRedemption ?? true;
+                                    const dailyLimit = subConfig?.dailyRedemptionLimit || 0;
+                                    const isToday = sub.lastRedemptionDate && new Date(sub.lastRedemptionDate).toDateString() === new Date().toDateString();
+                                    const currentToday = isToday ? (sub.redemptionsToday || 0) : 0;
+                                    const limitReached = !isFlexible && dailyLimit > 0 && currentToday >= dailyLimit;
+                                    
+                                    return sub.status === 'active' && c.remaining > 0 && !limitReached && (
+
+                                    <button 
+                                      onClick={() => {
+                                        if (window.confirm(`Request ${mi.name} from your subscription?`)) {
+                                          placeOrder({
+                                            customerName: profile.name || customerEmail,
+                                            customerEmail: customerEmail,
+                                            tenantId: sub.tenantId,
+                                            type: 'subscription_redemption',
+                                            paymentMethod: 'cash', // Prepaid
+                                            advancePaymentRef: sub.id,
+                                            paymentVerificationStatus: 'approved',
+                                            discount: 0,
+                                            items: [{
+                                              menuItemId: mi.id,
+                                              name: mi.name,
+                                              price: 0, 
+                                              quantity: 1,
+                                              status: 'received',
+                                              assignedStationId: mi.preparationStationId
+                                            }]
+                                          });
+                                          
+                                          const newTodayCount = currentToday + 1;
+                                          const newCredits = JSON.parse(JSON.stringify(sub.credits));
+                                          const targetCred = newCredits.find((x: any) => x.menuItemId === mi.id);
+                                          if (targetCred) {
+                                            targetCred.remaining -= 1;
+                                            targetCred.used += 1;
+                                          }
+                                          updateCustomerMealSubscription(sub.id, {
+                                            credits: newCredits,
+                                            totalCreditsRemaining: sub.totalCreditsRemaining - 1,
+                                            redemptionsToday: newTodayCount,
+                                            lastRedemptionDate: new Date().toISOString()
+                                          });
+                                          alert('Meal requested! Sent to Kitchen.');
+                                        }
+                                      }}
+                                      className="bg-indigo-600 text-white px-2 py-1 rounded text-[10px] font-bold hover:bg-indigo-700 transition-colors"
+                                    >
+                                      Request
+                                    </button>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
                       </div>
-
 
                       <div className="text-[10px] text-gray-400 space-y-1 font-mono">
                         <div className="flex justify-between">
@@ -355,43 +479,6 @@ export default function CustomerProfileDashboard({ customerEmail, onAddFavoriteT
                           <span>End Date: {new Date(sub.endDate).toLocaleDateString()}</span>
                         </div>
                       </div>
-                      {sub.status === 'active' && sub.mealsUsedToday < sub.mealsPerDay && sub.mealsRemainingTotal > 0 && (
-                        <button
-                          onClick={() => {
-                            if (window.confirm('Request a meal from this subscription to the kitchen?')) {
-                              logMealService(sub.id);
-                              
-                              const tenantItems = menuItems[sub.tenantId] || [];
-                              const selectedItems = tenantItems.filter(i => sub.menuItemIds?.includes(i.id));
-                              
-                              const itemsToOrder = selectedItems.length > 0 ? selectedItems : [tenantItems[0]].filter(Boolean);
-                              
-                              placeOrder({
-                                customerName: profile.name || customerEmail,
-                                customerEmail: customerEmail,
-                                tenantId: sub.tenantId,
-                                orderType: 'dine_in',
-                                paymentMethod: 'cash', // Prepaid
-                                paymentVerificationStatus: 'approved',
-                                discount: 0,
-                                items: itemsToOrder.map(i => ({
-                                  menuItemId: i.id,
-                                  name: i.name,
-                                  price: 0, // Prepaid
-                                  quantity: 1,
-                                  status: 'received',
-                                  assignedStationId: i.preparationStationId
-                                }))
-                              });
-                              alert('Meal requested! Sent to Kitchen.');
-                            }
-                          }}
-                          className="w-full mt-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-                        >
-                          <Zap className="w-3.5 h-3.5" />
-                          Request Meal Now
-                        </button>
-                      )}
                     </div>
                   );
                 })}
@@ -400,7 +487,6 @@ export default function CustomerProfileDashboard({ customerEmail, onAddFavoriteT
           </div>
         )}
 
-        {/* Favorites List Tab */}
         {activeTab === 'favorites' && (
           <div className="space-y-4 animate-in fade-in duration-200">
             <h4 className="font-bold text-gray-900 text-sm">Saved Dining Favorites</h4>

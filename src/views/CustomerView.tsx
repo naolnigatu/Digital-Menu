@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { sanitizeName, validatePhone } from '../utils/validation';
 import { useApp } from '../context/AppContext';
-import { MenuItem, OrderItem, Order, Category, PaymentMethodConfig, MealSubscriptionPlan } from '../types';
+import { MenuItem, OrderItem, Order, Category, PaymentMethodConfig, MealSubscriptionPackage } from '../types';
 import { 
   Search, ShoppingBag, Languages, Flame, Award, Clock, ArrowRight, Star, 
   Smile, ClipboardList, CheckCircle2, ShoppingCart, User, Smartphone, MapPin, Megaphone,
@@ -15,6 +15,7 @@ import { CustomerReservationModal } from '../components/CustomerReservationModal
 
 export default function CustomerView() {
   const { 
+    globalSettings,
     currentUser,
     tenants, 
     categories, 
@@ -37,6 +38,7 @@ export default function CustomerView() {
     removeFavoriteItem,
     customerSubscriptions,
     subscribeToMealPlan,
+    updateCustomerMealSubscription,
     mealSubscriptionPlans,
     paymentMethodsConfigs,
     loyaltyConfigs,
@@ -64,6 +66,26 @@ export default function CustomerView() {
   
   const [activeTableId, setActiveTableId] = useState<string>(() => filteredActiveTables[0]?.id || '');
   const [orderType, setOrderType] = useState<string>('dine_in');
+
+  const activeServiceTypes = useMemo(() => {
+    const allTypes = [
+      { id: 'dine_in', label: 'Dine-In' },
+      { id: 'takeaway', label: 'Takeaway' },
+      { id: 'delivery', label: 'Delivery' },
+      { id: 'drive_through', label: 'Drive Thru' },
+      { id: 'pickup', label: 'Pick Up' },
+      { id: 'meal_subscription', label: 'Subscription' }
+    ];
+    const globalAllowed = globalSettings?.allowedDiningServiceTypes || ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'];
+    const bizEnabled = activeSettings?.enabledDiningServiceTypes || ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'];
+    return allTypes.filter(t => globalAllowed.includes(t.id) && bizEnabled.includes(t.id));
+  }, [globalSettings, activeSettings]);
+
+  useEffect(() => {
+    if (activeServiceTypes.length > 0 && !activeServiceTypes.some(t => t.id === orderType)) {
+      setOrderType(activeServiceTypes[0].id);
+    }
+  }, [activeServiceTypes, orderType]);
   const [showAccountPrompt, setShowAccountPrompt] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryLandmark, setDeliveryLandmark] = useState('');
@@ -72,7 +94,17 @@ export default function CustomerView() {
   const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
   const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [licensePlate, setLicensePlate] = useState('');
-  const [subscriptionPeriod, setSubscriptionPeriod] = useState('weekly');
+  const [subscriptionDurationDays, setSubscriptionDurationDays] = useState<number>(30);
+
+  const availableDurations = useMemo(() => {
+    return activeSettings?.subscriptionDurations || [7, 14, 30];
+  }, [activeSettings]);
+
+  useEffect(() => {
+    if (availableDurations.length > 0 && !availableDurations.includes(subscriptionDurationDays)) {
+      setSubscriptionDurationDays(availableDurations[0]);
+    }
+  }, [availableDurations, subscriptionDurationDays]);
 
   // New States: Account Dashboards & Auth
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
@@ -92,13 +124,12 @@ export default function CustomerView() {
 
   // Active loyalty points redemption toggle
   const [redeemPointsActive, setRedeemPointsActive] = useState(false);
+  const [useSubscriptionCredits, setUseSubscriptionCredits] = useState(false);
 
   // Waiter tip selected during checkout
   const [selectedTipAmount, setSelectedTipAmount] = useState<number>(0);
   const [customTipActive, setCustomTipActive] = useState(false);
   const [customTipValue, setCustomTipValue] = useState('');
-  const [cashTipRecipient, setCashTipRecipient] = useState<'waiter' | 'kitchen'>('waiter');
-  const [cashTipStationId, setCashTipStationId] = useState<string>('');
 
   // Stripe simulated card checkout inputs
   const [stripeCardNum, setStripeCardNum] = useState('');
@@ -133,12 +164,19 @@ export default function CustomerView() {
 
   // Fallback default payment methods if not customized by business
   const activePaymentConfigs = paymentMethodsConfigs[activeTenantId] || [
-    { id: 'cash', name: 'Cash Payment', enabled: true, requiresProof: false },
-    { id: 'card', name: 'Credit/Debit Card', enabled: true, requiresProof: false },
-    { id: 'stripe', name: 'Stripe Pay Online', enabled: true, requiresProof: false },
-    { id: 'bank_transfer', name: 'Bank Transfer (CBE)', enabled: true, requiresProof: true, details: 'CBE: 1000123456789 (Aisha Jafar)' }
+    { id: 'cash', name: 'Cash', enabled: true, requiresProof: false },
+    { id: 'stripe', name: 'Stripe Pay Online', enabled: false, requiresProof: false },
+    { id: 'mobile_money', name: 'Mobile Money Transfer', enabled: false, requiresProof: true, details: 'Telebirr: 0911223344' },
+    { id: 'bank_transfer', name: 'Bank Transfer', enabled: false, requiresProof: true, details: 'Commercial Bank: 1000123456789' },
+    { id: 'binance_id', name: 'Binance Pay (ID)', enabled: false, requiresProof: true, details: 'Binance Pay ID: 88776655' },
+    { id: 'binance_wallet', name: 'Binance BEP20 Wallet', enabled: false, requiresProof: true, details: 'BEP20 Address: 0x71C7656EC7ab88b098defB751B7401B5f6d8976F' }
   ];
-  const enabledPaymentConfigs = activePaymentConfigs.filter(c => c.enabled);
+  const allowedByPlatform = globalSettings.allowedPaymentMethods || [
+    'cash', 'stripe', 'mobile_money', 'bank_transfer', 'binance_id', 'binance_wallet'
+  ];
+  const enabledPaymentConfigs = activePaymentConfigs.filter(
+    c => c.enabled && c.id !== 'card' && allowedByPlatform.includes(c.id)
+  );
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string>(() => {
     return enabledPaymentConfigs[0]?.id || 'cash';
   });
@@ -152,15 +190,19 @@ export default function CustomerView() {
   }, [customerPhone]);
 
   // Modals & Tracking
-  const [activeItemDetails, setActiveItemDetails] = useState<MenuItem | null>(null);
-  const [selectedPortion, setSelectedPortion] = useState<{name: string, price: number} | null>(null);
+    const [selectedPortion, setSelectedPortion] = useState<{name: string, price: number} | null>(null);
+  const [itemQty, setItemQty] = useState<number>(1);
+
   const [selectedMods, setSelectedMods] = useState<{ groupName: string; optionName: string; price: number }[]>([]);
   const [itemNote, setItemNote] = useState('');
-  const [itemQty, setItemQty] = useState<number>(1);
   const [paymentScreenshot, setPaymentScreenshot] = useState<string>('');
   const [paymentScreenshotName, setPaymentScreenshotName] = useState<string>('');
   const [paymentRef, setPaymentRef] = useState<string>('');
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [directCheckoutItem, setDirectCheckoutItem] = useState<any>(null);
+  const [isDirectCheckoutOpen, setIsDirectCheckoutOpen] = useState(false);
+
+  const [activeItemDetails, setActiveItemDetails] = useState<MenuItem | null>(null);
   const [activeCustomerOrder, setActiveCustomerOrder] = useState<Order | null>(null);
   const [isTrackModalOpen, setIsTrackModalOpen] = useState(false);
   const [trackSearchQuery, setTrackSearchQuery] = useState('');
@@ -183,6 +225,56 @@ export default function CustomerView() {
 
   // Resolve Customer loyalty points
   const profile = customerEmailForDashboard ? (customerProfiles[customerEmailForDashboard] || { loyaltyPoints: 0, savedFavorites: [] as string[] }) : { loyaltyPoints: 0, savedFavorites: [] as string[] };
+  
+  // Subscription Eligibility
+  const activeSubs = customerSubscriptions.filter(s => 
+    s.status === 'active' && 
+    (s.customerId === customerEmailForDashboard || s.customerId === customerPhone) && 
+    s.tenantId === activeTenantId
+  );
+  
+  const eligibleSubsToRedeem = activeSubs.filter(sub => {
+    // Check if sub has enough credits for ALL cart items
+    // (For simplicity, we check if ANY cart item can be fully covered)
+    const cartItemIds = cart.map(c => c.item.id);
+    let canCoverAll = true;
+    const requiredQuantities: Record<string, number> = {};
+    cart.forEach(c => {
+      requiredQuantities[c.item.id] = (requiredQuantities[c.item.id] || 0) + c.qty;
+    });
+
+    let coversAtLeastOne = false;
+    for (const [itemId, qty] of Object.entries(requiredQuantities)) {
+      const credit = sub.credits?.find(c => c.menuItemId === itemId);
+      if (credit && credit.remaining >= qty) {
+        coversAtLeastOne = true;
+      }
+    }
+    return coversAtLeastOne && sub.totalCreditsRemaining > 0;
+  });
+  
+  const subConfig = activeTenant?.mealSubscriptionConfig;
+  const isFlexible = subConfig?.flexibleRedemption ?? true;
+  const dailyLimit = subConfig?.dailyRedemptionLimit || 0;
+  
+  // Filter eligible subs to respect daily limits if not flexible
+  const validSubsToRedeem = eligibleSubsToRedeem.filter(sub => {
+    // If not flexible, check daily limit
+    if (!isFlexible && dailyLimit > 0) {
+      // Check if last redemption was today
+      const isToday = sub.lastRedemptionDate && new Date(sub.lastRedemptionDate).toDateString() === new Date().toDateString();
+      const currentToday = isToday ? (sub.redemptionsToday || 0) : 0;
+      
+      // If we've hit the limit today, this sub can't be used
+      if (currentToday >= dailyLimit) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const canUseSubscriptionCredits = validSubsToRedeem.length > 0 && orderType !== 'meal_subscription';
+  
   const loyaltyConfig = loyaltyConfigs[activeTenantId];
   
   // Calculate Badge
@@ -199,8 +291,13 @@ export default function CustomerView() {
 
   // Calculate final discount percentage
   let finalDiscountPct = badgeBonus;
-  if (orderType === 'meal_subscription' && activeTenant.mealSubscriptionDiscountPercent) {
-    finalDiscountPct += activeTenant.mealSubscriptionDiscountPercent;
+  if (orderType === 'meal_subscription') {
+    const plan = tenantSubscriptionPlans.find(p => p.id === selectedSubPlanId);
+    if (plan && plan.discountPercentage) {
+      finalDiscountPct += plan.discountPercentage;
+    } else if ((activeTenant as any).mealSubscriptionDiscountPercent) {
+      finalDiscountPct += (activeTenant as any).mealSubscriptionDiscountPercent;
+    }
   }
   let pointsToRedeem = 0;
   if (redeemPointsActive && loyaltyConfig?.enabled && profile.loyaltyPoints >= loyaltyConfig.minPointsToRedeem) {
@@ -269,6 +366,7 @@ export default function CustomerView() {
   };
 
   // Modifier modal handlers
+
   const handleOpenItemDetails = (item: MenuItem) => {
     setActiveItemDetails(item);
     setItemNote('');
@@ -278,13 +376,7 @@ export default function CustomerView() {
       setSelectedPortion(null);
     }
     setItemQty(1);
-    const defaults = item.modifiers
-      .filter(g => !(g.name || '').toLowerCase().includes('injera'))
-      .map(g => ({
-        groupName: g.name,
-        optionName: g.options[0].name,
-        price: g.options[0].price
-      }));
+    const defaults: {groupName: string, optionName: string, price: number}[] = [];
     setSelectedMods(defaults);
   };
 
@@ -299,12 +391,19 @@ export default function CustomerView() {
     });
   };
 
-  const currentItemPrice = useMemo(() => {
+const currentItemPrice = useMemo(() => {
     if (!activeItemDetails) return 0;
     let total = activeItemDetails.price;
     selectedMods.forEach(m => { total += m.price; });
-    return total * itemQty;
-  }, [activeItemDetails, selectedMods, itemQty]);
+    let finalTotal = total * itemQty;
+    if (orderType === 'meal_subscription') {
+      finalTotal = finalTotal * subscriptionDurationDays;
+      if (activeTenant.mealSubscriptionDiscountPercent) {
+        finalTotal = finalTotal - (finalTotal * (activeTenant.mealSubscriptionDiscountPercent / 100));
+      }
+    }
+    return finalTotal;
+  }, [activeItemDetails, selectedMods, itemQty, orderType, subscriptionDurationDays, activeTenant.mealSubscriptionDiscountPercent]);
 
   const handleAddToCart = () => {
     if (!activeItemDetails) return;
@@ -319,21 +418,18 @@ export default function CustomerView() {
         copy[existingIdx].qty += itemQty;
         return copy;
       }
-
-      return [...prev, { 
-        item: activeItemDetails, 
-        qty: itemQty, 
-        notes: itemNote, 
-        selectedMods 
-      }];
+      return [...prev, { item: activeItemDetails, selectedMods, qty: itemQty }];
     });
     setActiveItemDetails(null);
+    showToast('Added to cart!');
   };
 
   const handleOrderNow = () => {
-    handleAddToCart();
-    setIsCartOpen(true);
+    setDirectCheckoutItem({ item: activeItemDetails, selectedMods, qty: itemQty });
+    setIsDirectCheckoutOpen(true);
+    setActiveItemDetails(null);
   };
+
 
   const calculateCartTotal = () => {
     return cart.reduce((acc, curr) => {
@@ -341,6 +437,35 @@ export default function CustomerView() {
       curr.selectedMods.forEach(m => { itemTotal += m.price; });
       return acc + (itemTotal * curr.qty);
     }, 0);
+  };
+
+
+  const getSubtotalWithSubscription = () => {
+    let sub = 0;
+    if (isDirectCheckoutOpen && directCheckoutItem) {
+      sub = directCheckoutItem.item.price;
+      directCheckoutItem.selectedMods.forEach((m: any) => { sub += m.price; });
+      sub = sub * directCheckoutItem.qty;
+    } else {
+      sub = calculateCartTotal();
+    }
+    
+    // Calculate Subscription Discount
+    if (orderType === 'meal_subscription') {
+      const discountPercent = activeTenant.mealSubscriptionDiscountPercent || 0;
+      // If we are doing a 30-day plan? The user said "each meal gets discounted percentage and calculated as per the price after %deduction"
+      // So let's multiply by 30 days as standard subscription, or just 1?
+      // "each meal gets discounted percentage... " 
+      // I'll keep the x30 but apply discount. Or just apply the discount without x30 if they don't want a 30-day multiplier.
+      // Wait! The user says "an item or combination of items, the discount % will be calculated he pays the discounted price"
+      // Let's assume it's for 30 days, or we use the `subscriptionPeriod` if it exists.
+      // I'll use 30 for now and apply the discount.
+      sub = sub * subscriptionDurationDays; // dynamic duration meals
+      if (discountPercent > 0) {
+        sub = sub - (sub * (discountPercent / 100));
+      }
+    }
+    return sub;
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -359,13 +484,25 @@ export default function CustomerView() {
 
   // Process checkout order placement
   const handlePlaceOrder = () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 && !isDirectCheckoutOpen) return;
 
     const chosenConfig = enabledPaymentConfigs.find(c => c.id === selectedPaymentMethodId);
     
     // Validate Prepayments
+
     const isPrepaidType = ['pickup', 'delivery', 'drive_through', 'meal_subscription'].includes(orderType);
+    
+    // Require signup for meal subscriptions
+    if (orderType === 'meal_subscription' && !customerEmailForDashboard) {
+      showToast('Please sign in or register to purchase a meal subscription.', 'error');
+      setIsCartOpen(false);
+      setIsDirectCheckoutOpen(false);
+      setIsEmailLoginModalOpen(true);
+      return;
+    }
+
     if (isPrepaidType) {
+
       
       const nameCheck = sanitizeName(customerName);
       if (!nameCheck.valid) { showToast(nameCheck.error || 'Invalid name.', 'error'); return; }
@@ -435,8 +572,82 @@ export default function CustomerView() {
     }));
 
     const isPrepaidType = ['pickup', 'delivery', 'drive_through', 'meal_subscription'].includes(orderType);
-    const calculatedSubtotal = calculateCartTotal();
+    
+    
+    let calculatedSubtotal = getSubtotalWithSubscription();
+    let creditsToDeduct: {subId: string, itemId: string, qty: number}[] = [];
+    
+    if (useSubscriptionCredits && canUseSubscriptionCredits) {
+      // Very basic deduction: if they apply credits, zero out the price of items covered by credits.
+      let cartSubtotal = 0;
+      cart.forEach(c => {
+        let itemCost = c.item.price;
+        c.selectedMods.forEach(m => itemCost += m.price);
+        
+        let qtyToPayFor = c.qty;
+        
+        // Find a sub that covers it
+        for (const sub of validSubsToRedeem) {
+          const cred = sub.credits?.find(x => x.menuItemId === c.item.id);
+          if (cred && cred.remaining > 0 && qtyToPayFor > 0) {
+            const deductQty = Math.min(cred.remaining, qtyToPayFor);
+            qtyToPayFor -= deductQty;
+            creditsToDeduct.push({ subId: sub.id, itemId: c.item.id, qty: deductQty });
+          }
+        }
+        
+        cartSubtotal += (itemCost * qtyToPayFor);
+      });
+      calculatedSubtotal = cartSubtotal;
+    }
+  
+
     const discountVal = parseFloat(((calculatedSubtotal * finalDiscountPct) / 100).toFixed(2));
+
+
+    let finalCreditsToDeduct: {subId: string, itemId: string, qty: number}[] = [];
+    if (useSubscriptionCredits && canUseSubscriptionCredits) {
+      let cartSubtotal = 0;
+      cart.forEach(c => {
+        let itemCost = c.item.price;
+        c.selectedMods.forEach(m => itemCost += m.price);
+        let qtyToPayFor = c.qty;
+        for (const sub of validSubsToRedeem) {
+          const cred = sub.credits?.find(x => x.menuItemId === c.item.id);
+          if (cred && cred.remaining > 0 && qtyToPayFor > 0) {
+            const deductQty = Math.min(cred.remaining, qtyToPayFor);
+            qtyToPayFor -= deductQty;
+            finalCreditsToDeduct.push({ subId: sub.id, itemId: c.item.id, qty: deductQty });
+          }
+        }
+      });
+      
+      // Deduct the credits
+      const subUpdates: Record<string, { credits: any[], totalRemaining: number }> = {};
+      finalCreditsToDeduct.forEach(d => {
+        if (!subUpdates[d.subId]) {
+          const sub = validSubsToRedeem.find(s => s.id === d.subId);
+          if (sub) subUpdates[d.subId] = { credits: JSON.parse(JSON.stringify(sub.credits)), totalRemaining: sub.totalCreditsRemaining };
+        }
+        if (subUpdates[d.subId]) {
+          const cred = subUpdates[d.subId].credits.find((c: any) => c.menuItemId === d.itemId);
+          if (cred) {
+            cred.remaining -= d.qty;
+            cred.used += d.qty;
+            subUpdates[d.subId].totalRemaining -= d.qty;
+          }
+        }
+      });
+      
+      Object.keys(subUpdates).forEach(subId => {
+        updateCustomerMealSubscription(subId, {
+          credits: subUpdates[subId].credits,
+          totalCreditsRemaining: subUpdates[subId].totalRemaining,
+          redemptionsToday: (validSubsToRedeem.find(s => s.id === subId)?.redemptionsToday || 0) + 1,
+          lastRedemptionDate: new Date().toISOString()
+        });
+      });
+    }
 
     const isAutoApproval = activeSettings?.deliveryApprovalMode === 'automatic';
     const initStatus = orderType === 'delivery' 
@@ -454,7 +665,7 @@ export default function CustomerView() {
     const submitted = placeOrder({
       tenantId: activeTenantId,
       branchId: activeBranchId,
-      tableId: orderType === 'dine_in' ? activeTableId : undefined,
+      tableId: (orderType === 'dine_in' || orderType === 'meal_subscription') ? activeTableId : undefined,
       type: orderType as any,
       customerName: customerName || 'Guest User',
       customerPhone: customerPhone || undefined,
@@ -465,14 +676,12 @@ export default function CustomerView() {
       total: 0, // AppContext computes automatically
       status: initStatus as any,
       pickupTime: ['pickup', 'takeaway'].includes(orderType) ? pickupTime : undefined,
-      notes: (orderType === 'delivery' ? `Delivery Address: ${deliveryAddress}` : orderType === 'drive_through' ? `Drive-thru Plate: ${licensePlate}` : orderType === 'meal_subscription' ? `Subscription Term: ${subscriptionPeriod}` : '') + (selectedPaymentMethodId === 'cash' ? ` | [Cash Recognition: ${cashTipRecipient === 'waiter' ? 'Floor Waiter' : 'Kitchen Crew'}${cashTipRecipient === 'kitchen' && cashTipStationId ? ` (${(stations || []).find(s => s.id === cashTipStationId)?.name || 'General'} Station)` : ''}]` : ''),
+      notes: (orderType === 'delivery' ? `Delivery Address: ${deliveryAddress}` : orderType === 'drive_through' ? `Drive-thru Plate: ${licensePlate}` : orderType === 'meal_subscription' ? `Subscription Term: ${subscriptionDurationDays} Days` : ''),
       paymentScreenshotUrl: isPrepaidType ? (paymentScreenshot || undefined) : undefined,
       paymentVerificationStatus: selectedPaymentMethodId === 'stripe' ? 'approved' : isPrepaidType ? 'pending' : undefined,
       advancePaymentRef: isPrepaidType ? (paymentRef || undefined) : undefined,
       paymentMethod: selectedPaymentMethodId as any,
-      tip: selectedTipAmount,
-      cashTipRecipient: selectedPaymentMethodId === 'cash' ? cashTipRecipient : undefined,
-      cashTipStationId: selectedPaymentMethodId === 'cash' && cashTipRecipient === 'kitchen' ? cashTipStationId : undefined,
+      tip: orderType === 'meal_subscription' ? 0 : selectedTipAmount,
       
       // Inject delivery details
       deliveryAddress: orderType === 'delivery' ? deliveryAddress : undefined,
@@ -489,22 +698,44 @@ export default function CustomerView() {
 
     // If subscribed to meal plan
     if (orderType === 'meal_subscription') {
+      const plan = tenantSubscriptionPlans.find(p => p.id === selectedSubPlanId);
+      
+      let credits: any[] = [];
+      let totalCredits = 0;
+      
+      if (plan) {
+        if (plan.type === 'fixed') {
+          credits = (plan.items || []).map(i => ({
+            menuItemId: i.menuItemId,
+            total: i.quantity,
+            used: 0,
+            remaining: i.quantity
+          }));
+          totalCredits = credits.reduce((a, c) => a + c.total, 0);
+        } else {
+          // BYO Package -> credits are flexible, handled differently, but let's initialize based on maxCredits
+          totalCredits = plan.maxCredits || 30;
+          const eligibleIds = plan.eligibleMenuItemIds?.length ? plan.eligibleMenuItemIds : (isDirectCheckoutOpen && directCheckoutItem ? [directCheckoutItem.id] : cart.map(c => c.item.id));
+          credits = eligibleIds.map(id => ({
+            menuItemId: id,
+            total: totalCredits,
+            used: 0,
+            remaining: totalCredits
+          }));
+        }
+      }
+
       subscribeToMealPlan({
         customerId: customerEmailForDashboard || customerPhone || 'anonymous',
         tenantId: activeTenantId,
-        planId: selectedSubPlanId || 'custom_plan',
-        menuItemIds: cart.map(c => c.item.id),
+        packageId: selectedSubPlanId,
+        credits: credits,
+        totalCreditsRemaining: totalCredits,
         startDate: new Date().toISOString(),
-        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        endDate: new Date(Date.now() + (plan ? plan.durationDays : 30) * 24 * 60 * 60 * 1000).toISOString(),
         status: (selectedPaymentMethodId === 'stripe' || !isPrepaidType) ? 'active' : 'pending_approval',
-        mealsUsedToday: 0,
-        mealsUsedThisWeek: 0,
-        mealsUsedTotal: 0,
-        mealsRemainingTotal: 30,
-        mealsPerDay: 1,
-        mealsPerWeek: 5,
-        nextRenewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-      });
+        redemptionsToday: 0
+      } as any);
     }
 
 
@@ -546,6 +777,19 @@ export default function CustomerView() {
     setIsEmailLoginModalOpen(false);
     setIsDashboardOpen(true);
   };
+
+
+  useEffect(() => {
+    const handleOpenDashboard = () => {
+      if (customerEmailForDashboard) {
+        setIsDashboardOpen(true);
+      } else {
+        setIsEmailLoginModalOpen(true);
+      }
+    };
+    window.addEventListener('open-customer-dashboard', handleOpenDashboard);
+    return () => window.removeEventListener('open-customer-dashboard', handleOpenDashboard);
+  }, [customerEmailForDashboard]);
 
   const currentLiveOrder = activeCustomerOrder 
     ? orders.find(o => o.id === activeCustomerOrder.id) 
@@ -632,7 +876,7 @@ export default function CustomerView() {
             <p className="text-[11px] text-slate-300 leading-relaxed">{activeTenant.description}</p>
 
             <div className="space-y-3">
-              {orderType === 'dine_in' && (
+              {(orderType === 'dine_in' || orderType === 'meal_subscription') && (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-[9px] font-bold text-slate-400 uppercase">Zone / Section</label>
@@ -670,14 +914,7 @@ export default function CustomerView() {
               <div>
                 <label className="text-[9px] font-bold text-slate-400 uppercase">Dining Service Type</label>
                 <div className="grid grid-cols-3 gap-1 mt-1 bg-white/5 rounded-xl p-1 border border-white/10">
-                  {[
-                    { id: 'dine_in', label: 'Dine-In' },
-                    { id: 'takeaway', label: 'Takeaway' },
-                    { id: 'delivery', label: 'Delivery' },
-                    { id: 'drive_through', label: 'Drive Thru' },
-                    { id: 'pickup', label: 'Pick Up' },
-                    { id: 'meal_subscription', label: 'Subscription' }
-                  ].map(t => (
+                  {activeServiceTypes.map(t => (
                     <button
                       key={t.id}
                       onClick={() => setOrderType(t.id)}
@@ -756,26 +993,7 @@ export default function CustomerView() {
                 </div>
               )}
 
-              {orderType === 'meal_subscription' && (
-                <div className="space-y-2">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Available Subscription Plans</label>
-                  {tenantSubscriptionPlans.length === 0 ? (
-                    <p className="text-[10px] text-amber-300 italic">No recurring meal plans defined by merchant.</p>
-                  ) : (
-                    <select
-                      value={selectedSubPlanId}
-                      onChange={(e) => setSelectedSubPlanId(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2.5 py-1 text-xs font-semibold mt-1"
-                    >
-                      {tenantSubscriptionPlans.map(p => (
-                        <option key={p.id} value={p.id} className="text-slate-900">
-                          {p.name} ({activeTenant.currencySymbol}{p.monthlyPrice}/mo, {p.mealsPerWeek} meals/wk)
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              )}
+              
             </div>
           </div>
 
@@ -948,7 +1166,7 @@ export default function CustomerView() {
           </div>
 
           {/* Items catalog list */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {filteredItems
               .filter(item => {
                 try {
@@ -962,78 +1180,57 @@ export default function CustomerView() {
                 const isAvailable = item.isAvailable !== false;
                 const isFav = profile.savedFavorites?.includes(item.id);
 
+
+
                 return (
                   <div 
                     key={item.id} 
                     onClick={isAvailable ? () => handleOpenItemDetails(item) : undefined}
-                    className={`rounded-xl border p-2 shadow-sm flex flex-col gap-2 transition-all duration-200 relative ${
+                    className={`rounded-xl border p-2 shadow-sm flex items-center gap-3 transition-all duration-200 relative ${
                       isAvailable
                         ? 'border-slate-200 bg-white cursor-pointer hover:border-indigo-500 hover:shadow-md'
                         : 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
                     }`}
                   >
                     {item.photoUrl && (
-                      <div className="w-full aspect-[4/3] rounded-lg overflow-hidden shrink-0 border border-slate-50"><img src={item.photoUrl} alt={item.name} className={`h-full w-full object-cover ${!isAvailable && 'grayscale'}`} referrerPolicy="no-referrer" /></div>
+                      <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 border border-slate-50"><img src={item.photoUrl} alt={item.name} className={`h-full w-full object-cover ${!isAvailable && 'grayscale'}`} referrerPolicy="no-referrer" /></div>
                     )}
                     
-                    <div className="flex-1 flex flex-col justify-between">
-                      <div className="space-y-1">
-                        <div className="flex justify-between items-start gap-1">
-                          <h4 className={`text-[11px] leading-tight font-extrabold ${isAvailable ? 'text-slate-900' : 'text-slate-500 line-through'} line-clamp-2`}>
-                            <span>{info.name}</span>
-                            {item.featured && (
-                              <span className="bg-amber-100 text-amber-800 text-[8px] font-extrabold px-1.5 py-0.5 rounded tracking-wider uppercase">
-                                ★ Featured
-                              </span>
-                            )}
-                            {item.recommended && (
-                              <span className="bg-emerald-100 text-emerald-800 text-[8px] font-extrabold px-1.5 py-0.5 rounded tracking-wider uppercase">
-                                👍 Recommended
-                              </span>
-                            )}
-                          </h4>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {/* Favorites Heart Bookmark (Part 9) */}
-                            <button
-                              type="button"
-                              onClick={(e) => handleToggleFavorite(e, item.id)}
-                              className="p-1 text-slate-300 hover:text-red-500 hover:scale-110 transition-all rounded-full bg-slate-50 border border-slate-100 shrink-0"
-                              title="Bookmark Favorite"
-                            >
-                              <Heart className={`w-3.5 h-3.5 ${isFav ? 'text-red-500 fill-red-500' : ''}`} />
-                            </button>
-                            {isAvailable ? (
-                              <span className="font-mono text-xs font-bold text-slate-900">{activeTenant.currencySymbol} {item.price}</span>
-                            ) : (
-                              <span className="text-[9px] font-extrabold bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded uppercase">Sold Out</span>
-                            )}
-                          </div>
-                        </div>
-                        <p className="text-[10px] text-slate-400 leading-relaxed line-clamp-2">{info.description}</p>
-                        {item.prepTime && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] text-slate-400 font-semibold mt-0.5 bg-slate-100 px-1.5 py-0.5 rounded">
-                            ⏱ {item.prepTime} mins prep
-                          </span>
-                        )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start gap-1">
+                        <h4 className={`text-[12px] leading-tight font-extrabold ${isAvailable ? 'text-slate-900' : 'text-slate-500 line-through'} truncate`}>
+                          <span>{info.name}</span>
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isFav) {
+                              removeFavoriteItem(profile.id, item.id);
+                            } else {
+                              addFavoriteItem(profile.id, item.id);
+                            }
+                          }}
+                          className={`p-1.5 rounded-full shrink-0 transition-colors ${isFav ? 'bg-rose-50 text-rose-500' : 'bg-slate-50 text-slate-300 hover:text-rose-400'}`}
+                        >
+                          <Heart className="h-3 w-3" fill={isFav ? "currentColor" : "none"} />
+                        </button>
                       </div>
-
-                      <div className="flex justify-between items-center mt-2.5">
-                        <div className="flex gap-1">
-                          {item.dietaryTags.map(tag => (
-                            <span key={tag} className="rounded-md bg-emerald-50 px-1.5 py-0.25 text-[8px] font-bold text-emerald-700">{tag}</span>
-                          ))}
-                        </div>
-                        {isAvailable ? (
-                          <span className="text-[9px] font-bold text-indigo-600 flex items-center gap-0.5">Customize <ArrowRight className="h-2.5 w-2.5" /></span>
-                        ) : (
-                          <span className="text-[9px] font-extrabold text-slate-400">Unavailable</span>
+                      
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="font-extrabold text-slate-900 text-[11px] font-mono">{activeTenant.currencySymbol} {item.price}</span>
+                        {!isAvailable && (
+                          <span className="text-[9px] font-extrabold text-slate-400 shrink-0">Unavailable</span>
                         )}
                       </div>
                     </div>
                   </div>
                 );
+
+
               })}
           </div>
+
 
           {/* MODIFIER OPTIONS POPUP */}
           {activeItemDetails && (
@@ -1055,11 +1252,13 @@ export default function CustomerView() {
 
                 {/* Modifiers selector list */}
                 <div className="space-y-4">
-                  {activeItemDetails.modifiers.filter(g => !(g.name || '').toLowerCase().includes('injera')).map(group => (
+                  {(activeItemDetails.modifiers || []).filter(g => !(g.name || '').toLowerCase().includes('injera')).map(group => (
                     <div key={group.id} className="space-y-2">
                       <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                         <span>{group.name}</span>
-                        <span className="text-amber-700">Required</span>
+                        <span className={group.minSelect > 0 ? "text-amber-700" : "text-slate-400"}>
+                          {group.minSelect > 0 ? 'Required' : 'Optional'}
+                        </span>
                       </div>
                       
                       <div className="grid gap-2">
@@ -1076,70 +1275,53 @@ export default function CustomerView() {
                               }`}
                             >
                               <span>{opt.name}</span>
-                              <span className="font-mono text-[10px] text-slate-400">+{activeTenant.currencySymbol} {opt.price}</span>
+                              <span className="font-mono text-[10px]">+{activeTenant.currencySymbol} {opt.price}</span>
                             </button>
                           );
                         })}
                       </div>
                     </div>
                   ))}
+                </div>
 
-                  {/* Quantity selector */}
-                  <div className="pt-2 border-t border-slate-50 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Quantity</span>
-                    <div className="flex items-center gap-3">
+                <div className="pt-4 border-t border-slate-50">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-xs font-bold text-slate-700">Quantity</span>
+                    <div className="flex items-center gap-3 bg-slate-50 rounded-lg p-1 border border-slate-100">
                       <button 
-                        type="button" 
-                        onClick={() => setItemQty(prev => Math.max(1, prev - 1))}
-                        className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm"
-                      >
-                        -
-                      </button>
-                      <span className="font-bold text-sm font-mono">{itemQty}</span>
+                        onClick={() => setItemQty(Math.max(1, itemQty - 1))}
+                        className="w-8 h-8 flex items-center justify-center rounded-md bg-white shadow-sm text-slate-600 hover:text-indigo-600 font-bold"
+                      >-</button>
+                      <span className="font-mono font-bold text-sm min-w-[20px] text-center">{itemQty}</span>
                       <button 
-                        type="button" 
-                        onClick={() => setItemQty(prev => prev + 1)}
-                        className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm"
-                      >
-                        +
-                      </button>
+                        onClick={() => setItemQty(itemQty + 1)}
+                        className="w-8 h-8 flex items-center justify-center rounded-md bg-white shadow-sm text-slate-600 hover:text-indigo-600 font-bold"
+                      >+</button>
                     </div>
                   </div>
 
-                  {/* Special note input */}
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase block">Kitchen instructions (optional)</label>
-                    <input
-                      type="text"
-                      
-                      value={itemNote}
-                      onChange={(e) => setItemNote(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold focus:ring-1 focus:ring-indigo-600 outline-none"
-                    />
+                  <div className="flex gap-2 mt-4">
+                    <button
+                      onClick={handleAddToCart}
+                      className="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <ShoppingBag className="h-4 w-4" />
+                      {orderType === 'meal_subscription' ? 'Add to Subscription' : 'Add to Cart'}
+                    </button>
+                    <button
+                      onClick={handleOrderNow}
+                      className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center"
+                    >
+                      {orderType === 'meal_subscription' ? 'Subscribe Now' : 'Order Now'} - {activeTenant.currencySymbol} {currentItemPrice.toLocaleString()}
+                    </button>
                   </div>
                 </div>
-
-                <div className="flex gap-2 mt-4">
-                  <button
-                    onClick={handleAddToCart}
-                    className="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <ShoppingBag className="h-4 w-4" />
-                    Add to Cart
-                  </button>
-                  <button
-                    onClick={handleOrderNow}
-                    className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center"
-                  >
-                    Order Now - {activeTenant.currencySymbol} {currentItemPrice.toLocaleString()}
-                  </button>
-                </div>
-
               </div>
             </div>
           )}
 
           {/* SEARCH STATUS ORDER LISTING SCREEN */}
+
           {isTrackModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
               <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl border border-slate-100 space-y-4 animate-in zoom-in-95">
@@ -1235,7 +1417,7 @@ export default function CustomerView() {
           )}
 
           {/* SHOPPING CART CHECKOUT DRAWER */}
-          {isCartOpen && (
+          {(isCartOpen || isDirectCheckoutOpen) && (
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
               <div className="w-full max-w-sm rounded-t-2xl sm:rounded-2xl bg-white p-5 shadow-2xl border border-slate-100 max-h-[85vh] overflow-y-auto space-y-4 animate-in slide-in-from-bottom-5">
                 
@@ -1244,7 +1426,7 @@ export default function CustomerView() {
                     <ShoppingCart className="h-4 w-4" /> Guest Checkout Cart
                   </span>
                   <button 
-                    onClick={() => setIsCartOpen(false)}
+                    onClick={() => { setIsCartOpen(false); setIsDirectCheckoutOpen(false); setDirectCheckoutItem(null); }}
                     className="text-xs text-slate-400 hover:text-slate-600 font-bold"
                   >
                     Close
@@ -1350,12 +1532,52 @@ export default function CustomerView() {
                             className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-gray-900"
                           />
                         )}
+
+                        {orderType === 'meal_subscription' && (
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center px-1">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase">Select Subscription Package</span>
+                            </div>
+                            <div className="grid gap-2">
+                              {tenantSubscriptionPlans.filter(p => p.isActive).map(pkg => (
+                                <button
+                                  key={pkg.id}
+                                  type="button"
+                                  onClick={() => setSelectedSubPlanId(pkg.id)}
+                                  className={`flex flex-col text-left p-3 rounded-xl border transition-colors ${
+                                    selectedSubPlanId === pkg.id
+                                      ? 'bg-indigo-50 border-indigo-200 text-indigo-800'
+                                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  <span className="font-bold text-sm">{pkg.name}</span>
+                                  <span className="text-xs opacity-75">{pkg.type === 'fixed' ? 'Fixed Bundle' : 'Build Your Own'} • {pkg.durationDays} Days</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                       </>
                     )}
                   </div>
                 </div>
 
                 {/* Loyalty Point Redemption Option (Part 7) */}
+                                {canUseSubscriptionCredits && (
+                  <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-between gap-2 text-xs mb-3">
+                    <div className="space-y-0.5">
+                      <span className="font-bold text-amber-900 block">Use Meal Credits</span>
+                      <p className="text-[10px] text-amber-700 leading-snug">Redeem credits from your active subscription for eligible items in this order.</p>
+                    </div>
+                    <button 
+                      onClick={() => setUseSubscriptionCredits(!useSubscriptionCredits)}
+                      className={`px-3 py-1.5 rounded-lg font-bold text-[10px] uppercase tracking-wide transition-all ${useSubscriptionCredits ? 'bg-amber-600 text-white' : 'bg-white border border-amber-200 text-amber-600'}`}
+                    >
+                      {useSubscriptionCredits ? 'Applied' : 'Apply'}
+                    </button>
+                  </div>
+                )}
                 {loyaltyConfig?.enabled && profile.loyaltyPoints >= loyaltyConfig.minPointsToRedeem && (
                   <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between gap-2 text-xs">
                     <div className="space-y-0.5">
@@ -1371,6 +1593,9 @@ export default function CustomerView() {
                     </button>
                   </div>
                 )}
+
+
+
 
                 {/* Dynamic Payment Channel Selection (Part 1) */}
                 <div className="space-y-3 pt-3 border-t border-slate-100">
@@ -1485,101 +1710,52 @@ export default function CustomerView() {
                 </div>
 
                 {/* Waiter Tip Selection Options (Part 6) */}
-                {selectedPaymentMethodId === 'cash' ? (
-                  <div className="space-y-3 pt-2.5 border-t border-slate-100 bg-amber-50/30 p-3 rounded-xl border border-amber-100/60">
-                    <div className="flex flex-wrap items-center gap-1.5 mt-2 md:mt-0 w-full md:w-auto">
-                      <span className="text-amber-650 text-xs">💰</span>
-                      <p className="text-[10px] font-bold text-slate-850 uppercase tracking-wide">Cash Support Designation</p>
-                    </div>
-                    <p className="text-[10px] text-slate-500 leading-normal">Direct tipping is disabled for cash checkouts. Please choose who your service appreciation belongs to so we can record your feedback:</p>
-                    
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setCashTipRecipient('waiter')}
-                        className={`py-2 rounded-xl border text-center font-bold transition-all cursor-pointer ${
-                          cashTipRecipient === 'waiter'
-                            ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
-                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        🤵 Floor Waiter
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCashTipRecipient('kitchen')}
-                        className={`py-2 rounded-xl border text-center font-bold transition-all cursor-pointer ${
-                          cashTipRecipient === 'kitchen'
-                            ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
-                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        🍳 Kitchen Crew
-                      </button>
-                    </div>
-
-                    {cashTipRecipient === 'kitchen' && (
-                      <div className="space-y-1 mt-2.5 animate-in slide-in-from-top-1">
-                        <label className="text-[9px] font-bold text-slate-400 uppercase">Specific Cooking Station</label>
-                        <select
-                          value={cashTipStationId}
-                          onChange={(e) => setCashTipStationId(e.target.value)}
-                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold focus:outline-none"
-                        >
-                          <option value="">Whole Kitchen (General Team)</option>
-                          {(stations || []).filter(s => s.branchId === activeBranchId).map(s => (
-                            <option key={s.id} value={s.id}>{s.name} Station</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                ) : (
+                {orderType !== 'meal_subscription' && selectedPaymentMethodId !== 'cash' && (
                   <div className="space-y-2 pt-2 border-t border-slate-100">
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Support the wait staff (Waiter Tip)</p>
                     <div className="grid grid-cols-5 gap-1.5 text-xs text-center">
-                      {[0, 1, 3, 5].map((amt) => (
+                        {[0, 1, 3, 5].map((amt) => (
+                          <button
+                            key={amt}
+                            type="button"
+                            onClick={() => {
+                              setSelectedTipAmount(amt);
+                              setCustomTipActive(false);
+                            }}
+                            className={`py-1.5 rounded-lg border font-mono font-bold transition-all ${
+                              selectedTipAmount === amt && !customTipActive
+                                ? 'bg-amber-500 border-amber-500 text-slate-950'
+                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
+                            }`}
+                          >
+                            {amt === 0 ? 'No Tip' : `${activeTenant.currencySymbol}${amt}`}
+                          </button>
+                        ))}
                         <button
-                          key={amt}
                           type="button"
-                          onClick={() => {
-                            setSelectedTipAmount(amt);
-                            setCustomTipActive(false);
-                          }}
-                          className={`py-1.5 rounded-lg border font-mono font-bold transition-all ${
-                            selectedTipAmount === amt && !customTipActive
+                          onClick={() => setCustomTipActive(true)}
+                          className={`py-1.5 rounded-lg border font-bold transition-all ${
+                            customTipActive
                               ? 'bg-amber-500 border-amber-500 text-slate-950'
                               : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
                           }`}
                         >
-                          {amt === 0 ? 'No Tip' : `${activeTenant.currencySymbol}${amt}`}
+                          Custom
                         </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setCustomTipActive(true)}
-                        className={`py-1.5 rounded-lg border font-bold transition-all ${
-                          customTipActive
-                            ? 'bg-amber-500 border-amber-500 text-slate-950'
-                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
-                        }`}
-                      >
-                        Custom
-                      </button>
+                      </div>
+                      {customTipActive && (
+                        <input
+                          type="number"
+                          
+                          value={customTipValue}
+                          onChange={(e) => {
+                            setCustomTipValue(e.target.value);
+                            setSelectedTipAmount(parseFloat(e.target.value) || 0);
+                          }}
+                          className="w-full bg-slate-50 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold font-mono text-gray-900"
+                        />
+                      )}
                     </div>
-                    {customTipActive && (
-                      <input
-                        type="number"
-                        
-                        value={customTipValue}
-                        onChange={(e) => {
-                          setCustomTipValue(e.target.value);
-                          setSelectedTipAmount(parseFloat(e.target.value) || 0);
-                        }}
-                        className="w-full bg-slate-50 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold font-mono text-gray-900"
-                      />
-                    )}
-                  </div>
                 )}
 
                 {/* Financial Totals */}
@@ -1587,10 +1763,10 @@ export default function CustomerView() {
                   {finalDiscountPct > 0 && (
                     <div className="flex justify-between font-medium text-emerald-600">
                       <span>Discount ({finalDiscountPct}%)</span>
-                      <span>-{activeTenant.currencySymbol} {((calculateCartTotal() * finalDiscountPct) / 100).toFixed(2)}</span>
+                      <span>-{activeTenant.currencySymbol} {((getSubtotalWithSubscription() * finalDiscountPct) / 100).toFixed(2)}</span>
                     </div>
                   )}
-                  {selectedTipAmount > 0 && (
+                  {selectedTipAmount > 0 && orderType !== 'meal_subscription' && (
                     <div className="flex justify-between font-medium text-amber-600 font-mono">
                       <span>Staff Support Tip</span>
                       <span>+{activeTenant.currencySymbol} {selectedTipAmount}</span>
@@ -1598,7 +1774,7 @@ export default function CustomerView() {
                   )}
                   <div className="flex justify-between font-extrabold text-slate-900 text-sm">
                     <span>Cart Total Amount</span>
-                    <span>{activeTenant.currencySymbol} {((calculateCartTotal() * (100 - finalDiscountPct)) / 100 + selectedTipAmount).toFixed(2)}</span>
+                    <span>{activeTenant.currencySymbol} {((getSubtotalWithSubscription() * (100 - finalDiscountPct)) / 100 + (orderType === 'meal_subscription' ? 0 : selectedTipAmount)).toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -1613,7 +1789,7 @@ export default function CustomerView() {
                       <span>Simulating Card Clearing...</span>
                     </>
                   ) : (
-                    <span>Place {orderType === 'dine_in' ? `Dine-in Order ${tables.find(t => t.id === activeTableId)?.number || ''}` : 'Pickup Pre-order'}</span>
+                    <span>Place {orderType === 'dine_in' ? `Dine-in Order ${tables.find(t => t.id === activeTableId)?.number || ''}` : orderType === 'meal_subscription' ? 'Meal Subscription Order' : 'Pickup Pre-order'}</span>
                   )}
                 </button>
 

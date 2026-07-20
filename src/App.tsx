@@ -115,20 +115,9 @@ function DashboardShell() {
 
 function AppRouter() {
   const { currentUser } = useApp();
-  const [showApp, setShowApp] = useState(window.location.hash === '#app' || window.location.hash === '#demo');
 
-  useEffect(() => {
-    const handleHash = () => {
-      if (window.location.hash === '#app' || window.location.hash === '#demo') {
-        setShowApp(true);
-      }
-    };
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
-  }, []);
-
-  if (!currentUser && !showApp) {
-    return <LandingPageView onEnterApp={() => { window.location.hash = 'app'; setShowApp(true); }} />;
+  if (!currentUser) {
+    return <LandingPageView />;
   }
 
   return <DashboardShell />;

@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { UserRole, SubscriptionPlan } from '../types';
 import { 
   ChefHat, Coffee, QrCode, Shield, Utensils, CreditCard, Globe, Wifi, WifiOff, Bell, LogOut, User, RefreshCw,
-  PlusCircle, Lock, Mail, Building2, Landmark, HelpCircle, Check, ArrowRight, AlertTriangle, Bike
+  PlusCircle, Lock, Mail, Building2, Landmark, HelpCircle, Check, ArrowRight, AlertTriangle, Bike, Heart
 } from 'lucide-react';
 import { signInWithGoogle, logOut } from '../lib/firebase';
 
@@ -257,21 +257,17 @@ export default function Navbar() {
             )}
           </button>
 
-          {/* Localized Language Switcher (Aisha Amharic support) */}
-          {activeTenantId === 't-01' && (
-            <button 
-              id="nav-lang-btn"
-              onClick={() => setLanguage(currentLanguage === 'en' ? 'am' : 'en')}
-              className="flex items-center gap-1 sm:gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-1.5 sm:px-2.5 py-1 sm:py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
-              title="Toggle Multi-lingual Localization (English / Amharic)"
-            >
-              <Globe className="h-3.5 w-3.5 text-slate-500" />
-              <span>{currentLanguage === 'en' ? 'English' : 'አማርኛ'}</span>
-            </button>
-          )}
+
 
           {/* Quick Real-Time Notifications */}
           <div className="relative">
+                        <button 
+              onClick={() => window.dispatchEvent(new CustomEvent('open-customer-dashboard'))}
+              className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-50 hover:text-rose-500 transition-colors mr-2"
+              title="My Favorites"
+            >
+              <Heart className="h-5 w-5" />
+            </button>
             <button 
               id="nav-notif-btn"
               onClick={() => setShowNotifications(!showNotifications)}

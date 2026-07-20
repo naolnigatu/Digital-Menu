@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   Tenant, Branch, PreparationStation, Category, MenuItem, Table, Order, Staff, SystemLog, UserRole, OrderStatus, OrderItem, SubscriptionPlan, PlatformAd, PlanPricing, TimelineEvent, KitchenNote, 
-  PaymentMethodConfig, LoyaltyConfig, MealSubscriptionPlan, CustomerMealSubscription, CustomerProfile, RefundDetails, LoyaltyHistoryEntry, 
+  PaymentMethodConfig, LoyaltyConfig, MealSubscriptionPackage, CustomerMealSubscription, CustomerProfile, RefundDetails, LoyaltyHistoryEntry, 
   Reservation, Ingredient, StockMovement, MarketplaceExtension, InstalledExtension, DinexNotification, GlobalSettings, SubscriptionRequest
 } from '../types';
 
@@ -110,7 +110,7 @@ interface AppContextType {
   requestTenantUpgrade: (tenantId: string, plan: Tenant['subscriptionPlan']) => void;
   updateTenantCurrency: (tenantId: string, currency: string, currencySymbol: string) => void;
   updateTenantType: (tenantId: string, businessType: string) => void;
-  updateTenantProfile: (tenantId: string, logoUrl: string, bankAccount: string) => void;
+  updateTenantProfile: (tenantId: string, logoUrl: string, bankAccount: string, mealSubscriptionDiscountPercent?: number) => void;
   approveTenantStatus: (tenantId: string) => void;
   rejectTenantStatus: (tenantId: string) => void;
   
@@ -149,12 +149,13 @@ interface AppContextType {
   updateLoyaltyConfig: (tenantId: string, config: LoyaltyConfig) => void;
 
   // Meal Subscription
-  mealSubscriptionPlans: Record<string, MealSubscriptionPlan[]>;
+  mealSubscriptionPlans: Record<string, MealSubscriptionPackage[]>;
   customerSubscriptions: CustomerMealSubscription[];
-  addMealSubscriptionPlan: (plan: Omit<MealSubscriptionPlan, 'id'>) => void;
-  updateMealSubscriptionPlan: (plan: MealSubscriptionPlan) => void;
-  deleteMealSubscriptionPlan: (tenantId: string, planId: string) => void;
+  addMealSubscriptionPackage: (plan: Omit<MealSubscriptionPackage, 'id'>) => void;
+  updateMealSubscriptionPackage: (plan: MealSubscriptionPackage) => void;
+  deleteMealSubscriptionPackage: (tenantId: string, planId: string) => void;
   subscribeToMealPlan: (subscription: Omit<CustomerMealSubscription, 'id'>) => void;
+  updateCustomerMealSubscription: (subId: string, updates: Partial<CustomerMealSubscription>) => void;
   logMealService: (subscriptionId: string) => void;
 
   // Refunds
@@ -355,11 +356,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // 1. Payment Methods Configs State
   const [paymentMethodsConfigs, setPaymentMethodsConfigs] = useState<Record<string, PaymentMethodConfig[]>>(() => {
     const local = localStorage.getItem('mf_payment_methods');
-    if (local) return JSON.parse(local);
+    if (local) {
+      const parsed = JSON.parse(local);
+      // Clean up and filter out card payment methods from any saved state
+      Object.keys(parsed).forEach(k => {
+        parsed[k] = parsed[k].filter((c: any) => c.id !== 'card');
+      });
+      return parsed;
+    }
     
     const defaultConfigs: PaymentMethodConfig[] = [
       { id: 'cash', name: 'Cash', enabled: true, requiresProof: false },
-      { id: 'card', name: 'Card', enabled: true, requiresProof: false },
       { id: 'stripe', name: 'Stripe', enabled: true, requiresProof: false },
       { id: 'mobile_money', name: 'Mobile Money', enabled: true, requiresProof: true, details: 'Telebirr: 0911223344, CBE Birr: +251911223344' },
       { id: 'bank_transfer', name: 'Bank Transfer', enabled: true, requiresProof: true, details: 'Commercial Bank of Ethiopia: 1000123456789 (Dinex PLC)' },
@@ -404,7 +411,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [loyaltyConfigs]);
 
   // 3. Meal Subscription Plans State
-  const [mealSubscriptionPlans, setMealSubscriptionPlans] = useState<Record<string, MealSubscriptionPlan[]>>(() => {
+  const [mealSubscriptionPlans, setMealSubscriptionPackages] = useState<Record<string, MealSubscriptionPackage[]>>(() => {
     const local = localStorage.getItem('mf_meal_subscription_plans');
     if (local) return JSON.parse(local);
     
@@ -491,12 +498,56 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [globalSettings, setGlobalSettings] = useState<GlobalSettings>(() => {
     const local = localStorage.getItem('mf_global_settings');
-    return local ? JSON.parse(local) : {
+    if (local) {
+      const parsed = JSON.parse(local);
+      if (!parsed.allowedDiningServiceTypes) {
+        parsed.allowedDiningServiceTypes = ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'];
+      }
+      if (!parsed.allowedSubscriptionDurations) {
+        parsed.allowedSubscriptionDurations = [7, 14, 30];
+      }
+            if (!parsed.landingPageConfig) {
+        parsed.landingPageConfig = {
+          heroTitle: "Run Your Restaurant Business with AI",
+          heroSubtitle: "Dinex is the ultimate all-in-one platform for modern restaurants, cafes, and multi-branch food chains.",
+          heroBackgroundType: 'video',
+          heroBackgroundUrl: 'https://cdn.pixabay.com/video/2015/09/25/744-139366606_tiny.mp4',
+          aboutTitle: "Why businesses choose Dinex",
+          aboutText: "Join thousands of restaurants that have transformed their operations, increased revenue, and delighted customers using our platform.",
+          featuresTitle: "Everything you need to succeed",
+          featuresSubtitle: "From digital menus to kitchen displays, we've got your entire restaurant operation covered.",
+          contactEmail: "naolnigatu2025@gmail.com"
+        };
+      }
+      if (!parsed.allowedPaymentMethods) {
+        parsed.allowedPaymentMethods = ['cash', 'stripe', 'mobile_money', 'bank_transfer', 'binance_id', 'binance_wallet'];
+      }
+      // Also filter out 'card' from parsed allowedPaymentMethods if any exists
+      if (parsed.allowedPaymentMethods) {
+        parsed.allowedPaymentMethods = parsed.allowedPaymentMethods.filter((p: string) => p !== 'card');
+      }
+      return parsed;
+    }
+    return {
       supportedCountries: ['Ethiopia', 'Kenya', 'Rwanda', 'Nigeria', 'South Africa'],
       supportedCurrencies: ['ETB', 'KES', 'RWF', 'NGN', 'ZAR', 'USD'],
       maintenanceMode: false,
       announcements: [],
-      globalFeatureFlags: {}
+      globalFeatureFlags: {},
+      allowedDiningServiceTypes: ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'],
+      allowedSubscriptionDurations: [7, 14, 30],
+            allowedPaymentMethods: ['cash', 'stripe', 'mobile_money', 'bank_transfer', 'binance_id', 'binance_wallet'],
+      landingPageConfig: {
+        heroTitle: "Run Your Restaurant Business with AI",
+        heroSubtitle: "Dinex is the ultimate all-in-one platform for modern restaurants, cafes, and multi-branch food chains.",
+        heroBackgroundType: 'video',
+        heroBackgroundUrl: 'https://cdn.pixabay.com/video/2015/09/25/744-139366606_tiny.mp4',
+        aboutTitle: "Why businesses choose Dinex",
+        aboutText: "Join thousands of restaurants that have transformed their operations, increased revenue, and delighted customers using our platform.",
+        featuresTitle: "Everything you need to succeed",
+        featuresSubtitle: "From digital menus to kitchen displays, we've got your entire restaurant operation covered.",
+        contactEmail: "naolnigatu2025@gmail.com"
+      }
     };
   });
   useEffect(() => { localStorage.setItem('mf_global_settings', JSON.stringify(globalSettings)); }, [globalSettings]);
@@ -952,6 +1003,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const tenant = tenants.find(t => t.id === orderData.tenantId) || [][0];
     
     // Calculate financial subtotals
+
     let subtotal = 0;
     orderData.items.forEach(it => {
       let itemCost = it.price;
@@ -960,6 +1012,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       subtotal += itemCost * it.quantity;
     });
+
+    if (orderData.type === 'meal_subscription') {
+      const durationMatch = orderData.notes?.match(/Subscription Term: (\d+) Days/);
+      const subDays = durationMatch ? parseInt(durationMatch[1]) : 30;
+      subtotal = subtotal * subDays;
+      if (tenant.mealSubscriptionDiscountPercent && tenant.mealSubscriptionDiscountPercent > 0) {
+        subtotal = subtotal - (subtotal * (tenant.mealSubscriptionDiscountPercent / 100));
+      }
+    }
+
 
     const taxAmount = parseFloat(((subtotal * tenant.baseTaxRate) / 100).toFixed(2));
     const serviceChargeAmount = parseFloat(((subtotal * tenant.serviceCharge) / 100).toFixed(2));
@@ -1511,11 +1573,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
-  const updateTenantProfile = (tenantId: string, logoUrl: string, bankAccount: string) => {
+  const updateTenantProfile = (tenantId: string, logoUrl: string, bankAccount: string, mealSubscriptionDiscountPercent?: number) => {
     setTenants(prev => prev.map(t => {
       if (t.id !== tenantId) return t;
       addLog('Settings Override', `Tenant ${t.name} logo and bank details updated.`);
-      const updated = { ...t, logoUrl, bankAccount };
+      const updated = { ...t, logoUrl, bankAccount, mealSubscriptionDiscountPercent };
       syncToFirestore('businesses', tenantId, updated);
       return updated;
     }));
@@ -1797,10 +1859,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     syncToFirestore('businesses', tenantId, { loyaltyConfig: config });
   };
 
-  const addMealSubscriptionPlan = (plan: Omit<MealSubscriptionPlan, 'id'>) => {
+  const addMealSubscriptionPackage = (plan: Omit<MealSubscriptionPackage, 'id'>) => {
     const id = `sub-plan-${Date.now()}`;
-    const newPlan: MealSubscriptionPlan = { ...plan, id };
-    setMealSubscriptionPlans(prev => {
+    const newPlan: MealSubscriptionPackage = { ...plan, id };
+    setMealSubscriptionPackages(prev => {
       const list = prev[plan.tenantId] || [];
       return {
         ...prev,
@@ -1811,8 +1873,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     syncToFirestore('meal_subscription_plans', id, newPlan);
   };
 
-  const updateMealSubscriptionPlan = (plan: MealSubscriptionPlan) => {
-    setMealSubscriptionPlans(prev => {
+  const updateMealSubscriptionPackage = (plan: MealSubscriptionPackage) => {
+    setMealSubscriptionPackages(prev => {
       const list = prev[plan.tenantId] || [];
       return {
         ...prev,
@@ -1823,8 +1885,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     syncToFirestore('meal_subscription_plans', plan.id, plan);
   };
 
-  const deleteMealSubscriptionPlan = (tenantId: string, planId: string) => {
-    setMealSubscriptionPlans(prev => {
+  const deleteMealSubscriptionPackage = (tenantId: string, planId: string) => {
+    setMealSubscriptionPackages(prev => {
       const list = prev[tenantId] || [];
       return {
         ...prev,
@@ -1839,8 +1901,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const id = `cust-sub-${Date.now()}`;
     const newSub: CustomerMealSubscription = { ...subData, id };
     setCustomerSubscriptions(prev => [...prev, newSub]);
-    addLog('Meal Plan Subscription', `Customer subscribed to meal plan ID: ${subData.planId}`);
+    addLog('Meal Plan Subscription', `Customer subscribed to meal plan ID: ${subData.packageId}`);
     syncToFirestore('customer_subscriptions', id, newSub);
+  };
+
+  const updateCustomerMealSubscription = (subId: string, updates: Partial<CustomerMealSubscription>) => {
+    setCustomerSubscriptions(prev => {
+      const existing = prev.find(s => s.id === subId);
+      if (!existing) return prev;
+      const updated = { ...existing, ...updates };
+      syncToFirestore('customer_subscriptions', subId, updated);
+      return prev.map(s => s.id === subId ? updated : s);
+    });
   };
 
   const logMealService = (subscriptionId: string) => {
@@ -2270,10 +2342,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateLoyaltyConfig,
       mealSubscriptionPlans,
       customerSubscriptions,
-      addMealSubscriptionPlan,
-      updateMealSubscriptionPlan,
-      deleteMealSubscriptionPlan,
+      addMealSubscriptionPackage,
+      updateMealSubscriptionPackage,
+      deleteMealSubscriptionPackage,
       subscribeToMealPlan,
+      updateCustomerMealSubscription,
       logMealService,
       refundOrder,
       customerProfiles,

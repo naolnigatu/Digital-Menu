@@ -197,6 +197,7 @@ const getStaffDefaultRolePermissions = (roleName: string): string[] => {
 
 export default function BusinessOwnerView() {
   const { 
+    globalSettings,
     addCategory, 
     updateCategory, 
     deleteCategory,
@@ -225,6 +226,7 @@ export default function BusinessOwnerView() {
     updateStaffPermissions,
     placeOrder,
     updateOrderStatus,
+    verifyAdvancePayment,
     processPayment,
     cancelOrder,
     assignDelivery,
@@ -749,7 +751,8 @@ export default function BusinessOwnerView() {
   const [localSettings, setLocalSettings] = useState({
     bankAccount: tenant.bankAccount || '',
     currency: tenant.currency || 'ETB',
-    logoUrl: tenant.logoUrl || ''
+    logoUrl: tenant.logoUrl || '',
+    mealSubscriptionDiscountPercent: tenant.mealSubscriptionDiscountPercent || 0
   });
 
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -772,7 +775,7 @@ export default function BusinessOwnerView() {
     try {
       // Simulate real-time server response delay
       await new Promise(resolve => setTimeout(resolve, 800));
-      updateTenantProfile(activeTenantId, localSettings.logoUrl, localSettings.bankAccount);
+      updateTenantProfile(activeTenantId, localSettings.logoUrl, localSettings.bankAccount, localSettings.mealSubscriptionDiscountPercent);
       const symbol = localSettings.currency === 'USD' ? '$' : 'Br';
       updateTenantCurrency(activeTenantId, localSettings.currency, symbol);
       setSettingsStatusMessage({ type: 'success', text: '✓ Saved successfully.' });
@@ -916,7 +919,7 @@ export default function BusinessOwnerView() {
       {
         id: `mod-${Date.now()}`,
         name: newModName,
-        minSelect: 1,
+        minSelect: 0,
         maxSelect: 1,
         options: parsedOptions
       }
@@ -1399,7 +1402,9 @@ export default function BusinessOwnerView() {
                     <option value="delivery">Delivery</option>
                     <option value="drive_through">Drive Through</option>
                     <option value="pickup">Pick Up</option>
-                    <option value="meal_subscription">Meal Subscription</option>
+                    <option value="meal_subscription">Meal Subscription (Purchase)</option>
+                    <option value="subscription_redemption">Subscription Redemption</option>
+                    <option value="subscription_redemption">Subscription Request</option>
                   </select>
 
                   <select
@@ -1740,6 +1745,47 @@ export default function BusinessOwnerView() {
                                   )}
                                 </div>
                               )}
+                            </div>
+                          )}
+
+
+                          {selectedOrderDetail.paymentVerificationStatus === 'pending' && selectedOrderDetail.paymentScreenshotUrl && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 space-y-3">
+                              <h5 className="text-amber-900 font-bold text-sm">Action Required: Verify Advance Payment</h5>
+                              <div className="flex gap-4 items-start">
+                                <a href={selectedOrderDetail.paymentScreenshotUrl} target="_blank" rel="noreferrer" className="shrink-0">
+                                  <img src={selectedOrderDetail.paymentScreenshotUrl} className="w-24 h-24 object-cover rounded-lg border border-amber-200 hover:opacity-80 transition-opacity" alt="Payment Proof" />
+                                </a>
+                                <div className="space-y-1 text-xs">
+                                  <p><span className="font-bold text-amber-800">Transaction Ref:</span> {selectedOrderDetail.advancePaymentRef || 'Not provided'}</p>
+                                  <p><span className="font-bold text-amber-800">Order Amount:</span> {activeBusiness?.currency || 'ETB'} {selectedOrderDetail.total}</p>
+                                </div>
+                              </div>
+                              <div className="flex gap-2 pt-2">
+                                <button
+                                  onClick={() => {
+                                    verifyAdvancePayment(selectedOrderDetail.id, true);
+                                    showToast('Payment verified and accepted.');
+                                    setSelectedOrderDetail(prev => prev ? { ...prev, paymentVerificationStatus: 'approved' } : null);
+                                  }}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 px-4 rounded-lg shadow-sm"
+                                >
+                                  ✓ Approve Payment
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const reason = window.prompt("Reason for rejection:");
+                                    if (reason !== null) {
+                                      verifyAdvancePayment(selectedOrderDetail.id, false, reason);
+                                      showToast('Payment rejected.', 'error');
+                                      setSelectedOrderDetail(prev => prev ? { ...prev, paymentVerificationStatus: 'rejected', status: 'cancelled' } : null);
+                                    }
+                                  }}
+                                  className="bg-rose-50 border border-rose-200 text-rose-700 font-bold text-xs py-2 px-4 rounded-lg hover:bg-rose-100"
+                                >
+                                  ✕ Reject
+                                </button>
+                              </div>
                             </div>
                           )}
 
@@ -3012,7 +3058,7 @@ export default function BusinessOwnerView() {
 
                   {/* Modifiers Generator */}
                   <div className="border-t border-slate-100 pt-3 space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Item Modifiers (e.g. Extra toppings)</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Item Modifiers (e.g. Additional Portions, Sweetness, Spice)</label>
                     <div className="flex gap-2">
                       <input
                         type="text"
@@ -4195,6 +4241,85 @@ export default function BusinessOwnerView() {
                 </div>
               </div>
             )}
+
+            {/* Dining Service Types & Subscription Config */}
+            <div className="mt-4 p-4 rounded-xl border border-indigo-100 bg-indigo-50/10 space-y-4 animate-in fade-in">
+              <h4 className="font-sans font-bold text-xs text-indigo-950 flex items-center gap-1.5">
+                <Settings className="h-4 w-4 text-indigo-600" />
+                <span>Service Channels & Subscriptions</span>
+              </h4>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="text-[10px] font-bold text-indigo-900/60 uppercase">Business-specific Service Channels</label>
+                  <p className="text-[9px] text-slate-400 mb-2">Enable or disable dining services for this business. Only service channels enabled by the Platform Super Admin can be activated.</p>
+                  <div className="space-y-1.5 bg-white p-3 rounded-lg border border-slate-100 grid grid-cols-1 gap-1">
+                    {[
+                      { id: 'dine_in', label: 'Dine-In' },
+                      { id: 'takeaway', label: 'Takeaway' },
+                      { id: 'delivery', label: 'Delivery' },
+                      { id: 'drive_through', label: 'Drive Thru' },
+                      { id: 'pickup', label: 'Pick Up' },
+                      { id: 'meal_subscription', label: 'Subscription' }
+                    ].map((srv) => {
+                      const superAdminAllowed = (globalSettings?.allowedDiningServiceTypes || ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription']).includes(srv.id);
+                      const isChecked = (localDinexSettings.enabledDiningServiceTypes || ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription']).includes(srv.id);
+                      
+                      return (
+                        <label key={srv.id} className={`flex items-center justify-between p-1.5 rounded text-xs font-semibold ${superAdminAllowed ? 'text-slate-700 cursor-pointer' : 'text-slate-350 bg-slate-50'}`}>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              disabled={!superAdminAllowed}
+                              checked={superAdminAllowed && isChecked}
+                              onChange={() => {
+                                const current = localDinexSettings.enabledDiningServiceTypes || ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'];
+                                let next: string[];
+                                if (isChecked) {
+                                  next = current.filter(x => x !== srv.id);
+                                } else {
+                                  next = [...current, srv.id];
+                                }
+                                setLocalDinexSettings(prev => ({
+                                  ...prev,
+                                  enabledDiningServiceTypes: next
+                                }));
+                              }}
+                              className="rounded text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
+                            />
+                            <span>{srv.label}</span>
+                          </div>
+                          {!superAdminAllowed && (
+                            <span className="text-[8px] font-bold text-rose-500 uppercase tracking-wider bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">Disabled by Admin</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-indigo-900/60 uppercase">Supported Subscription Durations (comma separated days)</label>
+                  <p className="text-[9px] text-slate-400 mb-2">Define durations in days for your meal subscription plans. Select from or define dynamic durations.</p>
+                  <input
+                    type="text"
+                    value={(localDinexSettings.subscriptionDurations || [7, 14, 30]).join(', ')}
+                    onChange={(e) => {
+                      const vals = e.target.value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+                      setLocalDinexSettings(prev => ({
+                        ...prev,
+                        subscriptionDurations: vals
+                      }));
+                    }}
+                    placeholder="e.g., 7, 14, 30"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none font-mono"
+                  />
+                  <p className="text-[9px] text-slate-400 mt-2 leading-relaxed">
+                    Allowed durations globally set by Super Admin: <span className="font-bold font-mono">{(globalSettings?.allowedSubscriptionDurations || [7, 14, 30]).join(', ')}</span>.
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {/* Feature Status Alerts */}
             {featuresStatusMessage && (

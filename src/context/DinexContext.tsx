@@ -240,6 +240,8 @@ const DEFAULT_SETTINGS: Record<string, BusinessSettings> = {
     deliveryEnabled: false,
     deliveryApprovalMode: 'manual',
     predefinedDeliveryFee: 150,
+    enabledDiningServiceTypes: ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'],
+    subscriptionDurations: [7, 14, 30],
   },
   'biz-02': {
     orderingEnabled: true,
@@ -253,6 +255,8 @@ const DEFAULT_SETTINGS: Record<string, BusinessSettings> = {
     deliveryEnabled: true,
     deliveryApprovalMode: 'automatic',
     predefinedDeliveryFee: 120,
+    enabledDiningServiceTypes: ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'],
+    subscriptionDurations: [7, 14, 30],
   },
 };
 
@@ -658,7 +662,20 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const { activeBusiness } = useDinexBusiness();
   const [settings, setSettings] = useState<Record<string, BusinessSettings>>(() => {
     const local = localStorage.getItem('dinex_settings');
-    return local ? JSON.parse(local) : DEFAULT_SETTINGS;
+    if (local) {
+      const parsed = JSON.parse(local);
+      // Ensure all business settings have the new properties
+      Object.keys(parsed).forEach(bizId => {
+        if (!parsed[bizId].enabledDiningServiceTypes) {
+          parsed[bizId].enabledDiningServiceTypes = ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'];
+        }
+        if (!parsed[bizId].subscriptionDurations) {
+          parsed[bizId].subscriptionDurations = [7, 14, 30];
+        }
+      });
+      return parsed;
+    }
+    return DEFAULT_SETTINGS;
   });
 
   useEffect(() => {
@@ -677,6 +694,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     deliveryEnabled: true,
     deliveryApprovalMode: 'manual',
     predefinedDeliveryFee: 150,
+    enabledDiningServiceTypes: ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'],
+    subscriptionDurations: [7, 14, 30],
   }) : null;
 
   const updateSettings = (businessId: string, newSettings: BusinessSettings) => {
