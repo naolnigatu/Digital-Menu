@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   Tenant, Branch, PreparationStation, Category, MenuItem, Table, Order, Staff, SystemLog, UserRole, OrderStatus, OrderItem, SubscriptionPlan, PlatformAd, PlanPricing, TimelineEvent, KitchenNote, 
   PaymentMethodConfig, LoyaltyConfig, MealSubscriptionPackage, CustomerMealSubscription, CustomerProfile, RefundDetails, LoyaltyHistoryEntry, 
-  Reservation, Ingredient, StockMovement, MarketplaceExtension, InstalledExtension, DinexNotification, GlobalSettings, SubscriptionRequest
+  Reservation, Ingredient, StockMovement, MarketplaceExtension, InstalledExtension, DinexNotification, GlobalSettings, SubscriptionRequest, LandingPageConfig
 } from '../types';
 
 
@@ -56,10 +56,13 @@ interface AppContextType {
   // Platform Settings
   globalSettings: GlobalSettings;
   updateGlobalSettings: (settings: Partial<GlobalSettings>) => void;
+  landingPageConfig: LandingPageConfig;
+  updateLandingPageConfig: (settings: Partial<LandingPageConfig>) => void;
   
   // Actions
   currentView: 'landing' | 'login' | 'signup' | 'customer' | 'dashboard';
   setCurrentView: (view: 'landing' | 'login' | 'signup' | 'customer' | 'dashboard') => void;
+  registerUser: (email: string, name: string, role: "customer" | "owner") => void;
   registerCustomer: (name: string, email: string, phone: string) => void;
   login: (email: string) => boolean;
   logout: () => void;
@@ -499,6 +502,117 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
   useEffect(() => { localStorage.setItem('mf_installed_extensions', JSON.stringify(installedExtensions)); }, [installedExtensions]);
 
+  const defaultLandingPageConfig: LandingPageConfig = {
+    heroTitle: "Run Your Restaurant Business with AI",
+    heroSubtitle: "Dinex is the ultimate all-in-one platform for modern restaurants, cafes, and multi-branch food chains.",
+    heroBackgroundType: 'video',
+    heroBackgroundUrl: 'https://cdn.pixabay.com/video/2015/09/25/744-139366606_tiny.mp4',
+    heroCtaText: 'Get Started / Browse Menus',
+    heroCtaLink: '#',
+    heroOverlayOpacity: 70,
+    featuresEnabled: true,
+    businessTypesEnabled: true,
+    pricingEnabled: true,
+    faqEnabled: true,
+    testimonialsEnabled: false,
+    screenshotsEnabled: false,
+    pricingPlans: [
+      {
+        id: 'free',
+        name: 'Starter',
+        description: 'Perfect for small cafes and food trucks.',
+        monthlyPrice: 0,
+        yearlyPrice: 0,
+        priceETB: 0,
+        priceUSD: 0,
+        features: ['Digital QR Menu', 'Up to 50 Orders/mo', '1 Admin User', 'Basic Analytics'],
+        isRecommended: false, enabled: true, yearlyDiscount: 20
+      },
+      {
+        id: 'pro',
+        name: 'Professional',
+        description: 'Ideal for busy restaurants and chains.',
+        monthlyPrice: 49,
+        yearlyPrice: 470,
+        priceETB: 5000,
+        priceUSD: 49,
+        features: ['Unlimited Orders', 'Kitchen Display (KDS)', 'Unlimited Staff Accounts', 'Advanced Analytics', 'Priority Support'],
+        isRecommended: true, enabled: true, yearlyDiscount: 20
+      },
+      {
+        id: 'enterprise',
+        name: 'Enterprise',
+        description: 'Custom solutions for large businesses.',
+        monthlyPrice: 199,
+        yearlyPrice: 1900,
+        priceETB: 20000,
+        priceUSD: 199,
+        features: ['Multiple Branches', 'Custom Domain', 'Dedicated Account Manager', 'Custom API Integrations', 'White-labeling Options'],
+        isRecommended: false, enabled: true, yearlyDiscount: 20
+      }
+    ],
+    featuresTitle: "Everything you need to succeed",
+    featuresSubtitle: "From digital menus to kitchen displays, we've got your entire restaurant operation covered.",
+    features: [
+      { id: 'f1', title: 'Digital Menu & QR Ordering', description: 'Let customers scan and order instantly from their tables or homes.', icon: 'QrCode', order: 1, enabled: true },
+      { id: 'f2', title: 'Kitchen Display (KDS)', description: 'Send orders straight to the kitchen. Track prep times and manage tickets.', icon: 'ChefHat', order: 2, enabled: true },
+      { id: 'f3', title: 'Reservations', description: 'Manage table bookings, walk-ins, and waitlists with ease.', icon: 'Calendar', order: 3, enabled: true },
+      { id: 'f4', title: 'Delivery Management', description: 'Track drivers, optimize routes, and keep customers updated.', icon: 'MapPin', order: 4, enabled: true },
+      { id: 'f5', title: 'Customer Loyalty & Subs', description: 'Create meal subscriptions and reward programs to retain customers.', icon: 'Users', order: 5, enabled: true },
+      { id: 'f6', title: 'Reports & Analytics', description: 'Get insights into sales, popular items, and staff performance.', icon: 'BarChart3', order: 6, enabled: true },
+    ],
+    businessTypesTitle: "Built for all F&B Businesses",
+    businessTypesSubtitle: "Whatever you run, Dinex has the modules you need.",
+    businessTypes: [
+      { id: 'b1', type: 'Restaurants', description: '', icon: '', order: 1, enabled: true },
+      { id: 'b2', type: 'Coffee Shops', description: '', icon: '', order: 2, enabled: true },
+      { id: 'b3', type: 'Fast Food', description: '', icon: '', order: 3, enabled: true },
+      { id: 'b4', type: 'Bakeries', description: '', icon: '', order: 4, enabled: true },
+      { id: 'b5', type: 'Hotels', description: '', icon: '', order: 5, enabled: true },
+      { id: 'b6', type: 'Food Courts', description: '', icon: '', order: 6, enabled: true },
+      { id: 'b7', type: 'Juice Bars', description: '', icon: '', order: 7, enabled: true },
+      { id: 'b8', type: 'Pizza Shops', description: '', icon: '', order: 8, enabled: true },
+      { id: 'b9', type: 'Ice Cream Shops', description: '', icon: '', order: 9, enabled: true },
+      { id: 'b10', type: 'Food Trucks', description: '', icon: '', order: 10, enabled: true },
+      { id: 'b11', type: 'Catering', description: '', icon: '', order: 11, enabled: true },
+    ],
+    faqTitle: "Frequently Asked Questions",
+    faqSubtitle: "",
+    faqs: [
+      { id: 'q1', question: "How does Dinex work?", answer: "Dinex is a cloud-based restaurant and food business management platform. Business owners create their business, customize menus, manage staff, and configure operations. Customers simply scan a QR code or browse the online menu, place orders, reserve tables, subscribe to meal plans, request delivery, and track their orders in real time. Orders automatically flow through Kitchen, Cashier, Waiter, and Delivery workflows depending on the business configuration.", order: 1, enabled: true },
+      { id: 'q2', question: "Can I use QR menus?", answer: "Yes. Dinex generates unique QR codes for tables, takeaway counters, and other ordering points. Customers simply scan the QR code to browse the live menu, customize their order, place it instantly, and follow its progress without waiting for a staff member.", order: 2, enabled: true },
+      { id: 'q3', question: "Does it work on phones?", answer: "Absolutely. Dinex is a fully responsive Progressive Web App (PWA) designed primarily for mobile devices. Customers, waiters, kitchen staff, delivery staff, managers, cashiers, and business owners can all use Dinex from their phones, tablets, or computers.", order: 3, enabled: true },
+      { id: 'q4', question: "Can I manage multiple branches?", answer: "Yes. Depending on your subscription plan, Dinex allows businesses to manage multiple branches from one account. Each branch can have its own staff, menus, orders, reports, and settings while owners maintain centralized control and analytics.", order: 4, enabled: true },
+      { id: 'q5', question: "Does Dinex support delivery?", answer: "Yes. Dinex includes a complete delivery management system. Businesses can assign delivery staff, verify customer addresses, calculate delivery fees, track delivery progress, notify customers in real time, and confirm successful delivery.", order: 5, enabled: true },
+      { id: 'q6', question: "Can customers reserve tables?", answer: "Yes. Customers can reserve tables before arriving. Businesses can approve, reject, or manage reservations and control availability from the reservation dashboard.", order: 6, enabled: true },
+      { id: 'q7', question: "Does Dinex support meal subscriptions?", answer: "Yes. Businesses can create flexible meal subscription packages. Customers can subscribe to meal plans containing multiple menu items and redeem their remaining meal credits at any time according to the business rules.", order: 7, enabled: true },
+      { id: 'q8', question: "Does Dinex work offline?", answer: "Yes. Dinex is built as a Progressive Web App (PWA). Frequently used resources remain available offline, and data synchronizes automatically when the internet connection is restored where applicable.", order: 8, enabled: true },
+      { id: 'q9', question: "Is Dinex secure?", answer: "Yes. Dinex uses Firebase Authentication, Cloud Firestore security rules, role-based permissions, and multi-tenant data isolation to ensure each business can access only its own data.", order: 9, enabled: true },
+      { id: 'q10', question: "Can I start for free?", answer: "Yes. Dinex offers a Free plan so businesses can explore the platform before upgrading to higher plans as their business grows.", order: 10, enabled: true }
+    ],
+    testimonialsTitle: "Loved by businesses everywhere",
+    testimonialsSubtitle: "See what our early adopters have to say.",
+    testimonials: [],
+    screenshotsTitle: "Platform Overview",
+    screenshotsSubtitle: "See Dinex in action.",
+    screenshots: [],
+    contactEmail: "naolnigatu2025@gmail.com",
+    contactPhone: "",
+    contactAddress: "",
+    socialLinks: {},
+    footerCopyright: `© ${new Date().getFullYear()} Dinex Platform. All rights reserved.`,
+    footerPrivacyUrl: "#",
+    footerTermsUrl: "#",
+    footerLinks: []
+  };
+
+  const [landingPageConfig, setLandingPageConfig] = useState<LandingPageConfig>(() => {
+    const local = localStorage.getItem('mf_landing_page_settings');
+    if (local) return JSON.parse(local);
+    return defaultLandingPageConfig;
+  });
+  useEffect(() => { localStorage.setItem('mf_landing_page_settings', JSON.stringify(landingPageConfig)); }, [landingPageConfig]);
+
   const [globalSettings, setGlobalSettings] = useState<GlobalSettings>(() => {
     const local = localStorage.getItem('mf_global_settings');
     if (local) {
@@ -624,6 +738,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             console.error("Firestore installed extensions listener error:", err);
           });
 
+          const unsubscribeLandingPageConfig = onSnapshot(firestoreDoc(db, 'landing_page_settings', 'global'), (docSnapshot) => {
+            if (docSnapshot.exists()) {
+              setLandingPageConfig(docSnapshot.data() as LandingPageConfig);
+            }
+          }, (err) => {
+            console.error("Firestore landing page settings listener error:", err);
+          });
+
           const unsubscribeGlobalSettings = onSnapshot(firestoreDoc(db, 'system_settings', 'global'), (docSnapshot) => {
             if (docSnapshot.exists()) {
               setGlobalSettings(docSnapshot.data() as GlobalSettings);
@@ -640,6 +762,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             unsubscribeMarketplaceExtensions();
             unsubscribeInstalledExtensions();
             unsubscribeGlobalSettings();
+            unsubscribeLandingPageConfig();
           };
         }
       } catch (err) {
@@ -1852,6 +1975,65 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCurrentUser(loggedUser);
   };
 
+  const registerUser = (email: string, name: string, role: 'customer' | 'owner') => {
+    const cleanEmail = email.toLowerCase().trim();
+    if (role === 'customer') {
+      const id = `cust-${Date.now()}`;
+      const newProfile = {
+        id, email: cleanEmail, name, phone: '', savedAddresses: [], savedFavorites: [], loyaltyPoints: 0, loyaltyHistory: []
+      };
+      setCustomerProfiles(prev => ({ ...prev, [cleanEmail]: newProfile }));
+      syncToFirestore('users', id, newProfile);
+    } else if (role === 'owner') {
+      // Create a temporary owner profile. 
+      // OnboardingView will handle the tenant creation later.
+      const id = `owner-${Date.now()}`;
+      const userProfile = { id, email: cleanEmail, name, role: 'owner' };
+      // Instead of storing it in a special collection, we just rely on `login` logic 
+      // to recognize them if we create an empty tenant or just allow them to pass through?
+      // Wait, `login` function checks `tenants` array for ownerEmail.
+      // Or we can add them to `staff` with role 'owner' but no tenantId?
+      // Let's create an empty tenant for them now.
+      const tenantId = `tenant-${Date.now()}`;
+      const newTenant = {
+        id: tenantId,
+        name: `${name}'s Business`,
+        ownerEmail: cleanEmail,
+        currency: 'USD',
+        currencySymbol: '$',
+        timezone: 'UTC',
+        subscriptionPlan: 'free',
+        planStatus: 'active',
+        taxPercent: 0,
+        diningServiceTypes: ['dine_in']
+      };
+      setTenants(prev => [...prev, newTenant as any]);
+      
+      const newBranch = {
+        id: `branch-${Date.now()}`,
+        tenantId,
+        name: 'Main Branch',
+        isMain: true
+      };
+      setBranches(prev => [...prev, newBranch as any]);
+      
+      const ownerStaff = {
+        id,
+        tenantId,
+        branchId: newBranch.id,
+        name,
+        email: cleanEmail,
+        role: 'owner',
+        active: true
+      };
+      setStaff(prev => [...prev, ownerStaff as any]);
+      
+      syncToFirestore('tenants', tenantId, newTenant);
+      syncToFirestore('branches', newBranch.id, newBranch);
+      syncToFirestore('staff', id, ownerStaff);
+    }
+  };
+
   const registerCustomer = (name: string, email: string, phone: string) => {
     const cleanEmail = (email || '').toLowerCase().trim();
     const id = `cust-${Date.now()}`;
@@ -2322,6 +2504,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateLandingPageConfig = async (settings: Partial<LandingPageConfig>) => {
+    const updated = { ...landingPageConfig, ...settings };
+    setLandingPageConfig(updated);
+    try {
+      await syncToFirestore('landing_page_settings', 'global', updated);
+      addLog('Update Landing Page Settings Success', `Successfully updated landing page configuration.`);
+    } catch (err: any) {
+      console.error("Update Landing Page Settings Error:", err);
+      addLog('Update Landing Page Settings Error', `Failed to update landing page settings: ${err.message || err}`);
+    }
+  };
+
   const updateGlobalSettings = async (settings: Partial<GlobalSettings>) => {
     const updated = { ...globalSettings, ...settings };
     setGlobalSettings(updated);
@@ -2348,6 +2542,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       activeTenantId,
       activeBranchId,
       currentLanguage,
+      registerUser,
       login,
       logout,
       setActiveTenantId,
@@ -2451,7 +2646,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       uninstallExtension,
 
       globalSettings,
-      updateGlobalSettings
+      updateGlobalSettings,
+      landingPageConfig,
+      updateLandingPageConfig
     }}>
       {children}
     </AppContext.Provider>

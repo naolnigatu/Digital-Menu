@@ -218,10 +218,15 @@ export interface PlatformStats {
 export interface PlanPricing {
   id: SubscriptionPlan;
   name: string;
-  priceUSD: number;
-  priceETB: number;
+  monthlyPrice: number; // USD
+  yearlyPrice: number; // USD
+  priceETB: number; // monthly ETB
+  priceUSD: number; // monthly USD
+  yearlyDiscount: number;
   description: string;
   features: string[];
+  enabled: boolean;
+  isRecommended: boolean;
 }
 
 export type BusinessType =
@@ -328,16 +333,128 @@ export interface DinexNotification {
 }
 
 
+export interface LandingPageFeature {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  order: number;
+  enabled: boolean;
+}
+
+export interface LandingPageBusinessType {
+  id: string;
+  type: string;
+  description: string;
+  icon: string;
+  order: number;
+  enabled: boolean;
+}
+
+export interface LandingPageFaq {
+  id: string;
+  question: string;
+  answer: string;
+  order: number;
+  enabled: boolean;
+}
+
+export interface LandingPageTestimonial {
+  id: string;
+  author: string;
+  role: string;
+  company: string;
+  content: string;
+  imageUrl?: string;
+  order: number;
+  enabled: boolean;
+}
+
+export interface LandingPageScreenshot {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  order: number;
+  enabled: boolean;
+}
+
+export interface LandingPageFooterLink {
+  id: string;
+  label: string;
+  url: string;
+  order: number;
+}
+
 export interface LandingPageConfig {
+  // Hero
   heroTitle: string;
   heroSubtitle: string;
   heroBackgroundType: 'image' | 'video' | 'color';
   heroBackgroundUrl: string;
-  aboutTitle: string;
-  aboutText: string;
+  heroCtaText: string;
+  heroCtaLink: string;
+  heroSecondaryCtaText?: string;
+  heroSecondaryCtaLink?: string;
+  
+  // Sections Enable/Disable
+  featuresEnabled: boolean;
+  businessTypesEnabled: boolean;
+  pricingEnabled: boolean;
+  faqEnabled: boolean;
+  testimonialsEnabled: boolean;
+  screenshotsEnabled: boolean;
+
+  // Features
   featuresTitle: string;
   featuresSubtitle: string;
+  features: LandingPageFeature[];
+
+  // Business Types
+  businessTypesTitle: string;
+  businessTypesSubtitle: string;
+  businessTypes: LandingPageBusinessType[];
+
+  // FAQ
+  faqTitle: string;
+  faqSubtitle: string;
+  faqs: LandingPageFaq[];
+
+  // Testimonials
+  testimonialsTitle: string;
+  testimonialsSubtitle: string;
+  testimonials: LandingPageTestimonial[];
+
+  // Screenshots
+  screenshotsTitle: string;
+  screenshotsSubtitle: string;
+  screenshots: LandingPageScreenshot[];
+
+  // Contact
   contactEmail: string;
+  contactPhone: string;
+  contactAddress: string;
+  socialLinks: Record<string, string>;
+
+  // Footer
+  footerCopyright: string;
+  footerPrivacyUrl: string;
+  footerTermsUrl: string;
+  footerLinks: LandingPageFooterLink[];
+
+  // SEO & Analytics
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string;
+  seoOpenGraphImage?: string;
+  seoFavicon?: string;
+  analyticsId?: string;
+
+  // New Hero Options
+  heroOverlayOpacity?: number;
+
+  // Pricing
+  pricingPlans: PlanPricing[];
 }
 
 export interface GlobalSettings {

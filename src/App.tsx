@@ -15,8 +15,6 @@ import CustomerView from './views/CustomerView';
 import DeliveryStaffView from './views/DeliveryStaffView';
 import OnboardingView from './views/OnboardingView';
 import LandingPageView from './views/LandingPageView';
-import LoginPage from './views/LoginPage';
-import SignupPage from './views/SignupPage';
 import { useState, useEffect } from 'react';
 import { 
   Building, LayoutGrid, CheckCircle2, ShieldCheck, RefreshCw, AlertTriangle, ArrowLeft
@@ -115,43 +113,22 @@ function DashboardShell() {
 }
 
 
+import AuthView from './views/AuthView';
+
 function AppRouter() {
-  const { currentUser, currentView, setCurrentView } = useApp();
-
-  const handleBack = () => {
-    if (currentView === 'login' || currentView === 'signup') {
-      setCurrentView('landing');
-    } else if (currentView === 'customer') {
-      window.dispatchEvent(new CustomEvent('go-back-customer'));
-    } else {
-      setCurrentView('landing');
-    }
-  };
-
-  const showGlobalBack = currentView !== 'landing' && !currentUser;
+  const { currentUser, currentView } = useApp();
 
   return (
     <div className="relative">
-      {showGlobalBack && (
-        <button 
-          onClick={handleBack}
-          className="fixed top-4 left-4 z-50 flex items-center justify-center gap-1.5 rounded-full bg-white border border-slate-250/80 px-3.5 py-2 text-xs font-bold text-slate-700 shadow-md hover:bg-slate-50 transition-all hover:scale-105 shrink-0"
-          title="Back"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Back</span>
-        </button>
-      )}
-
       {(() => {
         if (currentUser) {
           return <DashboardShell />;
         }
         switch (currentView) {
           case 'login':
-            return <LoginPage />;
+            return <AuthView defaultMode="signin" />;
           case 'signup':
-            return <SignupPage />;
+            return <AuthView defaultMode="signup" />;
           case 'customer':
             return <DashboardShell />;
           default:

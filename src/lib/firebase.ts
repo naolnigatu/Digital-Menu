@@ -1,10 +1,12 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, Auth } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, Auth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 let auth: Auth | null = null;
 let db: Firestore | null = null;
+let storage: FirebaseStorage | null = null;
 let googleProvider: GoogleAuthProvider | null = null;
 
 export const initializeFirebase = () => {
@@ -17,12 +19,13 @@ export const initializeFirebase = () => {
       const app = initializeApp(firebaseConfig);
       auth = getAuth(app);
       db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+      storage = getStorage(app);
       googleProvider = new GoogleAuthProvider();
     }
   } catch (err) {
     console.error("Error initializing Firebase:", err);
   }
-  return { auth, db, googleProvider };
+  return { auth, db, storage, googleProvider };
 };
 
 export const getDB = (): Firestore | null => {
@@ -30,11 +33,16 @@ export const getDB = (): Firestore | null => {
   return initialized ? initialized.db : null;
 };
 
+export const getFirebaseStorage = (): FirebaseStorage | null => {
+  const initialized = initializeFirebase();
+  return initialized ? initialized.storage : null;
+};
+
 export const signInWithGoogle = async () => {
   try {
     const initialized = initializeFirebase();
     if (!initialized || !initialized.auth || !initialized.googleProvider) {
-      throw new Error("Firebase is not configured in the environment variables (VITE_FIREBASE_API_KEY missing).");
+      throw new Error("Firebase is not configured.");
     }
     const result = await signInWithPopup(initialized.auth, initialized.googleProvider);
     return result.user;
@@ -42,6 +50,20 @@ export const signInWithGoogle = async () => {
     console.error('Google Sign In Error:', error);
     throw error;
   }
+};
+
+export const signInWithEmail = async (email: string, pass: string) => {
+  const initialized = initializeFirebase();
+  if (!initialized || !initialized.auth) throw new Error("Firebase not initialized");
+  const result = await signInWithEmailAndPassword(initialized.auth, email, pass);
+  return result.user;
+};
+
+export const signUpWithEmail = async (email: string, pass: string) => {
+  const initialized = initializeFirebase();
+  if (!initialized || !initialized.auth) throw new Error("Firebase not initialized");
+  const result = await createUserWithEmailAndPassword(initialized.auth, email, pass);
+  return result.user;
 };
 
 export const logOut = async () => {

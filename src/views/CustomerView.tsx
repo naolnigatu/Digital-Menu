@@ -6,8 +6,7 @@ import {
   Search, ShoppingBag, Languages, Flame, Award, Clock, ArrowRight, Star, 
   Smile, ClipboardList, CheckCircle2, ShoppingCart, User, Smartphone, MapPin, Megaphone,
   MessageSquare, RefreshCw, Sparkles, Send, Calendar, Truck, Car, Check, Heart, Lock, LogOut, Ticket,
-  AlertTriangle
-} from 'lucide-react';
+  AlertTriangle, ArrowLeft } from "lucide-react";
 import CustomerProfileDashboard from '../components/CustomerProfileDashboard';
 import { useDinexSettings } from '../context/DinexContext';
 
@@ -875,6 +874,13 @@ const currentItemPrice = useMemo(() => {
 
     return (
       <div className="space-y-8 py-6 px-4 max-w-6xl mx-auto animate-in fade-in duration-300">
+        <button 
+          onClick={() => setCurrentView('landing')}
+          className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-100 text-slate-600 hover:text-slate-950 hover:border-slate-200 shadow-sm transition-all text-xs font-bold w-fit"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Home
+        </button>
         <div className="text-center max-w-2xl mx-auto space-y-3">
           <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">Explore Restaurant Menus</h2>
           <p className="text-sm text-slate-500 leading-relaxed">
@@ -946,12 +952,21 @@ const currentItemPrice = useMemo(() => {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200 max-w-lg mx-auto bg-slate-50/50 pb-12 rounded-3xl min-h-[85vh] shadow-inner overflow-hidden border border-slate-100">
+    <div className="space-y-6 animate-in fade-in duration-200 max-w-lg mx-auto bg-slate-50/50 pb-12 rounded-3xl min-h-[85vh] shadow-inner overflow-hidden border border-slate-100 relative">
       
+      {/* Back to Directory Floating Button */}
+      <button
+        onClick={() => setShowDirectory(true)}
+        className="absolute top-4 left-4 z-50 flex items-center justify-center h-8 w-8 rounded-full bg-white/20 backdrop-blur-md border border-white/30 text-white hover:bg-white/30 transition-all shadow-sm"
+        title="Back to Directory"
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
+
       {/* 1. CUSTOMER PORTAL HEADER CONFIGS */}
       {!currentLiveOrder ? (
         <>
-          <div className="bg-slate-900 text-white p-5 space-y-4 shadow-md rounded-b-2xl">
+          <div className="bg-slate-900 text-white p-5 pt-14 space-y-4 shadow-md rounded-b-2xl">
             <div className="flex flex-row justify-between items-center gap-2">
               <div className="flex-1 flex items-center gap-2 min-w-0">
                 <img 
@@ -1163,7 +1178,7 @@ const currentItemPrice = useMemo(() => {
         </>
       ) : (
         /* Live tracker banner when order placed */
-        <div className="bg-slate-900 text-white p-4 flex items-center justify-between rounded-b-2xl">
+        <div className="bg-slate-900 text-white p-4 pt-14 flex items-center justify-between rounded-b-2xl">
           <div className="flex items-center gap-2">
             <span className="relative flex h-3.5 w-3.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -2066,7 +2081,7 @@ const currentItemPrice = useMemo(() => {
                   {currentLiveOrder.items.some(it => it.status === 'cancelled') && (
                     <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl text-xs space-y-1.5 mb-4 animate-in fade-in">
                       <p className="font-bold text-rose-800 flex items-center gap-1">
-                        <AlertTriangle className="h-4 w-4 text-rose-600" />
+                        <AlertTriangle className="h-4 w-4" />
                         <span>Unavailable Items (Cancelled)</span>
                       </p>
                       <p className="text-[10px] text-rose-700 leading-normal mb-1">
@@ -2496,7 +2511,7 @@ const currentItemPrice = useMemo(() => {
           {toast.type === 'success' ? (
             <Check className="h-4 w-4 bg-emerald-500 text-white rounded-full p-0.5" />
           ) : (
-            <AlertTriangle className="h-4 w-4 text-rose-500" />
+                        <AlertTriangle className="h-4 w-4" />
           )}
           <span className="text-xs font-bold">{toast.text}</span>
         </div>
