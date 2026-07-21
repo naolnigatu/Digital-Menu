@@ -22,6 +22,7 @@ export default function CustomerView() {
     menuItems, 
     tables, 
     orders, 
+    setCurrentView,
     stations,
     activeTenantId, 
     setActiveTenantId,
@@ -68,6 +69,7 @@ export default function CustomerView() {
   const [orderType, setOrderType] = useState<string>('dine_in');
 
   const activeServiceTypes = useMemo(() => {
+    const isFreePlan = activeTenant?.subscriptionPlan === 'free';
     const allTypes = [
       { id: 'dine_in', label: 'Dine-In' },
       { id: 'takeaway', label: 'Takeaway' },
@@ -75,11 +77,11 @@ export default function CustomerView() {
       { id: 'drive_through', label: 'Drive Thru' },
       { id: 'pickup', label: 'Pick Up' },
       { id: 'meal_subscription', label: 'Subscription' }
-    ];
+    ].filter(t => !isFreePlan || t.id !== 'meal_subscription');
     const globalAllowed = globalSettings?.allowedDiningServiceTypes || ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'];
     const bizEnabled = activeSettings?.enabledDiningServiceTypes || ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'];
     return allTypes.filter(t => globalAllowed.includes(t.id) && bizEnabled.includes(t.id));
-  }, [globalSettings, activeSettings]);
+  }, [globalSettings, activeSettings, activeTenant]);
 
   useEffect(() => {
     if (activeServiceTypes.length > 0 && !activeServiceTypes.some(t => t.id === orderType)) {
@@ -107,6 +109,35 @@ export default function CustomerView() {
   }, [availableDurations, subscriptionDurationDays]);
 
   // New States: Account Dashboards & Auth
+  const [showDirectory, setShowDirectory] = useState(() => {
+    const saved = localStorage.getItem('mf_customer_show_directory');
+    return saved === 'false' ? false : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('mf_customer_show_directory', String(showDirectory));
+  }, [showDirectory]);
+
+  useEffect(() => {
+    const handleGoBack = () => {
+      if (!showDirectory) {
+        setShowDirectory(true);
+      } else {
+        setCurrentView('landing');
+      }
+    };
+    window.addEventListener('go-back-customer', handleGoBack);
+    return () => window.removeEventListener('go-back-customer', handleGoBack);
+  }, [showDirectory, setCurrentView]);
+
+  useEffect(() => {
+    const handleForceDirectory = () => {
+      setShowDirectory(true);
+    };
+    window.addEventListener('customer-show-directory-updated', handleForceDirectory);
+    return () => window.removeEventListener('customer-show-directory-updated', handleForceDirectory);
+  }, []);
+
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
   const [isEmailLoginModalOpen, setIsEmailLoginModalOpen] = useState(false);
@@ -497,7 +528,7 @@ const currentItemPrice = useMemo(() => {
       showToast('Please sign in or register to purchase a meal subscription.', 'error');
       setIsCartOpen(false);
       setIsDirectCheckoutOpen(false);
-      setIsEmailLoginModalOpen(true);
+      setCurrentView('login');
       return;
     }
 
@@ -784,7 +815,7 @@ const currentItemPrice = useMemo(() => {
       if (customerEmailForDashboard) {
         setIsDashboardOpen(true);
       } else {
-        setIsEmailLoginModalOpen(true);
+        setCurrentView('login');
       }
     };
     window.addEventListener('open-customer-dashboard', handleOpenDashboard);
@@ -806,7 +837,8 @@ const currentItemPrice = useMemo(() => {
   const handleToggleFavorite = (e: React.MouseEvent, itemId: string) => {
     e.stopPropagation();
     if (!customerEmailForDashboard) {
-      setIsEmailLoginModalOpen(true);
+      alert('Please Sign In or Create a Customer Account to add items to your favorites!');
+      setCurrentView('login');
       return;
     }
     const isFav = profile.savedFavorites?.includes(itemId);
@@ -816,6 +848,102 @@ const currentItemPrice = useMemo(() => {
       addFavoriteItem(customerEmailForDashboard, itemId);
     }
   };
+
+  const getTierRank = (plan: string) => {
+    const p = (plan || '').toLowerCase();
+    if (p === 'sponsored') return 1;
+    if (p === 'enterprise') return 2;
+    if (p === 'pro' || p === 'growth') return 3;
+    if (p === 'basic') return 4;
+    if (p === 'free') return 5;
+    return 6;
+  };
+
+  if (showDirectory) {
+    const sortedTenants = [...tenants]
+      .filter(t => t.subscriptionPlan !== 'free')
+      .sort((a, b) => {
+        const rankA = getTierRank(a.subscriptionPlan);
+        const rankB = getTierRank(b.subscriptionPlan);
+        return rankA - rankB;
+      });
+
+    const searchFiltered = sortedTenants.filter(t => {
+      const term = bizSearchTerm.toLowerCase().trim();
+      return t.name.toLowerCase().includes(term) || (t.description || '').toLowerCase().includes(term);
+    });
+
+    return (
+      <div className="space-y-8 py-6 px-4 max-w-6xl mx-auto animate-in fade-in duration-300">
+        <div className="text-center max-w-2xl mx-auto space-y-3">
+          <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">Explore Restaurant Menus</h2>
+          <p className="text-sm text-slate-500 leading-relaxed">
+            Order directly from our high-fidelity digital partner menus. Browse premium kitchens, sponsored cafes, and gourmet eateries.
+          </p>
+        </div>
+
+        {/* Search & Filter Bar */}
+        <div className="max-w-md mx-auto relative shadow-sm rounded-2xl">
+          <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search kitchens, cafes, traditional dishes..."
+            value={bizSearchTerm}
+            onChange={(e) => setBizSearchTerm(e.target.value)}
+            className="w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-4 py-3 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition-all"
+          />
+        </div>
+
+        {/* Business Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {searchFiltered.map((t) => {
+            const plan = t.subscriptionPlan;
+            const isSponsored = plan === 'sponsored' || t.name.toLowerCase().includes('sponsored');
+            
+            return (
+              <div 
+                key={t.id}
+                className="group relative rounded-3xl border border-slate-100 bg-white p-6 shadow-xs hover:shadow-md transition-all flex flex-col justify-between gap-5"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 font-extrabold text-lg shadow-inner group-hover:scale-105 transition-transform shrink-0">
+                      {t.name.charAt(0)}
+                    </div>
+                    {/* Badge */}
+                    <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full ${
+                      plan === 'enterprise' ? 'bg-indigo-50 text-indigo-700' :
+                      plan === 'sponsored' || isSponsored ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                      plan === 'pro' || plan === 'growth' ? 'bg-emerald-50 text-emerald-700' :
+                      'bg-slate-100 text-slate-600'
+                    }`}>
+                      {plan}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h3 className="font-sans font-extrabold text-base text-slate-900 group-hover:text-indigo-600 transition-colors">{t.name}</h3>
+                    <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">{t.description}</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setActiveTenantId(t.id);
+                    setShowDirectory(false);
+                  }}
+                  className="w-full rounded-xl bg-slate-50 border border-slate-100 text-slate-700 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-transparent py-2.5 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>View Menu & Order</span>
+                  <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200 max-w-lg mx-auto bg-slate-50/50 pb-12 rounded-3xl min-h-[85vh] shadow-inner overflow-hidden border border-slate-100">
@@ -850,26 +978,30 @@ const currentItemPrice = useMemo(() => {
                 
 
                 {/* Account Dashboard Toggle */}
-                <button
-                  onClick={() => setIsReservationModalOpen(true)}
-                  className="bg-amber-600 hover:bg-amber-500 text-white transition-colors border-none rounded-lg px-2 py-1 text-[10px] font-bold flex items-center gap-0.5 shrink-0 shadow-xs"
-                >
-                  <MapPin className="h-3.5 w-3.5" />
-                  <span className="hidden md:inline">Book Table</span>
-                </button>
-                <button
-                  onClick={() => {
-                    if (customerEmailForDashboard) {
-                      setIsDashboardOpen(true);
-                    } else {
-                      setIsEmailLoginModalOpen(true);
-                    }
-                  }}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white transition-colors border-none rounded-lg px-2 py-1 text-[10px] font-bold flex items-center gap-0.5 shrink-0 shadow-xs"
-                >
-                  <User className="h-3.5 w-3.5" />
-                  <span className="hidden md:inline">{customerEmailForDashboard ? 'My Profile' : 'Sign In'}</span>
-                </button>
+                {!(activeTenant?.subscriptionPlan === 'free') && (
+                  <>
+                    <button
+                      onClick={() => setIsReservationModalOpen(true)}
+                      className="bg-amber-600 hover:bg-amber-500 text-white transition-colors border-none rounded-lg px-2 py-1 text-[10px] font-bold flex items-center gap-0.5 shrink-0 shadow-xs"
+                    >
+                      <MapPin className="h-3.5 w-3.5" />
+                      <span className="hidden md:inline">Book Table</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (customerEmailForDashboard) {
+                          setIsDashboardOpen(true);
+                        } else {
+                          setCurrentView('login');
+                        }
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white transition-colors border-none rounded-lg px-2 py-1 text-[10px] font-bold flex items-center gap-0.5 shrink-0 shadow-xs"
+                    >
+                      <User className="h-3.5 w-3.5" />
+                      <span className="hidden md:inline">{customerEmailForDashboard ? 'My Profile' : 'Sign In'}</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 

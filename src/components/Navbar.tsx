@@ -21,6 +21,7 @@ export default function Navbar() {
     addLog,
     registerTenant,
     signUpOwnerOnly,
+    setCurrentView,
     notifications,
     markNotificationRead,
     deleteNotification
@@ -315,10 +316,7 @@ export default function Navbar() {
           {!currentUser ? (
             <button 
               id="nav-login-btn"
-              onClick={() => {
-                setActiveModalTab('signin');
-                setShowRoleModal(true);
-              }}
+              onClick={() => setCurrentView('login')}
               className="flex items-center gap-1 sm:gap-1.5 rounded-lg bg-indigo-600 text-white px-2 sm:px-3.5 py-1 sm:py-1.5 text-[10px] sm:text-xs font-extrabold hover:bg-indigo-700 transition-colors cursor-pointer shadow-sm"
             >
               <User className="h-3.5 w-3.5" />

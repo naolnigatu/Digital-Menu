@@ -58,6 +58,9 @@ interface AppContextType {
   updateGlobalSettings: (settings: Partial<GlobalSettings>) => void;
   
   // Actions
+  currentView: 'landing' | 'login' | 'signup' | 'customer' | 'dashboard';
+  setCurrentView: (view: 'landing' | 'login' | 'signup' | 'customer' | 'dashboard') => void;
+  registerCustomer: (name: string, email: string, phone: string) => void;
   login: (email: string) => boolean;
   logout: () => void;
   setActiveTenantId: (id: string) => void;
@@ -697,11 +700,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [currentLanguage, setLanguage] = useState<'en' | 'am'>('en');
 
+  const [currentView, setCurrentView] = useState<'landing' | 'login' | 'signup' | 'customer' | 'dashboard'>(() => {
+    const saved = localStorage.getItem('mf_current_view');
+    return (saved as any) || 'landing';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('mf_current_view', currentView);
+  }, [currentView]);
+
   // Currently logged-in operational user (Simulated)
   const [currentUser, setCurrentUser] = useState<AppContextType['currentUser']>(() => {
     const saved = localStorage.getItem('mf_current_user');
     return saved ? JSON.parse(saved) : null;
   });
+
+  useEffect(() => {
+    if (currentUser) {
+      setCurrentView('dashboard');
+    } else if (currentView === 'dashboard') {
+      setCurrentView('landing');
+    }
+  }, [currentUser]);
 
   // Sync to local storage on state changes
   useEffect(() => {
@@ -854,16 +874,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
     }
 
-    // 5. If not found, log them in as a brand new owner
-    setCurrentUser({
-      id: `u-${Date.now()}`,
-      email: cleanEmail,
-      role: 'owner',
-      name: cleanEmail.split('@')[0],
-      tenantId: '',
-      branchId: ''
-    });
-    return true;
+    // 5. Check Customer Profiles
+    const foundCustomer = customerProfiles[cleanEmail];
+    if (foundCustomer) {
+      const user = {
+        id: foundCustomer.id,
+        email: cleanEmail,
+        role: 'customer' as const,
+        name: foundCustomer.name,
+        tenantId: '',
+        branchId: ''
+      };
+      setCurrentUser(user);
+      localStorage.setItem('mf_customer_logged_email', cleanEmail);
+      addLog('Login', `Customer ${foundCustomer.name} logged in.`);
+      return true;
+    }
+
+    // 6. If not found, do not auto-login, return false to force Signup!
+    return false;
   };
 
   const logout = () => {
@@ -1823,6 +1852,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCurrentUser(loggedUser);
   };
 
+  const registerCustomer = (name: string, email: string, phone: string) => {
+    const cleanEmail = (email || '').toLowerCase().trim();
+    const id = `cust-${Date.now()}`;
+    const newProfile = {
+      id,
+      email: cleanEmail,
+      name,
+      phone,
+      savedAddresses: [],
+      savedFavorites: [],
+      loyaltyPoints: 0,
+      loyaltyHistory: []
+    };
+    setCustomerProfiles(prev => ({
+      ...prev,
+      [cleanEmail]: newProfile
+    }));
+    syncToFirestore('users', id, newProfile);
+    
+    const loggedUser = {
+      id,
+      email: cleanEmail,
+      role: 'customer' as const,
+      name,
+      tenantId: '',
+      branchId: ''
+    };
+    setCurrentUser(loggedUser);
+    localStorage.setItem('mf_customer_logged_email', cleanEmail);
+    addLog('Customer Signup', `Customer registered: ${name} (${cleanEmail})`);
+  };
+
   // Sync to Firestore Helper (dynamic, safe imports)
   const syncToFirestore = async (collectionName: string, docId: string, data: any) => {
     try {
@@ -2343,6 +2404,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updatePlanTabs,
       registerTenant,
       signUpOwnerOnly,
+      registerCustomer,
+      currentView,
+      setCurrentView,
       addLog,
       
       paymentMethodsConfigs,

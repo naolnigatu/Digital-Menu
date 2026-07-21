@@ -9,29 +9,15 @@ import { useApp } from '../context/AppContext';
 import { signInWithGoogle } from '../lib/firebase';
 
 export default function LandingPageView() {
-  const { login, pricingPlans, marketplaceExtensions, globalSettings } = useApp();
+  const { setCurrentView, pricingPlans, marketplaceExtensions, globalSettings } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoginLoading, setIsLoginLoading] = useState(false);
   
   const handleLogin = async () => {
-    setIsLoginLoading(true);
-    try {
-      const user = await signInWithGoogle();
-      if (user && user.email) {
-        login(user.email);
-      } else {
-        login('naolnigatu2025@gmail.com');
-      }
-    } catch (error) {
-      console.error(error);
-      // Fallback
-      login('naolnigatu2025@gmail.com');
-    } finally {
-      setIsLoginLoading(false);
-    }
+    setCurrentView('login');
   };
 
-  const config = globalSettings.landingPageConfig || {
+  const defaults = {
     heroTitle: "Run Your Restaurant Business with AI",
     heroSubtitle: "Dinex is the ultimate all-in-one platform for modern restaurants, cafes, and multi-branch food chains.",
     heroBackgroundType: 'video',
@@ -40,7 +26,12 @@ export default function LandingPageView() {
     aboutText: "Join thousands of restaurants that have transformed their operations, increased revenue, and delighted customers using our platform.",
     featuresTitle: "Everything you need to succeed",
     featuresSubtitle: "From digital menus to kitchen displays, we've got your entire restaurant operation covered.",
-    contactEmail: "{config.contactEmail}"
+    contactEmail: "naolnigatu2025@gmail.com"
+  };
+
+  const config = {
+    ...defaults,
+    ...(globalSettings.landingPageConfig || {})
   };
   
   const navLinks = [
@@ -74,12 +65,12 @@ export default function LandingPageView() {
               </div>
             </div>
             <div className="hidden lg:flex items-center space-x-4">
-              <button onClick={handleLogin} disabled={isLoginLoading} className="text-sm font-semibold text-slate-700 hover:text-indigo-600 transition-colors">{isLoginLoading ? 'Logging in...' : 'Login'}</button>
+              <button onClick={() => setCurrentView('login')} className="text-sm font-semibold text-slate-700 hover:text-indigo-600 transition-colors">Login / Sign In</button>
               <button
-                
-                className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition-all hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                onClick={() => setCurrentView('login')}
+                className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition-all hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 cursor-pointer"
               >
-                View Demo
+                View Demo / Sandbox
               </button>
             </div>
             {/* Mobile menu button */}
@@ -101,16 +92,16 @@ export default function LandingPageView() {
               ))}
               <div className="pt-4 flex flex-col gap-3">
                 <button 
-                  onClick={handleLogin}
-                  className="w-full text-center py-2.5 text-sm font-semibold text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50"
+                  onClick={() => { setMobileMenuOpen(false); setCurrentView('login'); }}
+                  className="w-full text-center py-2.5 text-sm font-semibold text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer"
                 >
-                  Login
+                  Login / Sign In
                 </button>
                 <button
-                  
-                  className="w-full text-center py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-500"
+                  onClick={() => { setMobileMenuOpen(false); setCurrentView('login'); }}
+                  className="w-full text-center py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-500 cursor-pointer"
                 >
-                  View Demo
+                  View Demo / Sandbox
                 </button>
               </div>
             </div>
@@ -149,8 +140,8 @@ export default function LandingPageView() {
               {config.heroSubtitle}
             </p>
             <div className="mt-10 flex items-center justify-center gap-x-6">
-              <button onClick={handleLogin} className="rounded-full bg-indigo-600 px-8 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all hover:scale-105 hover:shadow-lg hover:shadow-indigo-500/25">
-                Get Started
+              <button onClick={() => setCurrentView('customer')} className="rounded-full bg-indigo-600 px-8 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all hover:scale-105 hover:shadow-lg hover:shadow-indigo-500/25 cursor-pointer">
+                Get Started / Browse Menus
               </button>
               <a href="#demo-video" className={`text-sm font-semibold leading-6 group flex items-center gap-2 ${config.heroBackgroundType === 'color' || !config.heroBackgroundUrl ? 'text-slate-900' : 'text-white'}`}>
                 View Demo <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
@@ -354,7 +345,7 @@ export default function LandingPageView() {
                       ))}
                     </ul>
                   </div>
-                  <button onClick={handleLogin} className={`mt-8 block w-full rounded-md px-3 py-2 text-center text-sm font-semibold leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-colors ${isPopular ? 'bg-indigo-600 text-white hover:bg-indigo-500 focus-visible:outline-indigo-600' : 'bg-slate-50 text-slate-900 ring-1 ring-inset ring-slate-200 hover:ring-slate-300'}`}>Get Started</button>
+                  <button onClick={() => setCurrentView('signup')} className={`mt-8 block w-full rounded-md px-3 py-2 text-center text-sm font-semibold leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-colors cursor-pointer ${isPopular ? 'bg-indigo-600 text-white hover:bg-indigo-500 focus-visible:outline-indigo-600' : 'bg-slate-50 text-slate-900 ring-1 ring-inset ring-slate-200 hover:ring-slate-300'}`}>Get Started</button>
                 </div>
               )})}
             </div>
@@ -389,7 +380,7 @@ export default function LandingPageView() {
                   <h3 className="text-lg font-bold text-slate-900">{ext.name}</h3>
                   <p className="text-xs text-slate-500 mb-4 mt-1">by {ext.provider}</p>
                   <p className="text-sm text-slate-600 line-clamp-2">{ext.description}</p>
-                  <button onClick={handleLogin} className="mt-6 w-full text-center text-sm font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 py-2 rounded-lg transition-colors">
+                  <button onClick={() => setCurrentView('login')} className="mt-6 w-full text-center text-sm font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 py-2 rounded-lg transition-colors cursor-pointer">
                     Add Integration
                   </button>
                 </div>
@@ -444,8 +435,8 @@ export default function LandingPageView() {
             </p>
             <div className="mt-10 flex items-center justify-center gap-x-6">
               <button 
-                onClick={handleLogin}
-                className="rounded-full bg-white px-8 py-3.5 text-sm font-semibold text-indigo-600 shadow-sm hover:bg-indigo-50 transition-all hover:scale-105"
+                onClick={() => setCurrentView('customer')}
+                className="rounded-full bg-white px-8 py-3.5 text-sm font-semibold text-indigo-600 shadow-sm hover:bg-indigo-50 transition-all hover:scale-105 cursor-pointer"
               >
                 Get Started
               </button>

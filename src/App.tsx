@@ -15,9 +15,11 @@ import CustomerView from './views/CustomerView';
 import DeliveryStaffView from './views/DeliveryStaffView';
 import OnboardingView from './views/OnboardingView';
 import LandingPageView from './views/LandingPageView';
+import LoginPage from './views/LoginPage';
+import SignupPage from './views/SignupPage';
 import { useState, useEffect } from 'react';
 import { 
-  Building, LayoutGrid, CheckCircle2, ShieldCheck, RefreshCw, AlertTriangle
+  Building, LayoutGrid, CheckCircle2, ShieldCheck, RefreshCw, AlertTriangle, ArrowLeft
 } from 'lucide-react';
 
 function DashboardShell() {
@@ -114,13 +116,50 @@ function DashboardShell() {
 
 
 function AppRouter() {
-  const { currentUser } = useApp();
+  const { currentUser, currentView, setCurrentView } = useApp();
 
-  if (!currentUser) {
-    return <LandingPageView />;
-  }
+  const handleBack = () => {
+    if (currentView === 'login' || currentView === 'signup') {
+      setCurrentView('landing');
+    } else if (currentView === 'customer') {
+      window.dispatchEvent(new CustomEvent('go-back-customer'));
+    } else {
+      setCurrentView('landing');
+    }
+  };
 
-  return <DashboardShell />;
+  const showGlobalBack = currentView !== 'landing' && !currentUser;
+
+  return (
+    <div className="relative">
+      {showGlobalBack && (
+        <button 
+          onClick={handleBack}
+          className="fixed top-4 left-4 z-50 flex items-center justify-center gap-1.5 rounded-full bg-white border border-slate-250/80 px-3.5 py-2 text-xs font-bold text-slate-700 shadow-md hover:bg-slate-50 transition-all hover:scale-105 shrink-0"
+          title="Back"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span>Back</span>
+        </button>
+      )}
+
+      {(() => {
+        if (currentUser) {
+          return <DashboardShell />;
+        }
+        switch (currentView) {
+          case 'login':
+            return <LoginPage />;
+          case 'signup':
+            return <SignupPage />;
+          case 'customer':
+            return <DashboardShell />;
+          default:
+            return <LandingPageView />;
+        }
+      })()}
+    </div>
+  );
 }
 
 export default function App() {
