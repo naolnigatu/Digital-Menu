@@ -117,7 +117,7 @@ export default function LandingPageView() {
 
       <main>
         {/* Hero Section */}
-        <div className="relative isolate pt-24 pb-16 sm:pt-40 sm:pb-24 lg:pb-32 overflow-hidden">
+        <div className="relative isolate min-h-screen flex flex-col justify-center pt-24 pb-16 sm:pt-40 sm:pb-24 lg:pb-32 overflow-hidden">
           {/* Background */}
           {config.heroBackgroundType === 'video' && config.heroBackgroundUrl ? (
             <>

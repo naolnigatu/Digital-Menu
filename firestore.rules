@@ -17,6 +17,16 @@ service cloud.firestore {
       allow read, write: if true;
     }
     
+    // Tenants (Replacing Businesses)
+    match /tenants/{tenantId} {
+      allow read, write: if true;
+    }
+    
+    // Staff Members
+    match /staff/{staffId} {
+      allow read, write: if true;
+    }
+
     // Memberships & Roles
     match /memberships/{membershipId} {
       allow read, write: if true;

@@ -2166,25 +2166,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCurrentUser(loggedUser);
   };
 
-  const registerUser = (email: string, name: string, role: 'customer' | 'owner') => {
+  const registerUser = async (email: string, name: string, role: 'customer' | 'owner') => {
     const cleanEmail = email.toLowerCase().trim();
     if (role === 'customer') {
       const id = `cust-${Date.now()}`;
       const newProfile = {
-        id, email: cleanEmail, name, phone: '', savedAddresses: [], savedFavorites: [], loyaltyPoints: 0, loyaltyHistory: []
+        id, email: cleanEmail, name, phone: '', savedAddresses: [], savedFavorites: [], loyaltyPoints: 0, loyaltyHistory: [], role: 'customer'
       };
       setCustomerProfiles(prev => ({ ...prev, [cleanEmail]: newProfile }));
-      syncToFirestore('users', id, newProfile);
+      await syncToFirestore('users', id, newProfile);
     } else if (role === 'owner') {
-      // Create a temporary owner profile. 
-      // OnboardingView will handle the tenant creation later.
       const id = `owner-${Date.now()}`;
       const userProfile = { id, email: cleanEmail, name, role: 'owner' };
-      // Instead of storing it in a special collection, we just rely on `login` logic 
-      // to recognize them if we create an empty tenant or just allow them to pass through?
-      // Wait, `login` function checks `tenants` array for ownerEmail.
-      // Or we can add them to `staff` with role 'owner' but no tenantId?
-      // Let's create an empty tenant for them now.
+      
       const tenantId = `tenant-${Date.now()}`;
       const newTenant = {
         id: tenantId,
@@ -2219,9 +2213,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
       setStaff(prev => [...prev, ownerStaff as any]);
       
-      syncToFirestore('tenants', tenantId, newTenant);
-      syncToFirestore('branches', newBranch.id, newBranch);
-      syncToFirestore('staff', id, ownerStaff);
+      await syncToFirestore('users', id, userProfile);
+      await syncToFirestore('tenants', tenantId, newTenant);
+      await syncToFirestore('branches', newBranch.id, newBranch);
+      await syncToFirestore('staff', id, ownerStaff);
     }
   };
 

@@ -12,6 +12,7 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [signupRole, setSignupRole] = useState<'customer' | 'owner'>('owner');
   
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -28,7 +29,7 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
       const exists = await login(user.email);
       if (!exists) {
         if (mode === 'signup') {
-          registerUser(user.email, user.displayName || 'User', 'owner');
+          await registerUser(user.email, user.displayName || 'User', signupRole);
           await login(user.email);
           setSuccessMsg('Account created successfully!');
         } else {
@@ -70,7 +71,7 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
       } else {
         const user = await signUpWithEmail(email, password);
         if (!user.email) throw new Error("No email returned.");
-        registerUser(user.email, name, 'owner');
+        await registerUser(user.email, name, signupRole);
         await login(user.email);
         setSuccessMsg('Account created successfully!');
       }
@@ -161,20 +162,46 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
 
           <form onSubmit={handleEmailAuth} className="space-y-4">
             {mode === 'signup' && (
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Full Name</label>
-                <div className="relative">
-                  <UserCircle className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="John Doe"
-                    className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition-all"
-                  />
+              <>
+                <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setSignupRole('customer')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                      signupRole === 'customer'
+                        ? 'bg-white text-indigo-600 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Customer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSignupRole('owner')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                      signupRole === 'owner'
+                        ? 'bg-white text-indigo-600 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Business Owner
+                  </button>
                 </div>
-              </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Full Name</label>
+                  <div className="relative">
+                    <UserCircle className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="John Doe"
+                      className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition-all"
+                    />
+                  </div>
+                </div>
+              </>
             )}
             
             <div>
