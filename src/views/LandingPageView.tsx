@@ -123,10 +123,10 @@ export default function LandingPageView() {
             <>
               {(config.heroBackgroundUrl.includes('youtube.com') || config.heroBackgroundUrl.includes('youtu.be')) ? (
                 <div className="absolute inset-0 w-full h-full -z-20 overflow-hidden pointer-events-none">
-                  <div className="absolute top-1/2 left-1/2 w-[100vw] h-[56.25vw] min-h-[100vh] min-w-[177.77vh] -translate-x-1/2 -translate-y-1/2">
+                  <div className="absolute top-1/2 left-1/2 w-[100vw] h-[56.25vw] min-h-[100vh] min-w-[177.77vh] -translate-x-1/2 -translate-y-1/2 scale-125">
                     <iframe
-                      className="absolute top-0 left-0 w-full h-full border-0"
-                      src={`https://www.youtube.com/embed/${config.heroBackgroundUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)?.[1]}?autoplay=1&mute=1&controls=0&loop=1&playlist=${config.heroBackgroundUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)?.[1]}&playsinline=1&rel=0&showinfo=0&disablekb=1&modestbranding=1`}
+                      className="absolute top-0 left-0 w-full h-full border-0 pointer-events-none"
+                      src={`https://www.youtube.com/embed/${config.heroBackgroundUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)?.[1]}?autoplay=1&mute=1&controls=0&loop=1&playlist=${config.heroBackgroundUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)?.[1]}&playsinline=1&rel=0&showinfo=0&disablekb=1&modestbranding=1&iv_load_policy=3&fs=0`}
                       allow="autoplay; encrypted-media"
                       title="Background Video"
                     ></iframe>
@@ -165,8 +165,8 @@ export default function LandingPageView() {
             </div>
           </div>
 
-          {/* Abstract Dashboard Mockup or Real Screenshots */}
-          {config.screenshotsEnabled && config.screenshots?.length > 0 ? (
+          {/* Real Screenshots */}
+          {config.screenshotsEnabled && config.screenshots?.length > 0 && (
             <div className="mt-12 sm:mt-24 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
               <div className="relative rounded-xl sm:rounded-2xl bg-slate-900/5 p-4 sm:p-8 ring-1 ring-inset ring-slate-900/10 lg:-m-4 lg:rounded-3xl shadow-2xl overflow-hidden text-center">
                 <h3 className="text-2xl font-bold mb-4">{config.screenshotsTitle || 'Platform Overview'}</h3>
@@ -184,55 +184,6 @@ export default function LandingPageView() {
                 </div>
               </div>
             </div>
-          ) : (
-          <div className="mt-12 sm:mt-24 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="relative rounded-xl sm:rounded-2xl bg-slate-900/5 p-1.5 sm:p-2 ring-1 ring-inset ring-slate-900/10 lg:-m-4 lg:rounded-3xl lg:p-4 shadow-2xl overflow-hidden">
-               <div className="rounded-xl overflow-hidden border border-slate-200/50 bg-white flex flex-col shadow-inner aspect-[16/9] sm:aspect-[2/1] relative">
-                  {/* Mockup Header */}
-                  <div className="h-12 border-b border-slate-100 flex items-center px-4 justify-between bg-slate-50/80">
-                    <div className="flex gap-1.5">
-                      <div className="w-3 h-3 rounded-full bg-rose-400"></div>
-                      <div className="w-3 h-3 rounded-full bg-amber-400"></div>
-                      <div className="w-3 h-3 rounded-full bg-emerald-400"></div>
-                    </div>
-                    <div className="w-48 h-6 bg-slate-200 rounded-md"></div>
-                    <div className="w-8 h-8 rounded-full bg-indigo-100"></div>
-                  </div>
-                  {/* Mockup Body */}
-                  <div className="flex-1 flex p-4 gap-4 bg-slate-50/50">
-                    {/* Sidebar */}
-                    <div className="w-48 hidden sm:flex flex-col gap-3">
-                      {[1,2,3,4,5].map(i => (
-                        <div key={i} className={`h-8 rounded-md ${i===1 ? 'bg-indigo-100/50' : 'bg-slate-100'}`}></div>
-                      ))}
-                    </div>
-                    {/* Main Content */}
-                    <div className="flex-1 flex flex-col gap-4">
-                      <div className="flex justify-between items-center">
-                        <div className="h-8 w-40 bg-slate-200 rounded-lg"></div>
-                        <div className="h-8 w-24 bg-indigo-500/20 rounded-lg"></div>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {[1,2,3].map(i => (
-                          <div key={i} className="h-24 bg-white rounded-xl border border-slate-100 p-4 flex flex-col justify-between shadow-sm">
-                            <div className="h-4 w-1/2 bg-slate-100 rounded"></div>
-                            <div className="h-8 w-3/4 bg-slate-200 rounded"></div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex-1 bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-                         <div className="h-4 w-1/3 bg-slate-100 rounded mb-4"></div>
-                         <div className="space-y-3">
-                            {[1,2,3,4].map(i => (
-                              <div key={i} className="h-10 bg-slate-50 rounded-lg border border-slate-50"></div>
-                            ))}
-                         </div>
-                      </div>
-                    </div>
-                  </div>
-               </div>
-            </div>
-          </div>
           )}
         </div>
 
