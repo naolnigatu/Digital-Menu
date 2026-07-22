@@ -62,9 +62,9 @@ interface AppContextType {
   // Actions
   currentView: 'landing' | 'login' | 'signup' | 'customer' | 'dashboard';
   setCurrentView: (view: 'landing' | 'login' | 'signup' | 'customer' | 'dashboard') => void;
-  registerUser: (email: string, name: string, role: "customer" | "owner") => void;
+  registerUser: (email: string, name: string, role?: "customer" | "owner") => void;
   registerCustomer: (name: string, email: string, phone: string) => void;
-  login: (email: string) => boolean;
+  login: (email: string) => Promise<boolean> | boolean;
   logout: () => void;
   setActiveTenantId: (id: string) => void;
   setActiveBranchId: (id: string) => void;
@@ -677,6 +677,104 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (db) {
           const { collection, onSnapshot, doc: firestoreDoc } = await import('firebase/firestore');
 
+          const unsubscribeTenants = onSnapshot(collection(db, 'tenants'), (snapshot) => {
+            const list: Tenant[] = [];
+            snapshot.forEach((docSnap) => {
+              list.push({ id: docSnap.id, ...docSnap.data() } as Tenant);
+            });
+            if (list.length > 0) {
+              setTenants(prev => {
+                const map = new Map<string, Tenant>(prev.map(t => [t.id, t]));
+                list.forEach(t => {
+                  const existing = map.get(t.id);
+                  map.set(t.id, existing ? Object.assign({}, existing, t) : t);
+                });
+                return Array.from(map.values());
+              });
+            }
+          }, (err) => console.error("Tenants listener error:", err));
+
+          const unsubscribeBusinesses = onSnapshot(collection(db, 'businesses'), (snapshot) => {
+            const list: Tenant[] = [];
+            snapshot.forEach((docSnap) => {
+              list.push({ id: docSnap.id, ...docSnap.data() } as Tenant);
+            });
+            if (list.length > 0) {
+              setTenants(prev => {
+                const map = new Map<string, Tenant>(prev.map(t => [t.id, t]));
+                list.forEach(t => {
+                  const existing = map.get(t.id);
+                  map.set(t.id, existing ? Object.assign({}, existing, t) : t);
+                });
+                return Array.from(map.values());
+              });
+            }
+          }, (err) => console.error("Businesses listener error:", err));
+
+          const unsubscribeStaff = onSnapshot(collection(db, 'staff'), (snapshot) => {
+            const list: Staff[] = [];
+            snapshot.forEach((docSnap) => {
+              const data = docSnap.data();
+              if (data.email) list.push({ id: docSnap.id, ...data } as Staff);
+            });
+            if (list.length > 0) {
+              setStaff(prev => {
+                const map = new Map<string, Staff>(prev.map(s => [s.id, s]));
+                list.forEach(s => {
+                  const existing = map.get(s.id);
+                  map.set(s.id, existing ? Object.assign({}, existing, s) : s);
+                });
+                return Array.from(map.values());
+              });
+            }
+          }, (err) => console.error("Staff listener error:", err));
+
+          const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+            const staffList: Staff[] = [];
+            const custMap: Record<string, CustomerProfile> = {};
+            snapshot.forEach((docSnap) => {
+              const data = docSnap.data();
+              if (data.email) {
+                const cleanEmail = data.email.toLowerCase().trim();
+                if (data.role && data.role !== 'customer') {
+                  staffList.push({ id: docSnap.id, ...data } as Staff);
+                } else {
+                  custMap[cleanEmail] = { id: docSnap.id, ...data } as CustomerProfile;
+                }
+              }
+            });
+            if (staffList.length > 0) {
+              setStaff(prev => {
+                const map = new Map<string, Staff>(prev.map(s => [s.id, s]));
+                staffList.forEach(s => {
+                  const existing = map.get(s.id);
+                  map.set(s.id, existing ? Object.assign({}, existing, s) : s);
+                });
+                return Array.from(map.values());
+              });
+            }
+            if (Object.keys(custMap).length > 0) {
+              setCustomerProfiles(prev => ({ ...prev, ...custMap }));
+            }
+          }, (err) => console.error("Users listener error:", err));
+
+          const unsubscribeBranches = onSnapshot(collection(db, 'branches'), (snapshot) => {
+            const list: Branch[] = [];
+            snapshot.forEach((docSnap) => {
+              list.push({ id: docSnap.id, ...docSnap.data() } as Branch);
+            });
+            if (list.length > 0) {
+              setBranches(prev => {
+                const map = new Map<string, Branch>(prev.map(b => [b.id, b]));
+                list.forEach(b => {
+                  const existing = map.get(b.id);
+                  map.set(b.id, existing ? Object.assign({}, existing, b) : b);
+                });
+                return Array.from(map.values());
+              });
+            }
+          }, (err) => console.error("Branches listener error:", err));
+
           const unsubscribeReservations = onSnapshot(collection(db, 'reservations'), (snapshot) => {
             const list: Reservation[] = [];
             snapshot.forEach((docSnap) => {
@@ -755,6 +853,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           });
 
           return () => {
+            unsubscribeTenants();
+            unsubscribeBusinesses();
+            unsubscribeStaff();
+            unsubscribeUsers();
+            unsubscribeBranches();
             unsubscribeReservations();
             unsubscribeIngredients();
             unsubscribeStockMovements();
@@ -918,43 +1021,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLogs(prev => [newLog, ...prev]);
   };
 
-  const login = (email: string): boolean => {
-    // 1. Check Super Admin
+  const login = async (email: string): Promise<boolean> => {
     const cleanEmail = (typeof email === 'string' ? email : '').toLowerCase().trim();
+    if (!cleanEmail) return false;
+
+    // 1. Check Super Admin
     if (cleanEmail === 'naolnigatu2025@gmail.com') {
-      const name = cleanEmail === 'naolnigatu2025@gmail.com' ? 'Naol Nigatu (Platform Admin)' : 'Super Administrator';
+      const name = 'Naol Nigatu (Platform Admin)';
       const user = { email: cleanEmail, role: 'super_admin' as const, name };
       setCurrentUser(user);
       addLog('Login', `${name} logged in.`);
       return true;
     }
 
-    // 2. Check Staff list
-    const foundStaff = staff.find(s => (s.email || '').toLowerCase().trim() === cleanEmail && s.active);
+    // 2. Check Staff list (In-memory)
+    const foundStaff = staff.find(s => (s.email || '').toLowerCase().trim() === cleanEmail && s.active !== false);
     if (foundStaff) {
-      const tenantObj = tenants.find(t => t.id === foundStaff.tenantId);
       const user = {
         id: foundStaff.id,
         email: foundStaff.email,
         role: foundStaff.role,
         name: foundStaff.name,
-        tenantId: foundStaff.tenantId,
-        branchId: foundStaff.branchId,
+        tenantId: foundStaff.tenantId || '',
+        branchId: foundStaff.branchId || '',
         stationId: foundStaff.stationId
       };
       setCurrentUser(user);
-      setActiveTenantId(foundStaff.tenantId);
-      setActiveBranchId(foundStaff.branchId);
+      if (foundStaff.tenantId) setActiveTenantId(foundStaff.tenantId);
+      if (foundStaff.branchId) setActiveBranchId(foundStaff.branchId);
       addLog('Login', `Staff ${foundStaff.name} logged in as ${foundStaff.role}.`);
       return true;
     }
 
-    // 3. Check Owner signups from tenants list (fallback)
+    // 3. Check Owner signups from tenants list (in-memory)
     const foundTenant = tenants.find(t => (t.ownerEmail || '').toLowerCase().trim() === cleanEmail);
     if (foundTenant) {
       const tenantBranch = branches.find(b => b.tenantId === foundTenant.id);
       const user = {
-        email,
+        email: cleanEmail,
         role: 'owner' as const,
         name: foundTenant.name + ' Owner',
         tenantId: foundTenant.id,
@@ -963,7 +1067,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCurrentUser(user);
       setActiveTenantId(foundTenant.id);
       if (tenantBranch) setActiveBranchId(tenantBranch.id);
-      addLog('Login', `Tenant Owner (${email}) logged in.`);
+      addLog('Login', `Tenant Owner (${cleanEmail}) logged in.`);
       return true;
     }
 
@@ -1014,7 +1118,94 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return true;
     }
 
-    // 6. If not found, do not auto-login, return false to force Signup!
+    // 6. Direct Firestore Fallback Query across users, staff, tenants, and businesses!
+    try {
+      const { getDB } = await import('../lib/firebase');
+      const db = getDB();
+      if (db) {
+        const { collection, query, where, getDocs } = await import('firebase/firestore');
+
+        // Check 'users' collection
+        const usersQuery = query(collection(db, 'users'), where('email', '==', cleanEmail));
+        const usersSnap = await getDocs(usersQuery);
+        if (!usersSnap.empty) {
+          const docSnap = usersSnap.docs[0];
+          const data = docSnap.data();
+          const role = (data.role || 'customer') as UserRole;
+          const user = {
+            id: docSnap.id,
+            email: cleanEmail,
+            role,
+            name: data.name || cleanEmail.split('@')[0],
+            tenantId: data.tenantId || '',
+            branchId: data.branchId || '',
+            stationId: data.stationId
+          };
+          if (role !== 'customer') {
+            setStaff(prev => [...prev.filter(s => s.id !== docSnap.id), { id: docSnap.id, ...data } as Staff]);
+          } else {
+            setCustomerProfiles(prev => ({ ...prev, [cleanEmail]: { id: docSnap.id, ...data } as CustomerProfile }));
+          }
+          setCurrentUser(user);
+          if (data.tenantId) setActiveTenantId(data.tenantId);
+          if (data.branchId) setActiveBranchId(data.branchId);
+          addLog('Login', `User ${user.name} logged in via Firestore lookup (${role}).`);
+          return true;
+        }
+
+        // Check 'staff' collection
+        const staffQuery = query(collection(db, 'staff'), where('email', '==', cleanEmail));
+        const staffSnap = await getDocs(staffQuery);
+        if (!staffSnap.empty) {
+          const docSnap = staffSnap.docs[0];
+          const data = docSnap.data();
+          const role = (data.role || 'owner') as UserRole;
+          const user = {
+            id: docSnap.id,
+            email: cleanEmail,
+            role,
+            name: data.name || cleanEmail.split('@')[0],
+            tenantId: data.tenantId || '',
+            branchId: data.branchId || '',
+            stationId: data.stationId
+          };
+          setStaff(prev => [...prev.filter(s => s.id !== docSnap.id), { id: docSnap.id, ...data } as Staff]);
+          setCurrentUser(user);
+          if (data.tenantId) setActiveTenantId(data.tenantId);
+          if (data.branchId) setActiveBranchId(data.branchId);
+          addLog('Login', `Staff ${user.name} logged in via Firestore lookup.`);
+          return true;
+        }
+
+        // Check 'tenants' & 'businesses' collection
+        const tenantsQuery = query(collection(db, 'tenants'), where('ownerEmail', '==', cleanEmail));
+        let tenantSnap = await getDocs(tenantsQuery);
+        if (tenantSnap.empty) {
+          const busQuery = query(collection(db, 'businesses'), where('ownerEmail', '==', cleanEmail));
+          tenantSnap = await getDocs(busQuery);
+        }
+        if (!tenantSnap.empty) {
+          const docSnap = tenantSnap.docs[0];
+          const data = docSnap.data();
+          const tenantObj = { id: docSnap.id, ...data } as Tenant;
+          setTenants(prev => [...prev.filter(t => t.id !== docSnap.id), tenantObj]);
+          const user = {
+            email: cleanEmail,
+            role: 'owner' as const,
+            name: (data.ownerName || data.name || 'Owner') + ' Owner',
+            tenantId: docSnap.id,
+            branchId: ''
+          };
+          setCurrentUser(user);
+          setActiveTenantId(docSnap.id);
+          addLog('Login', `Tenant Owner (${cleanEmail}) logged in via Firestore lookup.`);
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn("Firestore fallback login check failed:", err);
+    }
+
     return false;
   };
 

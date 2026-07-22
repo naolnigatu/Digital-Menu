@@ -1,17 +1,14 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { ChefHat, ArrowLeft, Mail, AlertCircle, Check, Lock, UserCircle, Building2 } from 'lucide-react';
+import { ChefHat, ArrowLeft, Mail, AlertCircle, Check, Lock, UserCircle } from 'lucide-react';
 import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '../lib/firebase';
 
 type AuthMode = 'signin' | 'signup';
-type UserType = 'customer' | 'owner' | null;
 
 export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: AuthMode }) {
   const { login, registerUser, setCurrentView } = useApp();
   
   const [mode, setMode] = useState<AuthMode>(defaultMode);
-  const [userType, setUserType] = useState<UserType>(null);
-  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -23,18 +20,19 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
   const handleGoogleAuth = async () => {
     setIsLoading(true);
     setErrorMsg('');
+    setSuccessMsg('');
     try {
       const user = await signInWithGoogle();
       if (!user.email) throw new Error("No email provided by Google.");
       
-      const exists = login(user.email);
+      const exists = await login(user.email);
       if (!exists) {
-        if (mode === 'signup' && userType) {
-          registerUser(user.email, user.displayName || 'User', userType === 'owner' ? 'owner' : 'customer');
-          login(user.email);
-          setSuccessMsg('Successfully created account and logged in!');
+        if (mode === 'signup') {
+          registerUser(user.email, user.displayName || 'User', 'owner');
+          await login(user.email);
+          setSuccessMsg('Account created successfully!');
         } else {
-          setErrorMsg('Account not found. Please sign up first.');
+          setErrorMsg('Account not found in our records. Please sign up.');
         }
       } else {
         setSuccessMsg('Successfully logged in!');
@@ -51,109 +49,60 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
     e.preventDefault();
     if (!email || !password) return;
     if (mode === 'signup' && !name) {
-      setErrorMsg('Please enter your name.');
+      setErrorMsg('Please enter your full name.');
       return;
     }
 
     setIsLoading(true);
     setErrorMsg('');
+    setSuccessMsg('');
     
     try {
       if (mode === 'signin') {
         const user = await signInWithEmail(email, password);
         if (!user.email) throw new Error("No email returned.");
-        const exists = login(user.email);
+        const exists = await login(user.email);
         if (exists) {
           setSuccessMsg('Successfully logged in!');
         } else {
-          // If Firebase succeeded but not in our AppContext, register them as what they chose? Or just fallback?
-          // Since it's a simulated context, let's just make sure they are in context if they authenticated via Firebase.
-          // Wait, if they are not in our context, we should register them as customer by default or fail?
           setErrorMsg('Account not found in our records. Please sign up.');
         }
       } else {
         const user = await signUpWithEmail(email, password);
         if (!user.email) throw new Error("No email returned.");
-        registerUser(user.email, name, userType === 'owner' ? 'owner' : 'customer');
-        login(user.email);
-        setSuccessMsg('Successfully created account and logged in!');
+        registerUser(user.email, name, 'owner');
+        await login(user.email);
+        setSuccessMsg('Account created successfully!');
       }
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(err.message || 'Authentication failed.');
+      setErrorMsg(err.message || 'Authentication failed. Please check your credentials.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (!userType) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-6 lg:px-8 relative">
-        <button 
-          onClick={() => setCurrentView('landing')}
-          className="absolute top-6 left-6 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-100 text-slate-600 hover:text-slate-950 hover:border-slate-200 shadow-sm transition-all text-xs font-bold"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Home
-        </button>
-        <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg mb-4">
-            <ChefHat className="h-6 w-6" />
-          </div>
-          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Welcome to Dinex</h2>
-          <p className="mt-2 text-sm text-slate-500 max-w-xs mx-auto">
-            How would you like to continue?
-          </p>
-        </div>
-        <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md space-y-4">
-          <button 
-            onClick={() => setUserType('customer')}
-            className="w-full flex items-center gap-4 p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left"
-          >
-            <div className="h-12 w-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-              <UserCircle className="h-6 w-6" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">Continue as Customer</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Order food, track delivery, manage subscriptions.</p>
-            </div>
-          </button>
-          
-          <button 
-            onClick={() => setUserType('owner')}
-            className="w-full flex items-center gap-4 p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left"
-          >
-            <div className="h-12 w-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-              <Building2 className="h-6 w-6" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">Continue as Business Owner</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Manage your restaurant, staff, and operations.</p>
-            </div>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-6 lg:px-8 relative">
       <button 
-        onClick={() => setUserType(null)}
-        className="absolute top-6 left-6 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-100 text-slate-600 hover:text-slate-950 hover:border-slate-200 shadow-sm transition-all text-xs font-bold"
+        onClick={() => setCurrentView('landing')}
+        className="absolute top-6 left-6 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-100 text-slate-600 hover:text-slate-950 hover:border-slate-200 shadow-sm transition-all text-xs font-bold cursor-pointer"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back
+        Back to Home
       </button>
+
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg mb-4">
-          {userType === 'owner' ? <Building2 className="h-6 w-6" /> : <UserCircle className="h-6 w-6" />}
+          <ChefHat className="h-6 w-6" />
         </div>
         <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-          {mode === 'signin' ? 'Sign In' : 'Create Account'}
+          {mode === 'signin' ? 'Sign In to Dinex' : 'Create Your Account'}
         </h2>
         <p className="mt-2 text-sm text-slate-500 max-w-xs mx-auto">
-          {userType === 'owner' ? 'Business Portal' : 'Customer Portal'}
+          {mode === 'signin' 
+            ? 'Enter your credentials to access your account' 
+            : 'Sign up to start managing or exploring on Dinex'}
         </p>
       </div>
       
@@ -177,7 +126,7 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
               type="button"
               onClick={handleGoogleAuth}
               disabled={isLoading}
-              className="w-full flex justify-center items-center gap-3 rounded-xl bg-white border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+              className="w-full flex justify-center items-center gap-3 rounded-xl bg-white border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors cursor-pointer"
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24">
                 <path
@@ -261,9 +210,9 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full rounded-xl bg-indigo-600 py-3 text-xs font-bold text-white shadow-md hover:bg-indigo-700 transition-colors cursor-pointer mt-2"
+              className="w-full rounded-xl bg-indigo-600 py-3 text-xs font-bold text-white shadow-md hover:bg-indigo-700 transition-colors cursor-pointer mt-2 disabled:opacity-50"
             >
-              {isLoading ? 'Processing...' : (mode === 'signin' ? 'Sign In' : 'Sign Up')}
+              {isLoading ? 'Processing...' : (mode === 'signin' ? 'Sign In' : 'Create Account')}
             </button>
           </form>
           
@@ -271,7 +220,11 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
             <p className="text-xs text-slate-500">
               {mode === 'signin' ? "Don't have an account? " : "Already have an account? "}
               <button
-                onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
+                onClick={() => {
+                  setMode(mode === 'signin' ? 'signup' : 'signin');
+                  setErrorMsg('');
+                  setSuccessMsg('');
+                }}
                 className="text-indigo-600 hover:text-indigo-500 font-bold underline cursor-pointer"
               >
                 {mode === 'signin' ? "Sign up here" : "Sign in here"}

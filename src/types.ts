@@ -1,4 +1,4 @@
-export type SubscriptionPlan = 'free' | 'growth' | 'enterprise';
+export type SubscriptionPlan = 'free' | 'pro' | 'growth' | 'enterprise';
 
 export type UserRole = 'super_admin' | 'owner' | 'manager' | 'cashier' | 'waiter' | 'kitchen' | 'customer' | 'delivery';
 

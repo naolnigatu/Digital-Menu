@@ -90,7 +90,7 @@ export default function Navbar() {
       setIsGoogleLoading(true);
       const user = await signInWithGoogle();
       if (user.email) {
-        const success = login(user.email);
+        const success = await login(user.email);
         if (success) {
           setShowRoleModal(false);
         } else {
@@ -126,7 +126,7 @@ export default function Navbar() {
       setIsGoogleLoadingSignUp(true);
       const user = await signInWithGoogle();
       if (user.email) {
-        const alreadyRegistered = login(user.email);
+        const alreadyRegistered = await login(user.email);
         if (alreadyRegistered) {
           showNotice(`Welcome back! Logging you in with ${user.email}...`, "success");
           setTimeout(() => setShowRoleModal(false), 1500);
@@ -153,8 +153,8 @@ export default function Navbar() {
     e.preventDefault();
     if (!loginEmail) return;
     setIsEmailLoading(true);
-    setTimeout(() => {
-      const success = login(loginEmail);
+    setTimeout(async () => {
+      const success = await login(loginEmail);
       setIsEmailLoading(false);
       if (success) {
         setShowRoleModal(false);
