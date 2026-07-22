@@ -123,10 +123,10 @@ export default function LandingPageView() {
             <>
               {(config.heroBackgroundUrl.includes('youtube.com') || config.heroBackgroundUrl.includes('youtu.be')) ? (
                 <div className="absolute inset-0 w-full h-full -z-20 overflow-hidden pointer-events-none">
-                  <div className="absolute top-1/2 left-1/2 w-[100vw] h-[56.25vw] min-h-[100vh] min-w-[177.77vh] -translate-x-1/2 -translate-y-1/2 scale-125">
+                  <div className="absolute top-1/2 left-1/2 w-[100vw] h-[56.25vw] min-h-[100vh] min-w-[177.77vh] -translate-x-1/2 -translate-y-1/2">
                     <iframe
-                      className="absolute top-0 left-0 w-full h-full border-0 pointer-events-none"
-                      src={`https://www.youtube.com/embed/${config.heroBackgroundUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)?.[1]}?autoplay=1&mute=1&controls=0&loop=1&playlist=${config.heroBackgroundUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)?.[1]}&playsinline=1&rel=0&showinfo=0&disablekb=1&modestbranding=1&iv_load_policy=3&fs=0`}
+                      className="absolute top-0 left-0 w-full h-full border-0"
+                      src={`https://www.youtube.com/embed/${config.heroBackgroundUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)?.[1]}?autoplay=1&mute=1&controls=0&loop=1&playlist=${config.heroBackgroundUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)?.[1]}&playsinline=1&rel=0&showinfo=0&disablekb=1&modestbranding=1`}
                       allow="autoplay; encrypted-media"
                       title="Background Video"
                     ></iframe>
