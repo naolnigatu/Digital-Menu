@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, Auth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { initializeFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -18,7 +18,9 @@ export const initializeFirebase = () => {
     if (!getApps().length) {
       const app = initializeApp(firebaseConfig);
       auth = getAuth(app);
-      db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+      db = initializeFirestore(app, {
+        experimentalForceLongPolling: true
+      }, firebaseConfig.firestoreDatabaseId);
       storage = getStorage(app);
       googleProvider = new GoogleAuthProvider();
     }
