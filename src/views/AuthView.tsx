@@ -127,7 +127,32 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
         }
       } else {
         setStatusMsg('Creating account...');
-        const user = await signUpWithEmail(email, password);
+        let user;
+        try {
+          user = await signUpWithEmail(email, password);
+        } catch (err: any) {
+          if (err.code === 'auth/email-already-in-use' || (err.message && err.message.includes('email-already-in-use'))) {
+            setStatusMsg('Account found. Verifying profile...');
+            try {
+              user = await signInWithEmail(email, password);
+              const loginCheck = await login(user.email!, user.uid);
+              if (loginCheck.success) {
+                setSuccessMsg('Account already exists! Redirecting...');
+                setTimeout(() => {
+                  setCurrentView(loginCheck.user?.role === 'customer' ? 'customer' : 'dashboard');
+                }, 600);
+                return;
+              } else {
+                setStatusMsg('Profile missing. Recovering workspace...');
+              }
+            } catch (loginErr) {
+              throw new Error("An account with this email already exists. Please sign in instead.");
+            }
+          } else {
+            throw err;
+          }
+        }
+
         if (!user || !user.email) throw new Error("Account creation failed.");
 
         setStatusMsg('Setting up your profile, business & permissions...');
