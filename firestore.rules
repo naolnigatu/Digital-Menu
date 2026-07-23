@@ -31,6 +31,12 @@ service cloud.firestore {
     match /memberships/{membershipId} {
       allow read, write: if true;
     }
+    match /roles/{roleId} {
+      allow read, write: if true;
+    }
+    match /permissions/{permissionId} {
+      allow read, write: if true;
+    }
     
     // Branch Locations
     match /branches/{branchId} {

@@ -2285,19 +2285,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updatedAt: createdAt
       };
 
-      setCustomerProfiles(prev => ({ ...prev, [cleanEmail]: customerProfile }));
-      await syncToFirestore('users', userUid, customerProfile);
+      try {
+        const { getDB } = await import('../lib/firebase');
+        const db = getDB();
+        if (db) {
+          const { doc, writeBatch } = await import('firebase/firestore');
+          const batch = writeBatch(db);
+          batch.set(doc(db, 'users', userUid), customerProfile, { merge: true });
+          await batch.commit();
+        }
+      } catch (err) {
+        console.error("Batch write failed for customer:", err);
+        throw new Error("Failed to create customer profile in database.");
+      }
 
-      const loggedUser = {
-        id: userUid,
-        uid: userUid,
-        email: cleanEmail,
-        role: 'customer' as const,
-        name: customerProfile.name,
-        tenantId: '',
-        branchId: ''
-      };
-      setCurrentUser(loggedUser);
+      setCustomerProfiles(prev => ({ ...prev, [cleanEmail]: customerProfile }));
       addLog('Customer Signup', `Customer registered: ${name} (${cleanEmail})`);
 
     } else if (role === 'owner') {
@@ -2388,34 +2390,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createdAt
       };
 
+      try {
+        const { getDB } = await import('../lib/firebase');
+        const db = getDB();
+        if (db) {
+          const { doc, writeBatch } = await import('firebase/firestore');
+          const batch = writeBatch(db);
+          batch.set(doc(db, 'users', userUid), userProfile, { merge: true });
+          batch.set(doc(db, 'businesses', tenantId), businessDoc, { merge: true });
+          batch.set(doc(db, 'tenants', tenantId), businessDoc, { merge: true });
+          batch.set(doc(db, 'memberships', membershipDoc.id), membershipDoc, { merge: true });
+          batch.set(doc(db, 'roles', roleDoc.id), roleDoc, { merge: true });
+          batch.set(doc(db, 'permissions', permissionDoc.id), permissionDoc, { merge: true });
+          batch.set(doc(db, 'branches', branchId), branchDoc, { merge: true });
+          batch.set(doc(db, 'staff', userUid), staffDoc, { merge: true });
+          await batch.commit();
+        }
+      } catch (err) {
+        console.error("Batch write failed for owner:", err);
+        throw new Error("Failed to create business profile in database.");
+      }
+
       setTenants(prev => [...prev.filter(t => t.id !== tenantId), businessDoc as any]);
       setBranches(prev => [...prev.filter(b => b.id !== branchId), branchDoc as any]);
       setStaff(prev => [...prev.filter(s => s.id !== userUid), staffDoc as any]);
 
-      await Promise.all([
-        syncToFirestore('users', userUid, userProfile),
-        syncToFirestore('businesses', tenantId, businessDoc),
-        syncToFirestore('tenants', tenantId, businessDoc),
-        syncToFirestore('memberships', membershipDoc.id, membershipDoc),
-        syncToFirestore('roles', roleDoc.id, roleDoc),
-        syncToFirestore('permissions', permissionDoc.id, permissionDoc),
-        syncToFirestore('branches', branchId, branchDoc),
-        syncToFirestore('staff', userUid, staffDoc)
-      ]);
-
-      const loggedUser = {
-        id: userUid,
-        uid: userUid,
-        email: cleanEmail,
-        role: 'owner' as const,
-        name: userProfile.name,
-        tenantId,
-        branchId
-      };
-
-      setCurrentUser(loggedUser);
-      setActiveTenantId(tenantId);
-      setActiveBranchId(branchId);
       addLog('Owner Signup', `Owner registered: ${name} (${cleanEmail}), Tenant: ${tenantId}`);
     }
   };
