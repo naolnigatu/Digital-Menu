@@ -2288,15 +2288,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         const { getDB } = await import('../lib/firebase');
         const db = getDB();
-        if (db) {
-          const { doc, writeBatch } = await import('firebase/firestore');
-          const batch = writeBatch(db);
-          batch.set(doc(db, 'users', userUid), customerProfile, { merge: true });
-          await batch.commit();
+        
+        if (!db) {
+          throw new Error("Firestore database instance (db) is null. Initialization failed.");
         }
-      } catch (err) {
-        console.error("Batch write failed for customer:", err);
-        throw new Error("Failed to create customer profile in database.");
+        
+        console.log("Starting Firestore batch write for customer signup...");
+        const { doc, writeBatch } = await import('firebase/firestore');
+        const batch = writeBatch(db);
+        
+        console.log(`Writing users/${userUid}`);
+        batch.set(doc(db, 'users', userUid), customerProfile, { merge: true });
+        
+        console.log("Committing batch to Firestore...");
+        await batch.commit();
+        console.log("Batch commit successful.");
+      } catch (err: any) {
+        console.error("FATAL: Batch write failed for customer signup:", err);
+        throw new Error(`Failed to create customer profile in database: ${err.message || err}`);
       }
 
       setCustomerProfiles(prev => ({ ...prev, [cleanEmail]: customerProfile }));
@@ -2393,22 +2402,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         const { getDB } = await import('../lib/firebase');
         const db = getDB();
-        if (db) {
-          const { doc, writeBatch } = await import('firebase/firestore');
-          const batch = writeBatch(db);
-          batch.set(doc(db, 'users', userUid), userProfile, { merge: true });
-          batch.set(doc(db, 'businesses', tenantId), businessDoc, { merge: true });
-          batch.set(doc(db, 'tenants', tenantId), businessDoc, { merge: true });
-          batch.set(doc(db, 'memberships', membershipDoc.id), membershipDoc, { merge: true });
-          batch.set(doc(db, 'roles', roleDoc.id), roleDoc, { merge: true });
-          batch.set(doc(db, 'permissions', permissionDoc.id), permissionDoc, { merge: true });
-          batch.set(doc(db, 'branches', branchId), branchDoc, { merge: true });
-          batch.set(doc(db, 'staff', userUid), staffDoc, { merge: true });
-          await batch.commit();
+        
+        if (!db) {
+          throw new Error("Firestore database instance (db) is null. Initialization failed.");
         }
-      } catch (err) {
-        console.error("Batch write failed for owner:", err);
-        throw new Error("Failed to create business profile in database.");
+        
+        console.log("Starting Firestore batch write for owner signup...");
+        const { doc, writeBatch } = await import('firebase/firestore');
+        const batch = writeBatch(db);
+        
+        console.log(`Writing users/${userUid}`);
+        batch.set(doc(db, 'users', userUid), userProfile, { merge: true });
+        
+        console.log(`Writing businesses/${tenantId}`);
+        batch.set(doc(db, 'businesses', tenantId), businessDoc, { merge: true });
+        
+        console.log(`Writing tenants/${tenantId}`);
+        batch.set(doc(db, 'tenants', tenantId), businessDoc, { merge: true });
+        
+        console.log(`Writing memberships/${membershipDoc.id}`);
+        batch.set(doc(db, 'memberships', membershipDoc.id), membershipDoc, { merge: true });
+        
+        console.log(`Writing roles/${roleDoc.id}`);
+        batch.set(doc(db, 'roles', roleDoc.id), roleDoc, { merge: true });
+        
+        console.log(`Writing permissions/${permissionDoc.id}`);
+        batch.set(doc(db, 'permissions', permissionDoc.id), permissionDoc, { merge: true });
+        
+        console.log(`Writing branches/${branchId}`);
+        batch.set(doc(db, 'branches', branchId), branchDoc, { merge: true });
+        
+        console.log(`Writing staff/${userUid}`);
+        batch.set(doc(db, 'staff', userUid), staffDoc, { merge: true });
+        
+        console.log("Committing batch to Firestore...");
+        await batch.commit();
+        console.log("Batch commit successful.");
+      } catch (err: any) {
+        console.error("FATAL: Batch write failed for owner signup:", err);
+        throw new Error(`Failed to create business profile in database: ${err.message || err}`);
       }
 
       setTenants(prev => [...prev.filter(t => t.id !== tenantId), businessDoc as any]);
@@ -2456,12 +2488,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const { getDB } = await import('../lib/firebase');
       const db = getDB();
-      if (db) {
-        const { doc, setDoc } = await import('firebase/firestore');
-        await setDoc(doc(db, collectionName, docId), data, { merge: true });
-      }
-    } catch (e) {
-      console.warn("Firestore sync skipped/failed:", e);
+      if (!db) throw new Error("Firestore DB instance is null");
+      
+      const { doc, setDoc } = await import('firebase/firestore');
+      await setDoc(doc(db, collectionName, docId), data, { merge: true });
+    } catch (e: any) {
+      console.error(`FATAL: Firestore sync failed for ${collectionName}/${docId}:`, e);
+      throw e;
     }
   };
 
@@ -2469,12 +2502,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const { getDB } = await import('../lib/firebase');
       const db = getDB();
-      if (db) {
-        const { doc, deleteDoc } = await import('firebase/firestore');
-        await deleteDoc(doc(db, collectionName, docId));
-      }
-    } catch (e) {
-      console.warn("Firestore delete skipped/failed:", e);
+      if (!db) throw new Error("Firestore DB instance is null");
+      
+      const { doc, deleteDoc } = await import('firebase/firestore');
+      await deleteDoc(doc(db, collectionName, docId));
+    } catch (e: any) {
+      console.error(`FATAL: Firestore delete failed for ${collectionName}/${docId}:`, e);
+      throw e;
     }
   };
 

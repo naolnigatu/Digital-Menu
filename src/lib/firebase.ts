@@ -1,6 +1,6 @@
-import { initializeApp, getApps } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, Auth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { initializeFirestore, Firestore } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -22,6 +22,12 @@ export const initializeFirebase = () => {
       }, firebaseConfig.firestoreDatabaseId);
       storage = getStorage(app);
       googleProvider = new GoogleAuthProvider();
+    } else {
+      const app = getApp();
+      if (!auth) auth = getAuth(app);
+      if (!db) db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+      if (!storage) storage = getStorage(app);
+      if (!googleProvider) googleProvider = new GoogleAuthProvider();
     }
   } catch (err) {
     console.error("Error initializing Firebase:", err);
