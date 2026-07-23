@@ -62,9 +62,9 @@ interface AppContextType {
   // Actions
   currentView: 'landing' | 'login' | 'signup' | 'customer' | 'dashboard';
   setCurrentView: (view: 'landing' | 'login' | 'signup' | 'customer' | 'dashboard') => void;
-  registerUser: (email: string, name: string, role?: "customer" | "owner") => void;
+  registerUser: (userParam: { uid: string; email: string } | string, nameParam?: string, roleParam?: "customer" | "owner", uidParam?: string) => Promise<void>;
   registerCustomer: (name: string, email: string, phone: string) => void;
-  login: (email: string) => Promise<boolean> | boolean;
+  login: (email: string, uid?: string) => Promise<{ success: boolean; message: string; user?: any }>;
   logout: () => void;
   setActiveTenantId: (id: string) => void;
   setActiveBranchId: (id: string) => void;
@@ -878,9 +878,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unsubscribeFn = unsub;
     });
 
+    let unsubAuth: (() => void) | undefined;
+    const setupAuthObserver = async () => {
+      try {
+        const { getAuth, onAuthStateChanged } = await import('firebase/auth');
+        const { initializeFirebase } = await import('../lib/firebase');
+        const init = initializeFirebase();
+        if (init && init.auth) {
+          unsubAuth = onAuthStateChanged(init.auth, async (firebaseUser) => {
+            if (firebaseUser && firebaseUser.email) {
+              await login(firebaseUser.email, firebaseUser.uid);
+            }
+          });
+        }
+      } catch (err) {
+        console.warn("Auth observer setup skipped:", err);
+      }
+    };
+    setupAuthObserver();
+
     return () => {
       if (unsubscribeFn) {
         unsubscribeFn();
+      }
+      if (unsubAuth) {
+        unsubAuth();
       }
     };
   }, []);
@@ -1021,20 +1043,186 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLogs(prev => [newLog, ...prev]);
   };
 
-  const login = async (email: string): Promise<boolean> => {
-    const cleanEmail = (typeof email === 'string' ? email : '').toLowerCase().trim();
-    if (!cleanEmail) return false;
+  const login = async (emailOrInput: string, uid?: string): Promise<{ success: boolean; message: string; user?: any }> => {
+    const cleanEmail = (typeof emailOrInput === 'string' ? emailOrInput : '').toLowerCase().trim();
 
     // 1. Check Super Admin
     if (cleanEmail === 'naolnigatu2025@gmail.com') {
       const name = 'Naol Nigatu (Platform Admin)';
-      const user = { email: cleanEmail, role: 'super_admin' as const, name };
+      const user = { id: uid || 'sa-01', uid: uid || 'sa-01', email: cleanEmail, role: 'super_admin' as const, name };
       setCurrentUser(user);
       addLog('Login', `${name} logged in.`);
-      return true;
+      return { success: true, message: "Signed in as Platform Admin", user };
     }
 
-    // 2. Check Staff list (In-memory)
+    // 2. PRIMARY LOOKUP: Query Firestore by UID or Email directly from database
+    try {
+      const { getDB } = await import('../lib/firebase');
+      const db = getDB();
+      if (db) {
+        const { doc, getDoc, collection, query, where, getDocs } = await import('firebase/firestore');
+
+        let userDocData: any = null;
+        let userDocId: string = uid || '';
+
+        // A. Primary Lookup by Firebase UID in 'users' collection
+        if (uid) {
+          const uSnap = await getDoc(doc(db, 'users', uid));
+          if (uSnap.exists()) {
+            userDocData = uSnap.data();
+            userDocId = uSnap.id;
+          }
+        }
+
+        // B. Secondary Lookup by Email in 'users' collection
+        if (!userDocData && cleanEmail) {
+          const uQuery = query(collection(db, 'users'), where('email', '==', cleanEmail));
+          const uQuerySnap = await getDocs(uQuery);
+          if (!uQuerySnap.empty) {
+            userDocData = uQuerySnap.docs[0].data();
+            userDocId = uQuerySnap.docs[0].id;
+          }
+        }
+
+        // C. Check 'staff' collection by UID or Email
+        if (!userDocData && uid) {
+          const sSnap = await getDoc(doc(db, 'staff', uid));
+          if (sSnap.exists()) {
+            userDocData = sSnap.data();
+            userDocId = sSnap.id;
+          }
+        }
+        if (!userDocData && cleanEmail) {
+          const sQuery = query(collection(db, 'staff'), where('email', '==', cleanEmail));
+          const sQuerySnap = await getDocs(sQuery);
+          if (!sQuerySnap.empty) {
+            userDocData = sQuerySnap.docs[0].data();
+            userDocId = sQuerySnap.docs[0].id;
+          }
+        }
+
+        if (userDocData) {
+          const role = (userDocData.role || 'customer') as UserRole;
+          const tenantId = userDocData.tenantId || '';
+          
+          let loadedBusiness: Tenant | null = null;
+          let loadedPermissions: string[] = [];
+
+          if (role !== 'customer' && tenantId) {
+            // Load Business from Firestore
+            const bSnap = await getDoc(doc(db, 'businesses', tenantId));
+            if (bSnap.exists()) {
+              loadedBusiness = { id: bSnap.id, ...bSnap.data() } as Tenant;
+            } else {
+              const tSnap = await getDoc(doc(db, 'tenants', tenantId));
+              if (tSnap.exists()) {
+                loadedBusiness = { id: tSnap.id, ...tSnap.data() } as Tenant;
+              }
+            }
+
+            // Load Permissions from Firestore
+            const permSnap = await getDoc(doc(db, 'permissions', `perm-${userDocId}`));
+            if (permSnap.exists()) {
+              loadedPermissions = permSnap.data().permissions || [];
+            } else {
+              const pQuery = query(collection(db, 'permissions'), where('userId', '==', userDocId));
+              const pSnap = await getDocs(pQuery);
+              if (!pSnap.empty) {
+                loadedPermissions = pSnap.docs[0].data().permissions || [];
+              }
+            }
+          }
+
+          const userObj = {
+            id: userDocId,
+            uid: uid || userDocId,
+            email: cleanEmail || userDocData.email,
+            role,
+            name: userDocData.name || cleanEmail.split('@')[0],
+            tenantId: tenantId || loadedBusiness?.id || '',
+            branchId: userDocData.branchId || '',
+            stationId: userDocData.stationId,
+            permissions: loadedPermissions
+          };
+
+          if (loadedBusiness) {
+            setTenants(prev => [...prev.filter(t => t.id !== loadedBusiness!.id), loadedBusiness!]);
+            setActiveTenantId(loadedBusiness.id);
+          } else if (tenantId) {
+            setActiveTenantId(tenantId);
+          }
+
+          if (userDocData.branchId) {
+            setActiveBranchId(userDocData.branchId);
+          }
+
+          setCurrentUser(userObj);
+          addLog('Login', `User ${userObj.name} (${userObj.role}) loaded from Firestore.`);
+          return { success: true, message: "Workspace loaded successfully", user: userObj };
+        }
+
+        // D. Direct check for Tenant/Business ownership
+        let tenantSnapDocs: any[] = [];
+        if (uid) {
+          const tByUid = query(collection(db, 'tenants'), where('ownerUid', '==', uid));
+          const tByUidSnap = await getDocs(tByUid);
+          if (!tByUidSnap.empty) tenantSnapDocs = tByUidSnap.docs;
+        }
+        if (tenantSnapDocs.length === 0 && cleanEmail) {
+          const tByEmail = query(collection(db, 'tenants'), where('ownerEmail', '==', cleanEmail));
+          const tByEmailSnap = await getDocs(tByEmail);
+          if (!tByEmailSnap.empty) tenantSnapDocs = tByEmailSnap.docs;
+        }
+        if (tenantSnapDocs.length === 0 && cleanEmail) {
+          const bByEmail = query(collection(db, 'businesses'), where('ownerEmail', '==', cleanEmail));
+          const bByEmailSnap = await getDocs(bByEmail);
+          if (!bByEmailSnap.empty) tenantSnapDocs = bByEmailSnap.docs;
+        }
+
+        if (tenantSnapDocs.length > 0) {
+          const docSnap = tenantSnapDocs[0];
+          const data = docSnap.data();
+          const tenantObj = { id: docSnap.id, ...data } as Tenant;
+          setTenants(prev => [...prev.filter(t => t.id !== docSnap.id), tenantObj]);
+          
+          const userObj = {
+            id: uid || docSnap.id,
+            uid: uid || docSnap.id,
+            email: cleanEmail || data.ownerEmail,
+            role: 'owner' as const,
+            name: (data.ownerName || data.name || 'Owner'),
+            tenantId: docSnap.id,
+            branchId: ''
+          };
+          setCurrentUser(userObj);
+          setActiveTenantId(docSnap.id);
+          addLog('Login', `Tenant Owner (${userObj.email}) loaded from Firestore business record.`);
+          return { success: true, message: "Business workspace loaded successfully", user: userObj };
+        }
+      }
+    } catch (err) {
+      console.warn("Firestore profile loading error during login:", err);
+    }
+
+    // 3. Fallback for Hardcoded Demo Accounts
+    if (cleanEmail === 'aisha@menuflow.com') {
+      const u = { id: 's-01', email: cleanEmail, role: 'owner' as const, name: 'Aisha Jafar', tenantId: 't-01', branchId: 'b-01' };
+      setCurrentUser(u); setActiveTenantId('t-01'); setActiveBranchId('b-01'); return { success: true, message: "Demo account loaded", user: u };
+    }
+    if (cleanEmail === 'carlos@menuflow.com') {
+      const u = { id: 's-02', email: cleanEmail, role: 'owner' as const, name: 'Carlos Mwangi', tenantId: 't-02', branchId: 'b-03' };
+      setCurrentUser(u); setActiveTenantId('t-02'); setActiveBranchId('b-03'); return { success: true, message: "Demo account loaded", user: u };
+    }
+    if (cleanEmail === 'fatima@menuflow.com') {
+      const u = { id: 's-03', email: cleanEmail, role: 'waiter' as const, name: 'Fatima Ahmed', tenantId: 't-01', branchId: 'b-01' };
+      setCurrentUser(u); setActiveTenantId('t-01'); setActiveBranchId('b-01'); return { success: true, message: "Demo account loaded", user: u };
+    }
+    if (cleanEmail === 'yohannes@menuflow.com') {
+      const u = { id: 's-04', email: cleanEmail, role: 'kitchen' as const, name: 'Yohannes Bekele', tenantId: 't-01', branchId: 'b-01', stationId: 'st-01' };
+      setCurrentUser(u); setActiveTenantId('t-01'); setActiveBranchId('b-01'); return { success: true, message: "Demo account loaded", user: u };
+    }
+
+    // 4. In-Memory fallback for active session
     const foundStaff = staff.find(s => (s.email || '').toLowerCase().trim() === cleanEmail && s.active !== false);
     if (foundStaff) {
       const user = {
@@ -1049,15 +1237,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCurrentUser(user);
       if (foundStaff.tenantId) setActiveTenantId(foundStaff.tenantId);
       if (foundStaff.branchId) setActiveBranchId(foundStaff.branchId);
-      addLog('Login', `Staff ${foundStaff.name} logged in as ${foundStaff.role}.`);
-      return true;
+      return { success: true, message: "Staff profile loaded", user };
     }
 
-    // 3. Check Owner signups from tenants list (in-memory)
     const foundTenant = tenants.find(t => (t.ownerEmail || '').toLowerCase().trim() === cleanEmail);
     if (foundTenant) {
       const tenantBranch = branches.find(b => b.tenantId === foundTenant.id);
       const user = {
+        id: uid || foundTenant.id,
         email: cleanEmail,
         role: 'owner' as const,
         name: foundTenant.name + ' Owner',
@@ -1067,41 +1254,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCurrentUser(user);
       setActiveTenantId(foundTenant.id);
       if (tenantBranch) setActiveBranchId(tenantBranch.id);
-      addLog('Login', `Tenant Owner (${cleanEmail}) logged in.`);
-      return true;
+      return { success: true, message: "Business profile loaded", user };
     }
 
-    // 4. Hardcoded Fallbacks for Demo Users (in case Firestore is missing them)
-    if (cleanEmail === 'aisha@menuflow.com') {
-      setCurrentUser({ id: 's-01', email: cleanEmail, role: 'owner', name: 'Aisha Jafar', tenantId: 't-01', branchId: 'b-01' });
-      setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
-    }
-    if (cleanEmail === 'carlos@menuflow.com') {
-      setCurrentUser({ id: 's-02', email: cleanEmail, role: 'owner', name: 'Carlos Mwangi', tenantId: 't-02', branchId: 'b-03' });
-      setActiveTenantId('t-02'); setActiveBranchId('b-03'); return true;
-    }
-    if (cleanEmail === 'fatima@menuflow.com') {
-      setCurrentUser({ id: 's-03', email: cleanEmail, role: 'waiter', name: 'Fatima Ahmed', tenantId: 't-01', branchId: 'b-01' });
-      setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
-    }
-    if (cleanEmail === 'yohannes@menuflow.com') {
-      setCurrentUser({ id: 's-04', email: cleanEmail, role: 'kitchen', name: 'Yohannes Bekele', tenantId: 't-01', branchId: 'b-01', stationId: 'st-01' });
-      setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
-    }
-    if (cleanEmail === 'cashier@menuflow.com') {
-      setCurrentUser({ id: 's-05', email: cleanEmail, role: 'cashier', name: 'Kebron Abera', tenantId: 't-01', branchId: 'b-01' });
-      setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
-    }
-    if (cleanEmail === 'delivery@menuflow.com') {
-      setCurrentUser({ id: 's-08', email: cleanEmail, role: 'delivery', name: 'Dan (Delivery Staff)', tenantId: 't-01', branchId: 'b-01' });
-      setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
-    }
-    if (cleanEmail === 'manager@menuflow.com') {
-      setCurrentUser({ id: 's-09', email: cleanEmail, role: 'manager', name: 'Manager Demo', tenantId: 't-01', branchId: 'b-01' });
-      setActiveTenantId('t-01'); setActiveBranchId('b-01'); return true;
-    }
-
-    // 5. Check Customer Profiles
     const foundCustomer = customerProfiles[cleanEmail];
     if (foundCustomer) {
       const user = {
@@ -1113,105 +1268,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         branchId: ''
       };
       setCurrentUser(user);
-      localStorage.setItem('mf_customer_logged_email', cleanEmail);
-      addLog('Login', `Customer ${foundCustomer.name} logged in.`);
-      return true;
+      return { success: true, message: "Customer profile loaded", user };
     }
 
-    // 6. Direct Firestore Fallback Query across users, staff, tenants, and businesses!
-    try {
-      const { getDB } = await import('../lib/firebase');
-      const db = getDB();
-      if (db) {
-        const { collection, query, where, getDocs } = await import('firebase/firestore');
-
-        // Check 'users' collection
-        const usersQuery = query(collection(db, 'users'), where('email', '==', cleanEmail));
-        const usersSnap = await getDocs(usersQuery);
-        if (!usersSnap.empty) {
-          const docSnap = usersSnap.docs[0];
-          const data = docSnap.data();
-          const role = (data.role || 'customer') as UserRole;
-          const user = {
-            id: docSnap.id,
-            email: cleanEmail,
-            role,
-            name: data.name || cleanEmail.split('@')[0],
-            tenantId: data.tenantId || '',
-            branchId: data.branchId || '',
-            stationId: data.stationId
-          };
-          if (role !== 'customer') {
-            setStaff(prev => [...prev.filter(s => s.id !== docSnap.id), { id: docSnap.id, ...data } as Staff]);
-          } else {
-            setCustomerProfiles(prev => ({ ...prev, [cleanEmail]: { id: docSnap.id, ...data } as CustomerProfile }));
-          }
-          setCurrentUser(user);
-          if (data.tenantId) setActiveTenantId(data.tenantId);
-          if (data.branchId) setActiveBranchId(data.branchId);
-          addLog('Login', `User ${user.name} logged in via Firestore lookup (${role}).`);
-          return true;
-        }
-
-        // Check 'staff' collection
-        const staffQuery = query(collection(db, 'staff'), where('email', '==', cleanEmail));
-        const staffSnap = await getDocs(staffQuery);
-        if (!staffSnap.empty) {
-          const docSnap = staffSnap.docs[0];
-          const data = docSnap.data();
-          const role = (data.role || 'owner') as UserRole;
-          const user = {
-            id: docSnap.id,
-            email: cleanEmail,
-            role,
-            name: data.name || cleanEmail.split('@')[0],
-            tenantId: data.tenantId || '',
-            branchId: data.branchId || '',
-            stationId: data.stationId
-          };
-          setStaff(prev => [...prev.filter(s => s.id !== docSnap.id), { id: docSnap.id, ...data } as Staff]);
-          setCurrentUser(user);
-          if (data.tenantId) setActiveTenantId(data.tenantId);
-          if (data.branchId) setActiveBranchId(data.branchId);
-          addLog('Login', `Staff ${user.name} logged in via Firestore lookup.`);
-          return true;
-        }
-
-        // Check 'tenants' & 'businesses' collection
-        const tenantsQuery = query(collection(db, 'tenants'), where('ownerEmail', '==', cleanEmail));
-        let tenantSnap = await getDocs(tenantsQuery);
-        if (tenantSnap.empty) {
-          const busQuery = query(collection(db, 'businesses'), where('ownerEmail', '==', cleanEmail));
-          tenantSnap = await getDocs(busQuery);
-        }
-        if (!tenantSnap.empty) {
-          const docSnap = tenantSnap.docs[0];
-          const data = docSnap.data();
-          const tenantObj = { id: docSnap.id, ...data } as Tenant;
-          setTenants(prev => [...prev.filter(t => t.id !== docSnap.id), tenantObj]);
-          const user = {
-            email: cleanEmail,
-            role: 'owner' as const,
-            name: (data.ownerName || data.name || 'Owner') + ' Owner',
-            tenantId: docSnap.id,
-            branchId: ''
-          };
-          setCurrentUser(user);
-          setActiveTenantId(docSnap.id);
-          addLog('Login', `Tenant Owner (${cleanEmail}) logged in via Firestore lookup.`);
-          return true;
-        }
-      }
-    } catch (err) {
-      console.warn("Firestore fallback login check failed:", err);
-    }
-
-    return false;
+    return { success: false, message: "Account not found in our records. Please sign up." };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      const { logOut } = await import('../lib/firebase');
+      await logOut();
+    } catch (e) {
+      console.warn("Firebase logout error:", e);
+    }
     addLog('Logout', `User logged out.`);
     setCurrentUser(null);
+    localStorage.removeItem('mf_current_user');
+    localStorage.removeItem('mf_customer_logged_email');
+    setCurrentView('landing');
   };
 
   // Menu Categories
@@ -2166,57 +2240,183 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCurrentUser(loggedUser);
   };
 
-  const registerUser = async (email: string, name: string, role: 'customer' | 'owner') => {
+  const registerUser = async (
+    userParam: { uid: string; email: string } | string,
+    nameParam?: string,
+    roleParam: 'customer' | 'owner' = 'owner',
+    uidParam?: string
+  ) => {
+    let email = '';
+    let name = '';
+    let role: 'customer' | 'owner' = 'owner';
+    let uid = '';
+
+    if (typeof userParam === 'string') {
+      email = userParam;
+      name = nameParam || '';
+      role = roleParam;
+      uid = uidParam || '';
+    } else if (userParam && typeof userParam === 'object') {
+      email = userParam.email || '';
+      uid = userParam.uid || '';
+      name = nameParam || '';
+      role = roleParam;
+    }
+
     const cleanEmail = email.toLowerCase().trim();
+    if (!cleanEmail) throw new Error("Email address is required for registration.");
+
+    const userUid = uid || `uid-${Date.now()}`;
+    const createdAt = new Date().toISOString();
+
     if (role === 'customer') {
-      const id = `cust-${Date.now()}`;
-      const newProfile = {
-        id, email: cleanEmail, name, phone: '', savedAddresses: [], savedFavorites: [], loyaltyPoints: 0, loyaltyHistory: [], role: 'customer'
+      const customerProfile = {
+        id: userUid,
+        uid: userUid,
+        email: cleanEmail,
+        name: name || cleanEmail.split('@')[0],
+        phone: '',
+        savedAddresses: [],
+        savedFavorites: [],
+        loyaltyPoints: 0,
+        loyaltyHistory: [],
+        role: 'customer' as const,
+        createdAt,
+        updatedAt: createdAt
       };
-      setCustomerProfiles(prev => ({ ...prev, [cleanEmail]: newProfile }));
-      await syncToFirestore('users', id, newProfile);
+
+      setCustomerProfiles(prev => ({ ...prev, [cleanEmail]: customerProfile }));
+      await syncToFirestore('users', userUid, customerProfile);
+
+      const loggedUser = {
+        id: userUid,
+        uid: userUid,
+        email: cleanEmail,
+        role: 'customer' as const,
+        name: customerProfile.name,
+        tenantId: '',
+        branchId: ''
+      };
+      setCurrentUser(loggedUser);
+      addLog('Customer Signup', `Customer registered: ${name} (${cleanEmail})`);
+
     } else if (role === 'owner') {
-      const id = `owner-${Date.now()}`;
-      const userProfile = { id, email: cleanEmail, name, role: 'owner' };
-      
-      const tenantId = `tenant-${Date.now()}`;
-      const newTenant = {
+      const tenantId = `tenant-${userUid}`;
+      const branchId = `branch-${userUid}`;
+
+      const userProfile = {
+        id: userUid,
+        uid: userUid,
+        email: cleanEmail,
+        name: name || cleanEmail.split('@')[0],
+        role: 'owner' as const,
+        tenantId,
+        branchId,
+        createdAt,
+        updatedAt: createdAt
+      };
+
+      const businessDoc = {
         id: tenantId,
-        name: `${name}'s Business`,
+        name: `${name || 'Restaurant'}'s Business`,
         ownerEmail: cleanEmail,
+        ownerUid: userUid,
         currency: 'USD',
         currencySymbol: '$',
         timezone: 'UTC',
         subscriptionPlan: 'free',
         planStatus: 'active',
         taxPercent: 0,
-        diningServiceTypes: ['dine_in']
+        diningServiceTypes: ['dine_in', 'takeaway', 'delivery'],
+        createdAt,
+        updatedAt: createdAt
       };
-      setTenants(prev => [...prev, newTenant as any]);
-      
-      const newBranch = {
-        id: `branch-${Date.now()}`,
+
+      const membershipDoc = {
+        id: `mem-${userUid}`,
+        userId: userUid,
+        userEmail: cleanEmail,
+        tenantId,
+        role: 'owner',
+        status: 'active',
+        createdAt
+      };
+
+      const roleDoc = {
+        id: `role-${userUid}`,
+        userId: userUid,
+        tenantId,
+        role: 'owner',
+        title: 'Business Owner',
+        createdAt
+      };
+
+      const permissionDoc = {
+        id: `perm-${userUid}`,
+        userId: userUid,
+        tenantId,
+        permissions: [
+          'all',
+          'manage_business',
+          'manage_menu',
+          'manage_orders',
+          'manage_staff',
+          'manage_tables',
+          'manage_finances',
+          'view_reports'
+        ],
+        createdAt
+      };
+
+      const branchDoc = {
+        id: branchId,
         tenantId,
         name: 'Main Branch',
-        isMain: true
+        isMain: true,
+        createdAt
       };
-      setBranches(prev => [...prev, newBranch as any]);
-      
-      const ownerStaff = {
-        id,
+
+      const staffDoc = {
+        id: userUid,
+        uid: userUid,
         tenantId,
-        branchId: newBranch.id,
-        name,
+        branchId,
+        name: name || cleanEmail.split('@')[0],
         email: cleanEmail,
-        role: 'owner',
-        active: true
+        role: 'owner' as const,
+        active: true,
+        createdAt
       };
-      setStaff(prev => [...prev, ownerStaff as any]);
-      
-      await syncToFirestore('users', id, userProfile);
-      await syncToFirestore('tenants', tenantId, newTenant);
-      await syncToFirestore('branches', newBranch.id, newBranch);
-      await syncToFirestore('staff', id, ownerStaff);
+
+      setTenants(prev => [...prev.filter(t => t.id !== tenantId), businessDoc as any]);
+      setBranches(prev => [...prev.filter(b => b.id !== branchId), branchDoc as any]);
+      setStaff(prev => [...prev.filter(s => s.id !== userUid), staffDoc as any]);
+
+      await Promise.all([
+        syncToFirestore('users', userUid, userProfile),
+        syncToFirestore('businesses', tenantId, businessDoc),
+        syncToFirestore('tenants', tenantId, businessDoc),
+        syncToFirestore('memberships', membershipDoc.id, membershipDoc),
+        syncToFirestore('roles', roleDoc.id, roleDoc),
+        syncToFirestore('permissions', permissionDoc.id, permissionDoc),
+        syncToFirestore('branches', branchId, branchDoc),
+        syncToFirestore('staff', userUid, staffDoc)
+      ]);
+
+      const loggedUser = {
+        id: userUid,
+        uid: userUid,
+        email: cleanEmail,
+        role: 'owner' as const,
+        name: userProfile.name,
+        tenantId,
+        branchId
+      };
+
+      setCurrentUser(loggedUser);
+      setActiveTenantId(tenantId);
+      setActiveBranchId(branchId);
+      addLog('Owner Signup', `Owner registered: ${name} (${cleanEmail}), Tenant: ${tenantId}`);
     }
   };
 

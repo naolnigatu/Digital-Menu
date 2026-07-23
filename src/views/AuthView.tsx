@@ -1,9 +1,34 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { ChefHat, ArrowLeft, Mail, AlertCircle, Check, Lock, UserCircle } from 'lucide-react';
+import { ChefHat, ArrowLeft, Mail, AlertCircle, Check, Lock, UserCircle, Loader2 } from 'lucide-react';
 import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '../lib/firebase';
 
 type AuthMode = 'signin' | 'signup';
+
+function getFriendlyAuthErrorMessage(err: any): string {
+  const code = err?.code || '';
+  const message = err?.message || '';
+
+  if (code === 'auth/user-not-found' || message.includes('user-not-found')) {
+    return 'Account not found in our records. Please sign up.';
+  }
+  if (code === 'auth/wrong-password' || message.includes('wrong-password') || code === 'auth/invalid-credential' || message.includes('invalid-credential')) {
+    return 'Invalid email or password. Please check your credentials.';
+  }
+  if (code === 'auth/email-already-in-use' || message.includes('email-already-in-use')) {
+    return 'An account with this email already exists. Please sign in instead.';
+  }
+  if (code === 'auth/weak-password' || message.includes('weak-password')) {
+    return 'Password is too weak. Please use at least 6 characters.';
+  }
+  if (code === 'auth/invalid-email' || message.includes('invalid-email')) {
+    return 'Invalid email address format.';
+  }
+  if (code === 'auth/popup-closed-by-user' || message.includes('popup-closed-by-user')) {
+    return 'Google Sign In was cancelled.';
+  }
+  return message || 'Authentication failed. Please check your network and credentials.';
+}
 
 export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: AuthMode }) {
   const { login, registerUser, setCurrentView } = useApp();
@@ -15,6 +40,7 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
   const [signupRole, setSignupRole] = useState<'customer' | 'owner'>('owner');
   
   const [isLoading, setIsLoading] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -22,33 +48,56 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
     setIsLoading(true);
     setErrorMsg('');
     setSuccessMsg('');
+    setStatusMsg('Signing in with Google...');
+
     try {
       const user = await signInWithGoogle();
-      if (!user.email) throw new Error("No email provided by Google.");
+      if (!user.email) throw new Error("No email provided by Google account.");
       
-      const exists = await login(user.email);
-      if (!exists) {
+      setStatusMsg('Loading user profile...');
+      let loginRes = await login(user.email, user.uid);
+
+      if (!loginRes.success) {
         if (mode === 'signup') {
-          await registerUser(user.email, user.displayName || 'User', signupRole);
-          await login(user.email);
-          setSuccessMsg('Account created successfully!');
+          setStatusMsg('Creating business workspace & profile...');
+          await registerUser({ uid: user.uid, email: user.email }, name || user.displayName || 'User', signupRole);
+          
+          setStatusMsg('Loading your workspace...');
+          loginRes = await login(user.email, user.uid);
+          
+          if (loginRes.success) {
+            setSuccessMsg('Account created successfully! Redirecting...');
+            setTimeout(() => {
+              setCurrentView(signupRole === 'customer' ? 'customer' : 'dashboard');
+            }, 600);
+          } else {
+            setErrorMsg('Unable to load workspace profile after creation.');
+          }
         } else {
           setErrorMsg('Account not found in our records. Please sign up.');
         }
       } else {
-        setSuccessMsg('Successfully logged in!');
+        setSuccessMsg('Successfully logged in! Redirecting...');
+        setTimeout(() => {
+          const userRole = loginRes.user?.role || 'owner';
+          setCurrentView(userRole === 'customer' ? 'customer' : 'dashboard');
+        }, 600);
       }
     } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || 'Failed to authenticate with Google.');
+      console.error('Google Auth Error:', err);
+      setErrorMsg(getFriendlyAuthErrorMessage(err));
     } finally {
       setIsLoading(false);
+      setStatusMsg('');
     }
   };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return;
+    if (!email || !password) {
+      setErrorMsg('Please enter both email and password.');
+      return;
+    }
     if (mode === 'signup' && !name) {
       setErrorMsg('Please enter your full name.');
       return;
@@ -60,26 +109,48 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
     
     try {
       if (mode === 'signin') {
+        setStatusMsg('Signing you in...');
         const user = await signInWithEmail(email, password);
-        if (!user.email) throw new Error("No email returned.");
-        const exists = await login(user.email);
-        if (exists) {
-          setSuccessMsg('Successfully logged in!');
+        if (!user || !user.email) throw new Error("Authentication failed. Invalid user response.");
+
+        setStatusMsg('Loading your workspace...');
+        const loginRes = await login(user.email, user.uid);
+
+        if (loginRes.success) {
+          setSuccessMsg('Successfully logged in! Redirecting...');
+          setTimeout(() => {
+            const userRole = loginRes.user?.role || 'owner';
+            setCurrentView(userRole === 'customer' ? 'customer' : 'dashboard');
+          }, 600);
         } else {
-          setErrorMsg('Account not found in our records. Please sign up.');
+          setErrorMsg(loginRes.message || 'Account not found in our records. Please sign up.');
         }
       } else {
+        setStatusMsg('Creating account...');
         const user = await signUpWithEmail(email, password);
-        if (!user.email) throw new Error("No email returned.");
-        await registerUser(user.email, name, signupRole);
-        await login(user.email);
-        setSuccessMsg('Account created successfully!');
+        if (!user || !user.email) throw new Error("Account creation failed.");
+
+        setStatusMsg('Setting up your profile, business & permissions...');
+        await registerUser({ uid: user.uid, email: user.email }, name, signupRole);
+
+        setStatusMsg('Loading your workspace...');
+        const loginRes = await login(user.email, user.uid);
+
+        if (loginRes.success) {
+          setSuccessMsg('Account created successfully! Redirecting...');
+          setTimeout(() => {
+            setCurrentView(signupRole === 'customer' ? 'customer' : 'dashboard');
+          }, 600);
+        } else {
+          setErrorMsg(loginRes.message || 'Unable to load workspace profile.');
+        }
       }
     } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || 'Authentication failed. Please check your credentials.');
+      console.error('Email Auth Error:', err);
+      setErrorMsg(getFriendlyAuthErrorMessage(err));
     } finally {
       setIsLoading(false);
+      setStatusMsg('');
     }
   };
 
@@ -237,9 +308,10 @@ export default function AuthView({ defaultMode = 'signin' }: { defaultMode?: Aut
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full rounded-xl bg-indigo-600 py-3 text-xs font-bold text-white shadow-md hover:bg-indigo-700 transition-colors cursor-pointer mt-2 disabled:opacity-50"
+              className="w-full flex justify-center items-center gap-2 rounded-xl bg-indigo-600 py-3 text-xs font-bold text-white shadow-md hover:bg-indigo-700 transition-colors cursor-pointer mt-2 disabled:opacity-50"
             >
-              {isLoading ? 'Processing...' : (mode === 'signin' ? 'Sign In' : 'Create Account')}
+              {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isLoading ? (statusMsg || 'Processing...') : (mode === 'signin' ? 'Sign In' : 'Create Account')}
             </button>
           </form>
           
