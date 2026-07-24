@@ -19,13 +19,13 @@ export const initializeFirebase = () => {
       auth = getAuth(app);
       db = initializeFirestore(app, {
         experimentalForceLongPolling: true
-      }, firebaseConfig.firestoreDatabaseId);
+      });
       storage = getStorage(app);
       googleProvider = new GoogleAuthProvider();
     } else {
       const app = getApp();
       if (!auth) auth = getAuth(app);
-      if (!db) db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+      if (!db) db = getFirestore(app);
       if (!storage) storage = getStorage(app);
       if (!googleProvider) googleProvider = new GoogleAuthProvider();
     }
