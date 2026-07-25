@@ -201,7 +201,7 @@ export default function CustomerView() {
     { id: 'binance_id', name: 'Binance Pay (ID)', enabled: false, requiresProof: true, details: 'Binance Pay ID: 88776655' },
     { id: 'binance_wallet', name: 'Binance BEP20 Wallet', enabled: false, requiresProof: true, details: 'BEP20 Address: 0x71C7656EC7ab88b098defB751B7401B5f6d8976F' }
   ];
-  const allowedByPlatform = globalSettings.allowedPaymentMethods || [
+  const allowedByPlatform = globalSettings?.allowedPaymentMethods || [
     'cash', 'stripe', 'mobile_money', 'bank_transfer', 'binance_id', 'binance_wallet'
   ];
   const enabledPaymentConfigs = activePaymentConfigs.filter(
@@ -325,8 +325,8 @@ export default function CustomerView() {
     const plan = tenantSubscriptionPlans.find(p => p.id === selectedSubPlanId);
     if (plan && plan.discountPercentage) {
       finalDiscountPct += plan.discountPercentage;
-    } else if ((activeTenant as any).mealSubscriptionDiscountPercent) {
-      finalDiscountPct += (activeTenant as any).mealSubscriptionDiscountPercent;
+    } else if ((activeTenant as any)?.mealSubscriptionDiscountPercent) {
+      finalDiscountPct += (activeTenant as any)?.mealSubscriptionDiscountPercent;
     }
   }
   let pointsToRedeem = 0;
@@ -428,12 +428,12 @@ const currentItemPrice = useMemo(() => {
     let finalTotal = total * itemQty;
     if (orderType === 'meal_subscription') {
       finalTotal = finalTotal * subscriptionDurationDays;
-      if (activeTenant.mealSubscriptionDiscountPercent) {
-        finalTotal = finalTotal - (finalTotal * (activeTenant.mealSubscriptionDiscountPercent / 100));
+      if (activeTenant?.mealSubscriptionDiscountPercent) {
+        finalTotal = finalTotal - (finalTotal * (activeTenant?.mealSubscriptionDiscountPercent / 100));
       }
     }
     return finalTotal;
-  }, [activeItemDetails, selectedMods, itemQty, orderType, subscriptionDurationDays, activeTenant.mealSubscriptionDiscountPercent]);
+  }, [activeItemDetails, selectedMods, itemQty, orderType, subscriptionDurationDays, activeTenant?.mealSubscriptionDiscountPercent]);
 
   const handleAddToCart = () => {
     if (!activeItemDetails) return;
@@ -482,7 +482,7 @@ const currentItemPrice = useMemo(() => {
     
     // Calculate Subscription Discount
     if (orderType === 'meal_subscription') {
-      const discountPercent = activeTenant.mealSubscriptionDiscountPercent || 0;
+      const discountPercent = activeTenant?.mealSubscriptionDiscountPercent || 0;
       // If we are doing a 30-day plan? The user said "each meal gets discounted percentage and calculated as per the price after %deduction"
       // So let's multiply by 30 days as standard subscription, or just 1?
       // "each meal gets discounted percentage... " 
@@ -970,13 +970,13 @@ const currentItemPrice = useMemo(() => {
             <div className="flex flex-row justify-between items-center gap-2">
               <div className="flex-1 flex items-center gap-2 min-w-0">
                 <img 
-                  src={activeTenant.logoUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=80'} 
-                  alt={activeTenant.name} 
+                  src={activeTenant?.logoUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=80'} 
+                  alt={activeTenant?.name} 
                   className="h-8 w-8 shrink-0 rounded-full border border-white/20 object-cover"
                   referrerPolicy="no-referrer"
                 />
                 <div className="flex flex-col min-w-0">
-                  <span className="font-sans font-extrabold text-sm leading-tight truncate">{activeTenant.name}</span>
+                  <span className="font-sans font-extrabold text-sm leading-tight truncate">{activeTenant?.name}</span>
                   <button 
                     onClick={() => {
                       setBizSearchTerm('');
@@ -1020,7 +1020,7 @@ const currentItemPrice = useMemo(() => {
               </div>
             </div>
 
-            <p className="text-[11px] text-slate-300 leading-relaxed">{activeTenant.description}</p>
+            <p className="text-[11px] text-slate-300 leading-relaxed">{activeTenant?.description}</p>
 
             <div className="space-y-3">
               {(orderType === 'dine_in' || orderType === 'meal_subscription') && (
@@ -1365,7 +1365,7 @@ const currentItemPrice = useMemo(() => {
                       </div>
                       
                       <div className="flex items-center justify-between mt-1">
-                        <span className="font-extrabold text-slate-900 text-[11px] font-mono">{activeTenant.currencySymbol} {item.price}</span>
+                        <span className="font-extrabold text-slate-900 text-[11px] font-mono">{activeTenant?.currencySymbol} {item.price}</span>
                         {!isAvailable && (
                           <span className="text-[9px] font-extrabold text-slate-400 shrink-0">Unavailable</span>
                         )}
@@ -1387,7 +1387,7 @@ const currentItemPrice = useMemo(() => {
                 <div className="flex justify-between items-start border-b border-slate-50 pb-3">
                   <div>
                     <h4 className="font-sans font-extrabold text-sm text-slate-900">{getTranslatedText(activeItemDetails).name}</h4>
-                    <span className="font-mono text-xs font-extrabold text-slate-500 mt-1 block">Base Price: {activeTenant.currencySymbol} {activeItemDetails.price}</span>
+                    <span className="font-mono text-xs font-extrabold text-slate-500 mt-1 block">Base Price: {activeTenant?.currencySymbol} {activeItemDetails.price}</span>
                   </div>
                   <button 
                     onClick={() => setActiveItemDetails(null)}
@@ -1422,7 +1422,7 @@ const currentItemPrice = useMemo(() => {
                               }`}
                             >
                               <span>{opt.name}</span>
-                              <span className="font-mono text-[10px]">+{activeTenant.currencySymbol} {opt.price}</span>
+                              <span className="font-mono text-[10px]">+{activeTenant?.currencySymbol} {opt.price}</span>
                             </button>
                           );
                         })}
@@ -1459,7 +1459,7 @@ const currentItemPrice = useMemo(() => {
                       onClick={handleOrderNow}
                       className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center"
                     >
-                      {orderType === 'meal_subscription' ? 'Subscribe Now' : 'Order Now'} - {activeTenant.currencySymbol} {currentItemPrice.toLocaleString()}
+                      {orderType === 'meal_subscription' ? 'Subscribe Now' : 'Order Now'} - {activeTenant?.currencySymbol} {currentItemPrice.toLocaleString()}
                     </button>
                   </div>
                 </div>
@@ -1592,7 +1592,7 @@ const currentItemPrice = useMemo(() => {
                           <p className="text-[9px] text-amber-800 mt-0.5">{c.selectedMods.map(m => m.optionName).join(', ')}</p>
                           {c.notes && <p className="text-[10px] text-slate-400 italic">"{c.notes}"</p>}
                         </div>
-                        <span className="font-bold text-slate-700 font-mono">{activeTenant.currencySymbol} {pricePlusMods * c.qty}</span>
+                        <span className="font-bold text-slate-700 font-mono">{activeTenant?.currencySymbol} {pricePlusMods * c.qty}</span>
                       </div>
                     );
                   })}
@@ -1875,7 +1875,7 @@ const currentItemPrice = useMemo(() => {
                                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
                             }`}
                           >
-                            {amt === 0 ? 'No Tip' : `${activeTenant.currencySymbol}${amt}`}
+                            {amt === 0 ? 'No Tip' : `${activeTenant?.currencySymbol}${amt}`}
                           </button>
                         ))}
                         <button
@@ -1910,18 +1910,18 @@ const currentItemPrice = useMemo(() => {
                   {finalDiscountPct > 0 && (
                     <div className="flex justify-between font-medium text-emerald-600">
                       <span>Discount ({finalDiscountPct}%)</span>
-                      <span>-{activeTenant.currencySymbol} {((getSubtotalWithSubscription() * finalDiscountPct) / 100).toFixed(2)}</span>
+                      <span>-{activeTenant?.currencySymbol} {((getSubtotalWithSubscription() * finalDiscountPct) / 100).toFixed(2)}</span>
                     </div>
                   )}
                   {selectedTipAmount > 0 && orderType !== 'meal_subscription' && (
                     <div className="flex justify-between font-medium text-amber-600 font-mono">
                       <span>Staff Support Tip</span>
-                      <span>+{activeTenant.currencySymbol} {selectedTipAmount}</span>
+                      <span>+{activeTenant?.currencySymbol} {selectedTipAmount}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-extrabold text-slate-900 text-sm">
                     <span>Cart Total Amount</span>
-                    <span>{activeTenant.currencySymbol} {((getSubtotalWithSubscription() * (100 - finalDiscountPct)) / 100 + (orderType === 'meal_subscription' ? 0 : selectedTipAmount)).toFixed(2)}</span>
+                    <span>{activeTenant?.currencySymbol} {((getSubtotalWithSubscription() * (100 - finalDiscountPct)) / 100 + (orderType === 'meal_subscription' ? 0 : selectedTipAmount)).toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -1968,7 +1968,7 @@ const currentItemPrice = useMemo(() => {
                   </p>
                   <div className="bg-white p-3 rounded-xl text-left border border-amber-200 text-[10px] space-y-1 mt-2 shadow-sm">
                     <p className="text-slate-400 font-bold">YOUR TRANSFER INFORMATION:</p>
-                    <p className="font-semibold text-slate-700">Bank CBE Account: {activeTenant.bankAccount || '1000123456789'}</p>
+                    <p className="font-semibold text-slate-700">Bank CBE Account: {activeTenant?.bankAccount || '1000123456789'}</p>
                     {currentLiveOrder.advancePaymentRef && <p className="font-semibold text-slate-700">Ref ID: {currentLiveOrder.advancePaymentRef}</p>}
                     <p className="text-[9px] text-amber-600 font-bold italic mt-1">Cashier is auditing the receipt screenshot now.</p>
                   </div>
@@ -2020,15 +2020,15 @@ const currentItemPrice = useMemo(() => {
                           <div className="bg-white p-3 rounded-xl border border-amber-100 text-xs space-y-2.5">
                             <div className="flex justify-between font-medium text-slate-500">
                               <span>Food Subtotal</span>
-                              <span>{activeTenant.currencySymbol} {currentLiveOrder.subtotal}</span>
+                              <span>{activeTenant?.currencySymbol} {currentLiveOrder.subtotal}</span>
                             </div>
                             <div className="flex justify-between font-semibold text-amber-900 border-b border-dashed border-amber-100 pb-2">
                               <span>Delivery Rider Fee</span>
-                              <span>+ {activeTenant.currencySymbol} {currentLiveOrder.deliveryFee || 0}</span>
+                              <span>+ {activeTenant?.currencySymbol} {currentLiveOrder.deliveryFee || 0}</span>
                             </div>
                             <div className="flex justify-between font-bold text-slate-900 text-sm pt-1">
                               <span>Final Total</span>
-                              <span>{activeTenant.currencySymbol} {currentLiveOrder.total}</span>
+                              <span>{activeTenant?.currencySymbol} {currentLiveOrder.total}</span>
                             </div>
                           </div>
 
@@ -2070,7 +2070,7 @@ const currentItemPrice = useMemo(() => {
                           </div>
                           <div className="text-right">
                             <p className="text-[10px] text-slate-400">Delivery Fee</p>
-                            <p className="text-xs font-bold text-slate-700">{activeTenant.currencySymbol} {currentLiveOrder.deliveryFee || 0}</p>
+                            <p className="text-xs font-bold text-slate-700">{activeTenant?.currencySymbol} {currentLiveOrder.deliveryFee || 0}</p>
                           </div>
                         </div>
                       )}
@@ -2317,7 +2317,7 @@ const currentItemPrice = useMemo(() => {
       {/* RESERVATION MODAL */}
       {isReservationModalOpen && (
         <CustomerReservationModal 
-          tenantId={activeTenant.id} 
+          tenantId={activeTenant?.id} 
           branchId={activeBranchId} 
           onClose={() => setIsReservationModalOpen(false)} 
         />

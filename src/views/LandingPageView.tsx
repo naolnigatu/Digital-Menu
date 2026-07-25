@@ -166,13 +166,13 @@ export default function LandingPageView() {
           </div>
 
           {/* Real Screenshots */}
-          {config.screenshotsEnabled && config.screenshots?.length > 0 && (
+          {config.screenshotsEnabled && (config.screenshots || []).length > 0 && (
             <div className="mt-12 sm:mt-24 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
               <div className="relative rounded-xl sm:rounded-2xl bg-slate-900/5 p-4 sm:p-8 ring-1 ring-inset ring-slate-900/10 lg:-m-4 lg:rounded-3xl shadow-2xl overflow-hidden text-center">
                 <h3 className="text-2xl font-bold mb-4">{config.screenshotsTitle || 'Platform Overview'}</h3>
                 <p className="text-slate-600 mb-8">{config.screenshotsSubtitle}</p>
                 <div className="grid gap-6 md:grid-cols-2">
-                  {config.screenshots.filter(s => s.enabled).sort((a,b) => a.order - b.order).map(screenshot => (
+                  {(config.screenshots || []).filter(s => s.enabled).sort((a,b) => a.order - b.order).map(screenshot => (
                     <div key={screenshot.id} className="relative rounded-lg overflow-hidden border border-slate-200 shadow-sm">
                       <img src={screenshot.imageUrl} alt={screenshot.title} className="w-full h-auto object-cover aspect-video" />
                       <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-900/80 to-transparent p-4 text-left">
@@ -229,7 +229,7 @@ export default function LandingPageView() {
               </div>
               <div className="mx-auto mt-12 sm:mt-16 lg:mt-20 lg:max-w-none">
                 <dl className="grid max-w-xl grid-cols-1 gap-x-8 gap-y-8 sm:gap-y-16 lg:max-w-none lg:grid-cols-3">
-                  {config.features.filter(f => f.enabled).sort((a, b) => a.order - b.order).map((feature) => {
+                  {(config.features || []).filter(f => f.enabled).sort((a, b) => a.order - b.order).map((feature) => {
                     const IconComponent = getIcon(feature.icon);
                     return (
                     <div key={feature.id} className="flex flex-col bg-white rounded-2xl p-6 sm:p-8 shadow-sm ring-1 ring-slate-100 transition-all hover:shadow-md">
@@ -287,7 +287,7 @@ export default function LandingPageView() {
                 <p className="mt-4 text-base sm:text-lg text-slate-400">{config.businessTypesSubtitle || 'Whatever you run, Dinex has the modules you need.'}</p>
               </div>
               <div className="flex flex-wrap justify-center gap-3 sm:gap-4">
-                {config.businessTypes.filter(b => b.enabled).sort((a, b) => a.order - b.order).map(type => (
+                {(config.businessTypes || []).filter(b => b.enabled).sort((a, b) => a.order - b.order).map(type => (
                   <span key={type.id} className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm rounded-full bg-slate-800 text-slate-300 font-medium border border-slate-700/50 hover:bg-slate-700 transition-colors">
                     {type.type}
                   </span>
@@ -378,7 +378,7 @@ export default function LandingPageView() {
             <h2 className="text-3xl font-bold tracking-tight text-slate-900">{config.testimonialsTitle || 'Loved by businesses everywhere'}</h2>
             <p className="mt-4 text-base sm:text-lg text-slate-600 mb-10 sm:mb-12">{config.testimonialsSubtitle || 'See what our early adopters have to say.'}</p>
             
-            {config.testimonials.length === 0 ? (
+            {(config.testimonials || []).length === 0 ? (
             <div className="relative max-w-3xl mx-auto border-2 border-dashed border-slate-200 rounded-2xl sm:rounded-3xl p-8 sm:p-12 bg-slate-50">
                <Star className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300 mx-auto mb-4" />
                <h3 className="text-lg sm:text-xl font-medium text-slate-900 mb-2">Customer Testimonials Coming Soon</h3>
@@ -386,7 +386,7 @@ export default function LandingPageView() {
             </div>
             ) : (
               <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-                {config.testimonials.filter(t => t.enabled).sort((a,b) => a.order - b.order).map(testimonial => (
+                {(config.testimonials || []).filter(t => t.enabled).sort((a,b) => a.order - b.order).map(testimonial => (
                   <div key={testimonial.id} className="bg-slate-50 p-6 rounded-2xl text-left shadow-sm">
                     <Star className="w-8 h-8 text-indigo-400 mb-4" />
                     <p className="text-slate-600 italic mb-6">"{testimonial.content}"</p>
@@ -418,7 +418,7 @@ export default function LandingPageView() {
               {config.faqSubtitle && <p className="mt-4 text-base text-slate-600">{config.faqSubtitle}</p>}
             </div>
             <div className="mx-auto max-w-3xl space-y-4 sm:space-y-6">
-              {config.faqs.filter(q => q.enabled).sort((a,b) => a.order - b.order).map((faq, i) => {
+              {(config.faqs || []).filter(q => q.enabled).sort((a,b) => a.order - b.order).map((faq, i) => {
                 const isOpen = openFaqIndex === i;
                 return (
                   <div key={faq.id} className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -480,7 +480,7 @@ export default function LandingPageView() {
             </div>
             
             <div className="flex flex-wrap justify-center gap-x-6 gap-y-3 sm:gap-x-8 sm:gap-y-4 text-xs sm:text-sm font-medium text-slate-600">
-              {config.footerLinks.sort((a,b) => a.order - b.order).map(link => (
+              {(config.footerLinks || []).sort((a,b) => a.order - b.order).map(link => (
                 <a key={link.id} href={link.url} className="hover:text-indigo-600">{link.label}</a>
               ))}
               {config.footerPrivacyUrl && <a href={config.footerPrivacyUrl} className="hover:text-indigo-600">Privacy Policy</a>}

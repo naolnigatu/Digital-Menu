@@ -1,686 +1,97 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  Tenant, Branch, PreparationStation, Category, MenuItem, Table, Order, Staff, SystemLog, UserRole, OrderStatus, OrderItem, SubscriptionPlan, PlatformAd, PlanPricing, TimelineEvent, KitchenNote, 
-  PaymentMethodConfig, LoyaltyConfig, MealSubscriptionPackage, CustomerMealSubscription, CustomerProfile, RefundDetails, LoyaltyHistoryEntry, 
-  Reservation, Ingredient, StockMovement, MarketplaceExtension, InstalledExtension, DinexNotification, GlobalSettings, SubscriptionRequest, LandingPageConfig
-} from '../types';
+import { Tenant, Branch, PreparationStation, Category, MenuItem, Table, Order, Staff, SystemLog, PlatformAd, PlanPricing, SubscriptionPlan, Reservation, Ingredient, StockMovement, DinexNotification, MarketplaceExtension, InstalledExtension, GlobalSettings, LandingPageConfig, CustomerProfile, PaymentMethodConfig, LoyaltyConfig, MealSubscriptionPackage, CustomerMealSubscription, UserRole, OrderStatus, TimelineEvent, OrderItem, LoyaltyHistoryEntry, KitchenNote, RefundDetails } from '../types';
 
 
-interface AppContextType {
-  tenants: Tenant[];
-  branches: Branch[];
-  stations: PreparationStation[];
-  categories: Record<string, Category[]>;
-  menuItems: Record<string, MenuItem[]>;
-  tables: Table[];
-  orders: Order[];
-  staff: Staff[];
-  logs: SystemLog[];
-  currentUser: {
-    id?: string;
-    email: string;
-    role: UserRole;
-    name: string;
-    tenantId?: string;
-    branchId?: string;
-    stationId?: string;
-  } | null;
-  activeTenantId: string;
-  activeBranchId: string;
-  currentLanguage: 'en' | 'am';
+export const AppContext = createContext<any>(undefined as any);
 
-  // Reservations
-  reservations: Reservation[];
-  addReservation: (reservation: Omit<Reservation, 'id' | 'createdAt' | 'timeline' | 'status'>) => void;
-  updateReservationStatus: (id: string, status: Reservation['status'], tableId?: string) => void;
+export const AppProvider = ({ children }: { children: React.ReactNode }) => {
+  // Currently logged-in operational user (Simulated)
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
-  // Inventory
-  ingredients: Ingredient[];
-  addIngredient: (ingredient: Omit<Ingredient, 'id'>) => void;
-  updateIngredient: (ingredient: Ingredient) => void;
-  stockMovements: StockMovement[];
-  addStockMovement: (movement: Omit<StockMovement, 'id' | 'date'>) => void;
-
-  // Notifications
-  notifications: DinexNotification[];
-  markNotificationRead: (id: string) => void;
-  deleteNotification: (id: string) => void;
-  addNotification: (notification: Omit<DinexNotification, 'id' | 'createdAt' | 'read'>) => void;
-
-  // Marketplace
-  marketplaceExtensions: MarketplaceExtension[];
-  installedExtensions: InstalledExtension[];
-  installExtension: (tenantId: string, extensionId: string) => void;
-  uninstallExtension: (tenantId: string, extensionId: string) => void;
-
-  // Platform Settings
-  globalSettings: GlobalSettings;
-  updateGlobalSettings: (settings: Partial<GlobalSettings>) => void;
-  landingPageConfig: LandingPageConfig;
-  updateLandingPageConfig: (settings: Partial<LandingPageConfig>) => void;
-  
-  // Actions
-  currentView: 'landing' | 'login' | 'signup' | 'customer' | 'dashboard';
-  setCurrentView: (view: 'landing' | 'login' | 'signup' | 'customer' | 'dashboard') => void;
-  registerUser: (userParam: { uid: string; email: string } | string, nameParam?: string, roleParam?: "customer" | "owner", uidParam?: string) => Promise<void>;
-  registerCustomer: (name: string, email: string, phone: string) => void;
-  login: (email: string, uid?: string) => Promise<{ success: boolean; message: string; user?: any }>;
-  logout: () => void;
-  setActiveTenantId: (id: string) => void;
-  setActiveBranchId: (id: string) => void;
-  setLanguage: (lang: 'en' | 'am') => void;
-  
-  // Menu Category Actions
-  addCategory: (category: Omit<Category, 'id'>) => void;
-  updateCategory: (category: Category) => void;
-  deleteCategory: (tenantId: string, categoryId: string) => void;
-  
-  // Menu Item Actions
-  addMenuItem: (item: Omit<MenuItem, 'id'>) => void;
-  updateMenuItem: (item: MenuItem) => void;
-  deleteMenuItem: (tenantId: string, itemId: string) => void;
-  toggleMenuItemAvailability: (tenantId: string, itemId: string) => void;
-  
-  // Table Actions
-  addTable: (table: Omit<Table, 'id' | 'qrUrl'>) => void;
-  updateTableStatus: (tableId: string, status: Table['status']) => void;
-  
-  // Station Actions
-  addStation: (station: Omit<PreparationStation, 'id'>) => void;
-  
-  // Order Actions
-  placeOrder: (order: Omit<Order, 'id' | 'orderNum' | 'createdAt' | 'status' | 'paymentStatus' | 'subtotal' | 'tax' | 'serviceCharge' | 'total' | 'timeline' | 'kitchenNotes'> & { tip?: number }) => Order;
-  updateOrderStatus: (orderId: string, status: OrderStatus, actor?: string) => void;
-  updateOrderItemStatus: (orderId: string, itemId: string, status: OrderItem['status'], actor?: string) => void;
-  reportOrderItemIssue: (orderId: string, itemId: string, reason: string) => void;
-  resolveOrderItemIssue: (orderId: string, itemId: string, approved: boolean) => void;
-  processPayment: (orderId: string, paymentMethod: Order['paymentMethod'], discountPercentage: number, redeemPoints?: number, tipAmount?: number) => void;
-  rateAndFeedback: (orderId: string, rating: number, feedback: string) => void;
-  cancelOrder: (orderId: string, reason: string) => void;
-  assignDelivery: (orderId: string, staffId: string, staffName: string, deliveryFee: number) => void;
-  acceptDeliveryFee: (orderId: string) => void;
-  verifyAdvancePayment: (orderId: string, approve: boolean, rejectionReason?: string) => void;
-  addKitchenNote: (orderId: string, text: string) => void;
-  approveKitchenNote: (orderId: string, noteId: string, approve: boolean) => void;
-  addTip: (orderId: string, amount: number) => void;
-  deliverTip: (orderId: string) => void;
-  
-  // Staff Actions
-  addStaffMember: (member: Omit<Staff, 'id' | 'active'>) => void;
-  toggleStaffStatus: (staffId: string) => void;
-  updateStaffPermissions: (staffId: string, permissions: string[]) => void;
-  
-  // Super Admin Actions
-  toggleTenantStatus: (tenantId: string) => void;
-  updateTenantPlan: (tenantId: string, plan: Tenant['subscriptionPlan']) => void;
-  requestTenantUpgrade: (tenantId: string, plan: Tenant['subscriptionPlan']) => void;
-  updateTenantCurrency: (tenantId: string, currency: string, currencySymbol: string) => void;
-  updateTenantType: (tenantId: string, businessType: string) => void;
-  updateTenantProfile: (tenantId: string, logoUrl: string, bankAccount: string, mealSubscriptionDiscountPercent?: number) => void;
-  approveTenantStatus: (tenantId: string) => void;
-  rejectTenantStatus: (tenantId: string) => void;
-  
-  // Platform Ads Actions
-  ads: PlatformAd[];
-  addAd: (adData: Omit<PlatformAd, 'id' | 'createdAt' | 'active'>) => void;
-  toggleAdStatus: (id: string) => void;
-  deleteAd: (id: string) => void;
-  
-  // Pricing Actions
-  pricingPlans: PlanPricing[];
-  updatePlanPrice: (planId: SubscriptionPlan, newPriceUSD: number, newPriceETB: number) => void;
-  updatePlanTabs: (planId: string, enabledTabs: string[]) => void;
-
-  // Register Tenant Action
-  registerTenant: (tenantData: {
-    name: string;
-    slug: string;
-    description: string;
-    currency: string;
-    subscriptionPlan: SubscriptionPlan;
-    ownerEmail: string;
-    ownerName: string;
-  }) => void;
-  signUpOwnerOnly: (name: string, email: string) => void;
-  
-  // General helper
-  addLog: (action: string, details: string) => void;
-
-  // Payment configuration
-  paymentMethodsConfigs: Record<string, PaymentMethodConfig[]>;
-  updatePaymentMethodConfig: (tenantId: string, configs: PaymentMethodConfig[]) => void;
-
-  // Loyalty Program
-  loyaltyConfigs: Record<string, LoyaltyConfig>;
-  updateLoyaltyConfig: (tenantId: string, config: LoyaltyConfig) => void;
-
-  // Meal Subscription
-  mealSubscriptionPlans: Record<string, MealSubscriptionPackage[]>;
-  customerSubscriptions: CustomerMealSubscription[];
-  addMealSubscriptionPackage: (plan: Omit<MealSubscriptionPackage, 'id'>) => void;
-  updateMealSubscriptionPackage: (plan: MealSubscriptionPackage) => void;
-  deleteMealSubscriptionPackage: (tenantId: string, planId: string) => void;
-  subscribeToMealPlan: (subscription: Omit<CustomerMealSubscription, 'id'>) => void;
-  updateCustomerMealSubscription: (subId: string, updates: Partial<CustomerMealSubscription>) => void;
-  logMealService: (subscriptionId: string) => void;
-
-  // Refunds
-  refundOrder: (orderId: string, amount: number, reason: string, actor: string) => void;
-
-  // Customer Profile
-  customerProfiles: Record<string, CustomerProfile>;
-  updateCustomerProfile: (email: string, profile: Partial<CustomerProfile>) => void;
-  addFavoriteItem: (email: string, menuItemId: string) => void;
-  removeFavoriteItem: (email: string, menuItemId: string) => void;
-  addSavedAddress: (email: string, name: string, address: string) => void;
-  removeSavedAddress: (email: string, addressId: string) => void;
-
-  // Tips
-  updateTipStatus: (orderId: string, status: 'pending' | 'delivered' | 'accepted') => void;
-}
-
-const AppContext = createContext<AppContextType | undefined>(undefined);
-
-const CACHE_VERSION = 'v5_order_engine';
-
-export function AppProvider({ children }: { children: React.ReactNode }) {
-
-  const [subscriptionRequests, setSubscriptionRequests] = useState<SubscriptionRequest[]>([]);
-  const [superAdminPaymentInfo, setSuperAdminPaymentInfo] = useState<string>("CBE Account: 1000123456789 (Dinex Inc)\nPlease transfer and upload receipt.");
-
-  const requestSubscriptionUpgrade = (tenantId: string, planId: string, duration: number, paymentMethod: string, transactionId?: string, proofImageUrl?: string) => {
-    const newReq: SubscriptionRequest = {
-      id: Math.random().toString(36).substr(2, 9),
-      tenantId,
-      planId,
-      duration,
-      paymentMethod,
-      transactionId,
-      proofImageUrl,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
-    setSubscriptionRequests(prev => [newReq, ...prev]);
-  };
-
-  const approveSubscriptionRequest = (reqId: string) => {
-    setSubscriptionRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'approved' } : r));
-    const req = subscriptionRequests.find(r => r.id === reqId);
-    if (req) {
-      setTenants(prev => prev.map(t => {
-        if (t.id === req.tenantId) {
-          const now = new Date();
-          now.setMonth(now.getMonth() + req.duration);
-          return {
-            ...t,
-            subscriptionPlan: req.planId,
-            subscriptionStatus: 'active',
-            subscriptionExpiry: now.toISOString()
-          };
-        }
-        return t;
-      }));
-    }
-  };
-
-  const rejectSubscriptionRequest = (reqId: string) => {
-    setSubscriptionRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'rejected' } : r));
-  };
-
-  // Clear cache if version mismatch to purge old KSh mock data
-  useEffect(() => {
-    const ver = localStorage.getItem('mf_version');
-    if (ver !== CACHE_VERSION) {
-      localStorage.removeItem('mf_tenants');
-      localStorage.removeItem('mf_branches');
-      localStorage.removeItem('mf_stations');
-      localStorage.removeItem('mf_categories');
-      localStorage.removeItem('mf_menu_items');
-      localStorage.removeItem('mf_tables');
-      localStorage.removeItem('mf_orders');
-      localStorage.removeItem('mf_staff');
-      localStorage.removeItem('mf_logs');
-      localStorage.removeItem('mf_ads');
-      localStorage.setItem('mf_version', CACHE_VERSION);
-      // Reload the page to grab fresh mockData
-      window.location.reload();
-    }
-  }, []);
-
-  // Load state from local storage or fallback to mock data
-  const [tenants, setTenants] = useState<Tenant[]>(() => {
-    const local = localStorage.getItem('mf_tenants');
-    return local ? JSON.parse(local) : [];
-  });
-
-  const [branches, setBranches] = useState<Branch[]>(() => {
-    const local = localStorage.getItem('mf_branches');
-    return local ? JSON.parse(local) : [];
-  });
-
-  const [stations, setStations] = useState<PreparationStation[]>(() => {
-    const local = localStorage.getItem('mf_stations');
-    return local ? JSON.parse(local) : [];
-  });
-
-  const [categories, setCategories] = useState<Record<string, Category[]>>(() => {
-    const local = localStorage.getItem('mf_categories');
-    return local ? JSON.parse(local) : {};
-  });
-
-  const [menuItems, setMenuItems] = useState<Record<string, MenuItem[]>>(() => {
-    const local = localStorage.getItem('mf_menu_items');
-    return local ? JSON.parse(local) : {};
-  });
-
-  const [tables, setTables] = useState<Table[]>(() => {
-    const local = localStorage.getItem('mf_tables');
-    return local ? JSON.parse(local) : [];
-  });
-
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const local = localStorage.getItem('mf_orders');
-    return local ? JSON.parse(local) : [];
-  });
-
-  const [staff, setStaff] = useState<Staff[]>(() => {
-    const local = localStorage.getItem('mf_staff');
-    return local ? JSON.parse(local) : [];
-  });
-
-  const [logs, setLogs] = useState<SystemLog[]>(() => {
-    const local = localStorage.getItem('mf_logs');
-    return local ? JSON.parse(local) : [];
-  });
-
-  const [pricingPlans, setPricingPlans] = useState<PlanPricing[]>(() => {
-    const local = localStorage.getItem('mf_pricing');
-    if (local) return JSON.parse(local);
-    return [
-      {
-        id: 'free',
-        name: 'Free Tier',
-        priceUSD: 0,
-        priceETB: 0,
-        description: 'Get menu service for free! Basic digital menu, QR scanning, and self-serve dine-in ordering.',
-        features: ['1 branch', 'digital menus & QR scans'],
-        enabledTabs: ['dashboard', 'orders', 'menu', 'tables', 'settings']
-      },
-      {
-        id: 'growth',
-        name: 'Growth Plan',
-        priceUSD: 29,
-        priceETB: 1500,
-        description: 'Unlock multi-branch sync, interactive kitchen/waiter stations, detailed reporting & CRM.',
-        features: ['Multi-branch', 'full KDS', 'automated metrics'],
-        enabledTabs: ['dashboard', 'orders', 'menu', 'tables', 'staff', 'settings', 'payments', 'loyalty', 'reports', 'reservations', 'ads']
-      },
-      {
-        id: 'enterprise',
-        name: 'Enterprise Plan',
-        priceUSD: 99,
-        priceETB: 5000,
-        description: 'Unlimited branches, customized branding, high-frequency Live API, and 24/7 dedicated account manager.',
-        features: ['SLA guarantee', 'central controls', 'custom branding']
-      }
-    ];
-  });
-
-  const [ads, setAds] = useState<PlatformAd[]>(() => {
-    const local = localStorage.getItem('mf_ads');
-    if (local) return JSON.parse(local);
-    return [
-      {
-        id: 'ad-01',
-        tenantId: 't-01',
-        title: 'Weekend 20% Off Espresso Specials!',
-        subtitle: 'Get Carlos Specialty Brews with a 20% discount this Saturday and Sunday only.',
-        imageUrl: 'https://images.unsplash.com/photo-1511920170033-f8396924c348?w=800&auto=format&fit=crop&q=80',
-        active: true,
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'ad-02',
-        title: 'Discover Premium Dining',
-        subtitle: 'Order directly from any registered brand on MenuFlow. Scan or pre-order instantly!',
-        imageUrl: 'https://images.unsplash.com/photo-1526367790999-015078648c7e?w=800&auto=format&fit=crop&q=80',
-        active: true,
-        createdAt: new Date().toISOString()
-      }
-    ];
-  });
-
-  // Sync to local storage on state changes
-  useEffect(() => {
-    localStorage.setItem('mf_pricing', JSON.stringify(pricingPlans));
-  }, [pricingPlans]);
-
-  useEffect(() => {
-    localStorage.setItem('mf_ads', JSON.stringify(ads));
-  }, [ads]);
-
-  // 1. Payment Methods Configs State
-  const [paymentMethodsConfigs, setPaymentMethodsConfigs] = useState<Record<string, PaymentMethodConfig[]>>(() => {
-    const local = localStorage.getItem('mf_payment_methods');
-    if (local) {
-      const parsed = JSON.parse(local);
-      // Clean up and filter out card payment methods from any saved state
-      Object.keys(parsed).forEach(k => {
-        parsed[k] = parsed[k].filter((c: any) => c.id !== 'card');
-      });
-      return parsed;
-    }
-    
-    const defaultConfigs: PaymentMethodConfig[] = [
-      { id: 'cash', name: 'Cash', enabled: true, requiresProof: false },
-      { id: 'stripe', name: 'Stripe', enabled: true, requiresProof: false },
-      { id: 'mobile_money', name: 'Mobile Money', enabled: true, requiresProof: true, details: 'Telebirr: 0911223344, CBE Birr: +251911223344' },
-      { id: 'bank_transfer', name: 'Bank Transfer', enabled: true, requiresProof: true, details: 'Commercial Bank of Ethiopia: 1000123456789 (Dinex PLC)' },
-      { id: 'binance_id', name: 'Binance Pay (ID)', enabled: true, requiresProof: true, details: 'Binance Pay ID: 88776655' },
-      { id: 'binance_wallet', name: 'Binance BEP20 Wallet', enabled: true, requiresProof: true, details: 'BEP20 Address: 0x71C7656EC7ab88b098defB751B7401B5f6d8976F' }
-    ];
-    return {
-      't-01': defaultConfigs,
-      't-02': defaultConfigs
-    };
-  });
-
-  useEffect(() => {
-    localStorage.setItem('mf_payment_methods', JSON.stringify(paymentMethodsConfigs));
-  }, [paymentMethodsConfigs]);
-
-  // 2. Loyalty Configurations State
-  const [loyaltyConfigs, setLoyaltyConfigs] = useState<Record<string, LoyaltyConfig>>(() => {
-    const local = localStorage.getItem('mf_loyalty_configs');
-    if (local) return JSON.parse(local);
-    
-    const defaultConfig: LoyaltyConfig = {
-      enabled: true,
-      pointsPerPurchase: 1,
-      minPointsToRedeem: 10,
-      discountPercentage: 10,
-      badgeLevels: [
-        { name: 'Bronze Patron', minPoints: 10, discountBonus: 1 },
-        { name: 'Silver Patron', minPoints: 50, discountBonus: 3 },
-        { name: 'Gold Patron', minPoints: 150, discountBonus: 5 },
-        { name: 'Platinum Patron', minPoints: 300, discountBonus: 10 }
-      ]
-    };
-    return {
-      't-01': defaultConfig,
-      't-02': defaultConfig
-    };
-  });
-
-  useEffect(() => {
-    localStorage.setItem('mf_loyalty_configs', JSON.stringify(loyaltyConfigs));
-  }, [loyaltyConfigs]);
-
-  // 3. Meal Subscription Plans State
-  const [mealSubscriptionPlans, setMealSubscriptionPackages] = useState<Record<string, MealSubscriptionPackage[]>>(() => {
-    const local = localStorage.getItem('mf_meal_subscription_plans');
-    if (local) return JSON.parse(local);
-    
-    return {
-      't-01': [
-        {
-          id: 'sub-plan-01',
-          tenantId: 't-01',
-          name: 'Daily Power Lunch Sub',
-          monthlyPrice: 150,
-          discountPercentage: 20,
-          durationDays: 30,
-          mealsPerDay: 1,
-          mealsPerWeek: 5,
-          allowedOrderingTimes: '11:30-14:30',
-          menuItemIds: ['item-1', 'item-1-t-01', 'item-2-t-01']
-        },
-        {
-          id: 'sub-plan-02',
-          tenantId: 't-01',
-          name: 'Traditional Coffee & Pastry Plan',
-          monthlyPrice: 50,
-          discountPercentage: 15,
-          durationDays: 30,
-          mealsPerDay: 1,
-          mealsPerWeek: 7,
-          allowedOrderingTimes: '07:00-11:00',
-          menuItemIds: ['item-2', 'item-2-t-01']
-        }
-      ]
-    };
-  });
-
-  useEffect(() => {
-    localStorage.setItem('mf_meal_subscription_plans', JSON.stringify(mealSubscriptionPlans));
-  }, [mealSubscriptionPlans]);
-
-  // 4. Customer Meal Subscriptions State
-  const [customerSubscriptions, setCustomerSubscriptions] = useState<CustomerMealSubscription[]>(() => {
-    const local = localStorage.getItem('mf_customer_subscriptions');
-    return local ? JSON.parse(local) : [];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('mf_customer_subscriptions', JSON.stringify(customerSubscriptions));
-  }, [customerSubscriptions]);
-
-  // 4a. Final Features State (Fully migrated to Firestore with realtime listeners & localStorage fallback)
-  const [reservations, setReservations] = useState<Reservation[]>(() => {
-    const local = localStorage.getItem('mf_reservations');
-    return local ? JSON.parse(local) : [];
-  });
-  useEffect(() => { localStorage.setItem('mf_reservations', JSON.stringify(reservations)); }, [reservations]);
-
-  const [ingredients, setIngredients] = useState<Ingredient[]>(() => {
-    const local = localStorage.getItem('mf_ingredients');
-    return local ? JSON.parse(local) : [];
-  });
-  useEffect(() => { localStorage.setItem('mf_ingredients', JSON.stringify(ingredients)); }, [ingredients]);
-
-  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() => {
-    const local = localStorage.getItem('mf_stock_movements');
-    return local ? JSON.parse(local) : [];
-  });
-  useEffect(() => { localStorage.setItem('mf_stock_movements', JSON.stringify(stockMovements)); }, [stockMovements]);
-
-  const [notifications, setNotifications] = useState<DinexNotification[]>(() => {
-    const local = localStorage.getItem('mf_notifications');
-    return local ? JSON.parse(local) : [];
-  });
-  useEffect(() => { localStorage.setItem('mf_notifications', JSON.stringify(notifications)); }, [notifications]);
-
-  const [marketplaceExtensions, setMarketplaceExtensions] = useState<MarketplaceExtension[]>(() => {
-    const local = localStorage.getItem('mf_marketplace_extensions');
-    return local ? JSON.parse(local) : [];
-  });
-  useEffect(() => { localStorage.setItem('mf_marketplace_extensions', JSON.stringify(marketplaceExtensions)); }, [marketplaceExtensions]);
-
-  const [installedExtensions, setInstalledExtensions] = useState<InstalledExtension[]>(() => {
-    const local = localStorage.getItem('mf_installed_extensions');
-    return local ? JSON.parse(local) : [];
-  });
-  useEffect(() => { localStorage.setItem('mf_installed_extensions', JSON.stringify(installedExtensions)); }, [installedExtensions]);
-
-  const defaultLandingPageConfig: LandingPageConfig = {
-    heroTitle: "Run Your Restaurant Business with AI",
-    heroSubtitle: "Dinex is the ultimate all-in-one platform for modern restaurants, cafes, and multi-branch food chains.",
-    heroBackgroundType: 'video',
-    heroBackgroundUrl: 'https://cdn.pixabay.com/video/2015/09/25/744-139366606_tiny.mp4',
-    heroCtaText: 'Get Started / Browse Menus',
-    heroCtaLink: '#',
-    heroOverlayOpacity: 70,
-    featuresEnabled: true,
-    businessTypesEnabled: true,
-    pricingEnabled: true,
-    faqEnabled: true,
-    testimonialsEnabled: false,
-    screenshotsEnabled: false,
-    pricingPlans: [
-      {
-        id: 'free',
-        name: 'Starter',
-        description: 'Perfect for small cafes and food trucks.',
-        monthlyPrice: 0,
-        yearlyPrice: 0,
-        priceETB: 0,
-        priceUSD: 0,
-        features: ['Digital QR Menu', 'Up to 50 Orders/mo', '1 Admin User', 'Basic Analytics'],
-        isRecommended: false, enabled: true, yearlyDiscount: 20
-      },
-      {
-        id: 'pro',
-        name: 'Professional',
-        description: 'Ideal for busy restaurants and chains.',
-        monthlyPrice: 49,
-        yearlyPrice: 470,
-        priceETB: 5000,
-        priceUSD: 49,
-        features: ['Unlimited Orders', 'Kitchen Display (KDS)', 'Unlimited Staff Accounts', 'Advanced Analytics', 'Priority Support'],
-        isRecommended: true, enabled: true, yearlyDiscount: 20
-      },
-      {
-        id: 'enterprise',
-        name: 'Enterprise',
-        description: 'Custom solutions for large businesses.',
-        monthlyPrice: 199,
-        yearlyPrice: 1900,
-        priceETB: 20000,
-        priceUSD: 199,
-        features: ['Multiple Branches', 'Custom Domain', 'Dedicated Account Manager', 'Custom API Integrations', 'White-labeling Options'],
-        isRecommended: false, enabled: true, yearlyDiscount: 20
-      }
-    ],
-    featuresTitle: "Everything you need to succeed",
-    featuresSubtitle: "From digital menus to kitchen displays, we've got your entire restaurant operation covered.",
-    features: [
-      { id: 'f1', title: 'Digital Menu & QR Ordering', description: 'Let customers scan and order instantly from their tables or homes.', icon: 'QrCode', order: 1, enabled: true },
-      { id: 'f2', title: 'Kitchen Display (KDS)', description: 'Send orders straight to the kitchen. Track prep times and manage tickets.', icon: 'ChefHat', order: 2, enabled: true },
-      { id: 'f3', title: 'Reservations', description: 'Manage table bookings, walk-ins, and waitlists with ease.', icon: 'Calendar', order: 3, enabled: true },
-      { id: 'f4', title: 'Delivery Management', description: 'Track drivers, optimize routes, and keep customers updated.', icon: 'MapPin', order: 4, enabled: true },
-      { id: 'f5', title: 'Customer Loyalty & Subs', description: 'Create meal subscriptions and reward programs to retain customers.', icon: 'Users', order: 5, enabled: true },
-      { id: 'f6', title: 'Reports & Analytics', description: 'Get insights into sales, popular items, and staff performance.', icon: 'BarChart3', order: 6, enabled: true },
-    ],
-    businessTypesTitle: "Built for all F&B Businesses",
-    businessTypesSubtitle: "Whatever you run, Dinex has the modules you need.",
-    businessTypes: [
-      { id: 'b1', type: 'Restaurants', description: '', icon: '', order: 1, enabled: true },
-      { id: 'b2', type: 'Coffee Shops', description: '', icon: '', order: 2, enabled: true },
-      { id: 'b3', type: 'Fast Food', description: '', icon: '', order: 3, enabled: true },
-      { id: 'b4', type: 'Bakeries', description: '', icon: '', order: 4, enabled: true },
-      { id: 'b5', type: 'Hotels', description: '', icon: '', order: 5, enabled: true },
-      { id: 'b6', type: 'Food Courts', description: '', icon: '', order: 6, enabled: true },
-      { id: 'b7', type: 'Juice Bars', description: '', icon: '', order: 7, enabled: true },
-      { id: 'b8', type: 'Pizza Shops', description: '', icon: '', order: 8, enabled: true },
-      { id: 'b9', type: 'Ice Cream Shops', description: '', icon: '', order: 9, enabled: true },
-      { id: 'b10', type: 'Food Trucks', description: '', icon: '', order: 10, enabled: true },
-      { id: 'b11', type: 'Catering', description: '', icon: '', order: 11, enabled: true },
-    ],
-    faqTitle: "Frequently Asked Questions",
-    faqSubtitle: "",
-    faqs: [
-      { id: 'q1', question: "How does Dinex work?", answer: "Dinex is a cloud-based restaurant and food business management platform. Business owners create their business, customize menus, manage staff, and configure operations. Customers simply scan a QR code or browse the online menu, place orders, reserve tables, subscribe to meal plans, request delivery, and track their orders in real time. Orders automatically flow through Kitchen, Cashier, Waiter, and Delivery workflows depending on the business configuration.", order: 1, enabled: true },
-      { id: 'q2', question: "Can I use QR menus?", answer: "Yes. Dinex generates unique QR codes for tables, takeaway counters, and other ordering points. Customers simply scan the QR code to browse the live menu, customize their order, place it instantly, and follow its progress without waiting for a staff member.", order: 2, enabled: true },
-      { id: 'q3', question: "Does it work on phones?", answer: "Absolutely. Dinex is a fully responsive Progressive Web App (PWA) designed primarily for mobile devices. Customers, waiters, kitchen staff, delivery staff, managers, cashiers, and business owners can all use Dinex from their phones, tablets, or computers.", order: 3, enabled: true },
-      { id: 'q4', question: "Can I manage multiple branches?", answer: "Yes. Depending on your subscription plan, Dinex allows businesses to manage multiple branches from one account. Each branch can have its own staff, menus, orders, reports, and settings while owners maintain centralized control and analytics.", order: 4, enabled: true },
-      { id: 'q5', question: "Does Dinex support delivery?", answer: "Yes. Dinex includes a complete delivery management system. Businesses can assign delivery staff, verify customer addresses, calculate delivery fees, track delivery progress, notify customers in real time, and confirm successful delivery.", order: 5, enabled: true },
-      { id: 'q6', question: "Can customers reserve tables?", answer: "Yes. Customers can reserve tables before arriving. Businesses can approve, reject, or manage reservations and control availability from the reservation dashboard.", order: 6, enabled: true },
-      { id: 'q7', question: "Does Dinex support meal subscriptions?", answer: "Yes. Businesses can create flexible meal subscription packages. Customers can subscribe to meal plans containing multiple menu items and redeem their remaining meal credits at any time according to the business rules.", order: 7, enabled: true },
-      { id: 'q8', question: "Does Dinex work offline?", answer: "Yes. Dinex is built as a Progressive Web App (PWA). Frequently used resources remain available offline, and data synchronizes automatically when the internet connection is restored where applicable.", order: 8, enabled: true },
-      { id: 'q9', question: "Is Dinex secure?", answer: "Yes. Dinex uses Firebase Authentication, Cloud Firestore security rules, role-based permissions, and multi-tenant data isolation to ensure each business can access only its own data.", order: 9, enabled: true },
-      { id: 'q10', question: "Can I start for free?", answer: "Yes. Dinex offers a Free plan so businesses can explore the platform before upgrading to higher plans as their business grows.", order: 10, enabled: true }
-    ],
-    testimonialsTitle: "Loved by businesses everywhere",
-    testimonialsSubtitle: "See what our early adopters have to say.",
-    testimonials: [],
-    screenshotsTitle: "Platform Overview",
-    screenshotsSubtitle: "See Dinex in action.",
-    screenshots: [],
-    contactEmail: "naolnigatu2025@gmail.com",
-    contactPhone: "",
-    contactAddress: "",
-    socialLinks: {},
-    footerCopyright: `© ${new Date().getFullYear()} Dinex Platform. All rights reserved.`,
-    footerPrivacyUrl: "#",
-    footerTermsUrl: "#",
-    footerLinks: []
-  };
-
-  const [landingPageConfig, setLandingPageConfig] = useState<LandingPageConfig>(() => {
-    const local = localStorage.getItem('mf_landing_page_settings');
-    if (local) return JSON.parse(local);
-    return defaultLandingPageConfig;
-  });
-  useEffect(() => { localStorage.setItem('mf_landing_page_settings', JSON.stringify(landingPageConfig)); }, [landingPageConfig]);
-
-  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>(() => {
-    const local = localStorage.getItem('mf_global_settings');
-    if (local) {
-      const parsed = JSON.parse(local);
-      if (!parsed.allowedDiningServiceTypes) {
-        parsed.allowedDiningServiceTypes = ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'];
-      }
-      if (!parsed.allowedSubscriptionDurations) {
-        parsed.allowedSubscriptionDurations = [7, 14, 30];
-      }
-            if (!parsed.landingPageConfig) {
-        parsed.landingPageConfig = {
-          heroTitle: "Run Your Restaurant Business with AI",
-          heroSubtitle: "Dinex is the ultimate all-in-one platform for modern restaurants, cafes, and multi-branch food chains.",
-          heroBackgroundType: 'video',
-          heroBackgroundUrl: 'https://cdn.pixabay.com/video/2015/09/25/744-139366606_tiny.mp4',
-          aboutTitle: "Why businesses choose Dinex",
-          aboutText: "Join thousands of restaurants that have transformed their operations, increased revenue, and delighted customers using our platform.",
-          featuresTitle: "Everything you need to succeed",
-          featuresSubtitle: "From digital menus to kitchen displays, we've got your entire restaurant operation covered.",
-          contactEmail: "naolnigatu2025@gmail.com"
-        };
-      }
-      if (!parsed.allowedPaymentMethods) {
-        parsed.allowedPaymentMethods = ['cash', 'stripe', 'mobile_money', 'bank_transfer', 'binance_id', 'binance_wallet'];
-      }
-      // Also filter out 'card' from parsed allowedPaymentMethods if any exists
-      if (parsed.allowedPaymentMethods) {
-        parsed.allowedPaymentMethods = parsed.allowedPaymentMethods.filter((p: string) => p !== 'card');
-      }
-      return parsed;
-    }
-    return {
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({
+      platformName: "Dinex Platform",
+      platformCurrency: "USD",
+      platformCurrencySymbol: "$",
+      platformTimezone: "UTC",
+      platformContactEmail: "support@dinex.example.com",
+      maxBranchesPerTenant: 5,
+      maxStaffPerTenant: 50,
+      enableMarketplace: true,
+      enableReservations: true,
+      requireEmailVerification: false,
+      allowedDiningServiceTypes: ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'],
+      allowedSubscriptionDurations: [7, 14, 30],
+      allowedPaymentMethods: ['cash', 'stripe', 'mobile_money', 'bank_transfer', 'binance_id', 'binance_wallet'],
+      stripeIntegrationEnabled: true,
       supportedCountries: ['Ethiopia', 'Kenya', 'Rwanda', 'Nigeria', 'South Africa'],
       supportedCurrencies: ['ETB', 'KES', 'RWF', 'NGN', 'ZAR', 'USD'],
       maintenanceMode: false,
       announcements: [],
-      globalFeatureFlags: {},
-      allowedDiningServiceTypes: ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription'],
-      allowedSubscriptionDurations: [7, 14, 30],
-            allowedPaymentMethods: ['cash', 'stripe', 'mobile_money', 'bank_transfer', 'binance_id', 'binance_wallet'],
-      landingPageConfig: {
-        heroTitle: "Run Your Restaurant Business with AI",
-        heroSubtitle: "Dinex is the ultimate all-in-one platform for modern restaurants, cafes, and multi-branch food chains.",
-        heroBackgroundType: 'video',
-        heroBackgroundUrl: 'https://cdn.pixabay.com/video/2015/09/25/744-139366606_tiny.mp4',
-        aboutTitle: "Why businesses choose Dinex",
-        aboutText: "Join thousands of restaurants that have transformed their operations, increased revenue, and delighted customers using our platform.",
-        featuresTitle: "Everything you need to succeed",
-        featuresSubtitle: "From digital menus to kitchen displays, we've got your entire restaurant operation covered.",
-        contactEmail: "naolnigatu2025@gmail.com"
-      }
-    };
+      globalFeatureFlags: {}
   });
-  useEffect(() => { localStorage.setItem('mf_global_settings', JSON.stringify(globalSettings)); }, [globalSettings]);
 
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [stations, setStations] = useState<PreparationStation[]>([]);
+  const [categories, setCategories] = useState<Record<string, Category[]>>({});
+  const [menuItems, setMenuItems] = useState<Record<string, MenuItem[]>>({});
+  const [tables, setTables] = useState<Table[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [logs, setLogs] = useState<SystemLog[]>([]);
+  const [pricingPlans, setPricingPlans] = useState<PlanPricing[]>([]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
+  const [notifications, setNotifications] = useState<DinexNotification[]>([]);
+  const [marketplaceExtensions, setMarketplaceExtensions] = useState<MarketplaceExtension[]>([]);
+  const [installedExtensions, setInstalledExtensions] = useState<InstalledExtension[]>([]);
+  const [ads, setAds] = useState<PlatformAd[]>([]);
+  const [paymentMethodsConfigs, setPaymentMethodsConfigs] = useState<Record<string, PaymentMethodConfig>>({});
+  const [loyaltyConfigs, setLoyaltyConfigs] = useState<Record<string, LoyaltyConfig>>({});
+  const [mealSubscriptionPlans, setMealSubscriptionPackages] = useState<MealSubscriptionPackage[]>([]);
+  const [customerSubscriptions, setCustomerSubscriptions] = useState<CustomerMealSubscription[]>([]);
+  const [subscriptionRequests, setSubscriptionRequests] = useState<any[]>([]);
+  const [superAdminPaymentInfo, setSuperAdminPaymentInfo] = useState<any>(null);
+  
+  const requestSubscriptionUpgrade = async () => {};
+  const approveSubscriptionRequest = async () => {};
+  const rejectSubscriptionRequest = async () => {};
+
+  
+  const [landingPageConfig, setLandingPageConfig] = useState<any>({});
+  const defaultLandingPageConfig: any = {
+    heroTitle: "Run Your Restaurant Business with AI",
+    heroSubtitle: "Dinex is the ultimate all-in-one platform for modern restaurants, cafes, and multi-branch food chains.",
+    heroBackgroundType: 'video',
+    heroBackgroundUrl: 'https://cdn.pixabay.com/video/2015/09/25/744-139366606_tiny.mp4',
+    aboutTitle: "Why businesses choose Dinex",
+    aboutText: "Join thousands of restaurants that have transformed their operations, increased revenue, and delighted customers using our platform.",
+    featuresTitle: "Everything you need to succeed",
+    featuresSubtitle: "From digital menus to kitchen displays, we've got your entire restaurant operation covered.",
+    contactEmail: "naolnigatu2025@gmail.com"
+  };
   useEffect(() => {
+    let unsubscribeFn: (() => void) | undefined;
     const initializeListeners = async () => {
       try {
-        const { getDB } = await import('../lib/firebase');
+        const {
+          getDB
+        } = await import('../lib/firebase');
         const db = getDB();
         if (db) {
-          const { collection, onSnapshot, doc: firestoreDoc } = await import('firebase/firestore');
-
-          const unsubscribeTenants = onSnapshot(collection(db, 'tenants'), (snapshot) => {
+          const {
+            collection,
+            onSnapshot,
+            doc: firestoreDoc
+          } = await import('firebase/firestore');
+          const unsubscribeTenants = onSnapshot(collection(db, 'tenants'), snapshot => {
             const list: Tenant[] = [];
-            snapshot.forEach((docSnap) => {
-              list.push({ id: docSnap.id, ...docSnap.data() } as Tenant);
+            snapshot.forEach(docSnap => {
+              list.push({
+                id: docSnap.id,
+                ...docSnap.data()
+              } as Tenant);
             });
             if (list.length > 0) {
               setTenants(prev => {
@@ -692,12 +103,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 return Array.from(map.values());
               });
             }
-          }, (err) => console.error("Tenants listener error:", err));
-
-          const unsubscribeBusinesses = onSnapshot(collection(db, 'businesses'), (snapshot) => {
+          }, err => console.warn("Tenants listener error:", err));
+          const unsubscribeBusinesses = onSnapshot(collection(db, 'businesses'), snapshot => {
             const list: Tenant[] = [];
-            snapshot.forEach((docSnap) => {
-              list.push({ id: docSnap.id, ...docSnap.data() } as Tenant);
+            snapshot.forEach(docSnap => {
+              list.push({
+                id: docSnap.id,
+                ...docSnap.data()
+              } as Tenant);
             });
             if (list.length > 0) {
               setTenants(prev => {
@@ -709,13 +122,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 return Array.from(map.values());
               });
             }
-          }, (err) => console.error("Businesses listener error:", err));
-
-          const unsubscribeStaff = onSnapshot(collection(db, 'staff'), (snapshot) => {
+          }, err => console.warn("Businesses listener error:", err));
+          const unsubscribeStaff = onSnapshot(collection(db, 'staff'), snapshot => {
             const list: Staff[] = [];
-            snapshot.forEach((docSnap) => {
+            snapshot.forEach(docSnap => {
               const data = docSnap.data();
-              if (data.email) list.push({ id: docSnap.id, ...data } as Staff);
+              if (data.email) list.push({
+                id: docSnap.id,
+                ...data
+              } as Staff);
             });
             if (list.length > 0) {
               setStaff(prev => {
@@ -727,19 +142,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 return Array.from(map.values());
               });
             }
-          }, (err) => console.error("Staff listener error:", err));
-
-          const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+          }, err => console.warn("Staff listener error:", err));
+          const unsubscribeUsers = onSnapshot(collection(db, 'users'), snapshot => {
             const staffList: Staff[] = [];
             const custMap: Record<string, CustomerProfile> = {};
-            snapshot.forEach((docSnap) => {
+            snapshot.forEach(docSnap => {
               const data = docSnap.data();
               if (data.email) {
                 const cleanEmail = data.email.toLowerCase().trim();
                 if (data.role && data.role !== 'customer') {
-                  staffList.push({ id: docSnap.id, ...data } as Staff);
+                  staffList.push({
+                    id: docSnap.id,
+                    ...data
+                  } as Staff);
                 } else {
-                  custMap[cleanEmail] = { id: docSnap.id, ...data } as CustomerProfile;
+                  custMap[cleanEmail] = {
+                    id: docSnap.id,
+                    ...data
+                  } as CustomerProfile;
                 }
               }
             });
@@ -754,14 +174,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               });
             }
             if (Object.keys(custMap).length > 0) {
-              setCustomerProfiles(prev => ({ ...prev, ...custMap }));
+              setCustomerProfiles(prev => ({
+                ...prev,
+                ...custMap
+              }));
             }
-          }, (err) => console.error("Users listener error:", err));
-
-          const unsubscribeBranches = onSnapshot(collection(db, 'branches'), (snapshot) => {
+          }, err => console.warn("Users listener error:", err));
+          const unsubscribeBranches = onSnapshot(collection(db, 'branches'), snapshot => {
             const list: Branch[] = [];
-            snapshot.forEach((docSnap) => {
-              list.push({ id: docSnap.id, ...docSnap.data() } as Branch);
+            snapshot.forEach(docSnap => {
+              list.push({
+                id: docSnap.id,
+                ...docSnap.data()
+              } as Branch);
             });
             if (list.length > 0) {
               setBranches(prev => {
@@ -773,85 +198,94 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 return Array.from(map.values());
               });
             }
-          }, (err) => console.error("Branches listener error:", err));
-
-          const unsubscribeReservations = onSnapshot(collection(db, 'reservations'), (snapshot) => {
+          }, err => console.warn("Branches listener error:", err));
+          const unsubscribeReservations = onSnapshot(collection(db, 'reservations'), snapshot => {
             const list: Reservation[] = [];
-            snapshot.forEach((docSnap) => {
-              list.push({ id: docSnap.id, ...docSnap.data() } as Reservation);
+            snapshot.forEach(docSnap => {
+              list.push({
+                id: docSnap.id,
+                ...docSnap.data()
+              } as Reservation);
             });
             setReservations(list);
-          }, (err) => {
-            console.error("Firestore reservations listener error:", err);
+          }, err => {
+            console.warn("Firestore reservations listener error:", err);
           });
-
-          const unsubscribeIngredients = onSnapshot(collection(db, 'ingredients'), (snapshot) => {
+          const unsubscribeIngredients = onSnapshot(collection(db, 'ingredients'), snapshot => {
             const list: Ingredient[] = [];
-            snapshot.forEach((docSnap) => {
-              list.push({ id: docSnap.id, ...docSnap.data() } as Ingredient);
+            snapshot.forEach(docSnap => {
+              list.push({
+                id: docSnap.id,
+                ...docSnap.data()
+              } as Ingredient);
             });
             setIngredients(list);
-          }, (err) => {
-            console.error("Firestore ingredients listener error:", err);
+          }, err => {
+            console.warn("Firestore ingredients listener error:", err);
           });
-
-          const unsubscribeStockMovements = onSnapshot(collection(db, 'stock_movements'), (snapshot) => {
+          const unsubscribeStockMovements = onSnapshot(collection(db, 'stock_movements'), snapshot => {
             const list: StockMovement[] = [];
-            snapshot.forEach((docSnap) => {
-              list.push({ id: docSnap.id, ...docSnap.data() } as StockMovement);
+            snapshot.forEach(docSnap => {
+              list.push({
+                id: docSnap.id,
+                ...docSnap.data()
+              } as StockMovement);
             });
             setStockMovements(list);
-          }, (err) => {
-            console.error("Firestore stock movements listener error:", err);
+          }, err => {
+            console.warn("Firestore stock movements listener error:", err);
           });
-
-          const unsubscribeNotifications = onSnapshot(collection(db, 'notifications'), (snapshot) => {
+          const unsubscribeNotifications = onSnapshot(collection(db, 'notifications'), snapshot => {
             const list: DinexNotification[] = [];
-            snapshot.forEach((docSnap) => {
-              list.push({ id: docSnap.id, ...docSnap.data() } as DinexNotification);
+            snapshot.forEach(docSnap => {
+              list.push({
+                id: docSnap.id,
+                ...docSnap.data()
+              } as DinexNotification);
             });
             list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             setNotifications(list);
-          }, (err) => {
-            console.error("Firestore notifications listener error:", err);
+          }, err => {
+            console.warn("Firestore notifications listener error:", err);
           });
-
-          const unsubscribeMarketplaceExtensions = onSnapshot(collection(db, 'marketplace_extensions'), (snapshot) => {
+          const unsubscribeMarketplaceExtensions = onSnapshot(collection(db, 'marketplace_extensions'), snapshot => {
             const list: MarketplaceExtension[] = [];
-            snapshot.forEach((docSnap) => {
-              list.push({ id: docSnap.id, ...docSnap.data() } as MarketplaceExtension);
+            snapshot.forEach(docSnap => {
+              list.push({
+                id: docSnap.id,
+                ...docSnap.data()
+              } as MarketplaceExtension);
             });
             setMarketplaceExtensions(list);
-          }, (err) => {
-            console.error("Firestore marketplace extensions listener error:", err);
+          }, err => {
+            console.warn("Firestore marketplace extensions listener error:", err);
           });
-
-          const unsubscribeInstalledExtensions = onSnapshot(collection(db, 'installed_extensions'), (snapshot) => {
+          const unsubscribeInstalledExtensions = onSnapshot(collection(db, 'installed_extensions'), snapshot => {
             const list: InstalledExtension[] = [];
-            snapshot.forEach((docSnap) => {
-              list.push({ id: docSnap.id, ...docSnap.data() } as InstalledExtension);
+            snapshot.forEach(docSnap => {
+              list.push({
+                id: docSnap.id,
+                ...docSnap.data()
+              } as InstalledExtension);
             });
             setInstalledExtensions(list);
-          }, (err) => {
-            console.error("Firestore installed extensions listener error:", err);
+          }, err => {
+            console.warn("Firestore installed extensions listener error:", err);
           });
-
-          const unsubscribeLandingPageConfig = onSnapshot(firestoreDoc(db, 'landing_page_settings', 'global'), (docSnapshot) => {
+          const unsubscribeLandingPageConfig = onSnapshot(firestoreDoc(db, 'landing_page_settings', 'global'), docSnapshot => {
             if (docSnapshot.exists()) {
               setLandingPageConfig(docSnapshot.data() as LandingPageConfig);
             }
-          }, (err) => {
-            console.error("Firestore landing page settings listener error:", err);
+          }, err => {
+            console.warn("Firestore landing page settings listener error:", err);
           });
-
-          const unsubscribeGlobalSettings = onSnapshot(firestoreDoc(db, 'system_settings', 'global'), (docSnapshot) => {
+          const unsubscribeGlobalSettings = onSnapshot(firestoreDoc(db, 'system_settings', 'global'), docSnapshot => {
             if (docSnapshot.exists()) {
               setGlobalSettings(docSnapshot.data() as GlobalSettings);
             }
-          }, (err) => {
-            console.error("Firestore global settings listener error:", err);
+          }, err => {
+            console.warn("Firestore global settings listener error:", err);
           });
-
           return () => {
             unsubscribeTenants();
             unsubscribeBusinesses();
@@ -872,20 +306,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.warn("Error setting up Firestore realtime listeners:", err);
       }
     };
+    if (currentUser) {
+      initializeListeners().then(unsub => {
+        unsubscribeFn = unsub;
+      });
+    }
+    return () => {
+      if (unsubscribeFn) {
+        unsubscribeFn();
+      }
+    };
+  }, [currentUser]);
 
-    let unsubscribeFn: (() => void) | undefined;
-    initializeListeners().then((unsub) => {
-      unsubscribeFn = unsub;
-    });
-
+  useEffect(() => {
     let unsubAuth: (() => void) | undefined;
     const setupAuthObserver = async () => {
       try {
-        const { getAuth, onAuthStateChanged } = await import('firebase/auth');
-        const { initializeFirebase } = await import('../lib/firebase');
+        const {
+          getAuth,
+          onAuthStateChanged
+        } = await import('firebase/auth');
+        const {
+          initializeFirebase
+        } = await import('../lib/firebase');
         const init = initializeFirebase();
         if (init && init.auth) {
-          unsubAuth = onAuthStateChanged(init.auth, async (firebaseUser) => {
+          unsubAuth = onAuthStateChanged(init.auth, async firebaseUser => {
             if (firebaseUser && firebaseUser.email) {
               await login(firebaseUser.email, firebaseUser.uid);
             }
@@ -896,11 +342,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     };
     setupAuthObserver();
-
     return () => {
-      if (unsubscribeFn) {
-        unsubscribeFn();
-      }
       if (unsubAuth) {
         unsubAuth();
       }
@@ -908,60 +350,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // 5. Customer Profiles State
-  const [customerProfiles, setCustomerProfiles] = useState<Record<string, CustomerProfile>>(() => {
-    const local = localStorage.getItem('mf_customer_profiles');
-    if (local) return JSON.parse(local);
-
-    return {
-      'naolnigatu2025@gmail.com': {
-        id: 'cust-naol',
-        email: 'naolnigatu2025@gmail.com',
-        name: 'Naol Nigatu',
-        phone: '+251 912 345 678',
-        savedAddresses: [
-          { id: 'addr-1', name: 'Home', address: 'Bole, District 3, Addis Ababa' },
-          { id: 'addr-2', name: 'Office', address: 'Dinex Tech Hub, Level 4, Addis Ababa' }
-        ],
-        savedFavorites: ['item-1', 'item-2'],
-        loyaltyPoints: 340,
-        loyaltyHistory: [
-          { id: 'lh-1', date: '2026-07-10T12:00:00Z', points: 150, type: 'earn', orderNum: 'MF-4412', description: 'Earned on ordering House Special Dish' },
-          { id: 'lh-2', date: '2026-07-11T15:30:00Z', points: 200, type: 'earn', orderNum: 'MF-8821', description: 'Earned on ordering Ethio-Macchiato' },
-          { id: 'lh-3', date: '2026-07-12T09:00:00Z', points: -10, type: 'redeem', orderNum: 'MF-1102', description: 'Redeemed points for $10.00 discount' }
-        ]
-      }
-    };
-  });
-
-  useEffect(() => {
-    localStorage.setItem('mf_customer_profiles', JSON.stringify(customerProfiles));
-  }, [customerProfiles]);
+  const [customerProfiles, setCustomerProfiles] = useState<Record<string, CustomerProfile>>({});
+  useEffect(() => {}, [customerProfiles]);
 
   // Active configurations
-  const [activeTenantId, setActiveTenantId] = useState<string>(() => {
-    return localStorage.getItem('mf_active_tenant_id') || 't-01';
-  });
-
-  const [activeBranchId, setActiveBranchId] = useState<string>(() => {
-    return localStorage.getItem('mf_active_branch_id') || 'b-01';
-  });
-
+  const [activeTenantId, setActiveTenantId] = useState<string>('t-01');
+  const [activeBranchId, setActiveBranchId] = useState<string>('t-01');
   const [currentLanguage, setLanguage] = useState<'en' | 'am'>('en');
-
-  const [currentView, setCurrentView] = useState<'landing' | 'login' | 'signup' | 'customer' | 'dashboard'>(() => {
-    const saved = localStorage.getItem('mf_current_view');
-    return (saved as any) || 'landing';
-  });
-
-  useEffect(() => {
-    localStorage.setItem('mf_current_view', currentView);
-  }, [currentView]);
-
-  // Currently logged-in operational user (Simulated)
-  const [currentUser, setCurrentUser] = useState<AppContextType['currentUser']>(() => {
-    const saved = localStorage.getItem('mf_current_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [currentView, setCurrentView] = useState<'landing' | 'login' | 'signup' | 'customer' | 'dashboard'>('landing');
+  useEffect(() => {}, [currentView]);
 
   useEffect(() => {
     if (currentUser) {
@@ -972,61 +369,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [currentUser]);
 
   // Sync to local storage on state changes
+  useEffect(() => {}, [tenants]);
+  useEffect(() => {}, [branches]);
+  useEffect(() => {}, [stations]);
+  useEffect(() => {}, [categories]);
+  useEffect(() => {}, [menuItems]);
+  useEffect(() => {}, [tables]);
+  useEffect(() => {}, [orders]);
+  useEffect(() => {}, [staff]);
+  useEffect(() => {}, [logs]);
   useEffect(() => {
-    localStorage.setItem('mf_tenants', JSON.stringify(tenants));
-  }, [tenants]);
-
-  useEffect(() => {
-    localStorage.setItem('mf_branches', JSON.stringify(branches));
-  }, [branches]);
-
-  useEffect(() => {
-    localStorage.setItem('mf_stations', JSON.stringify(stations));
-  }, [stations]);
-
-  useEffect(() => {
-    localStorage.setItem('mf_categories', JSON.stringify(categories));
-  }, [categories]);
-
-  useEffect(() => {
-    localStorage.setItem('mf_menu_items', JSON.stringify(menuItems));
-  }, [menuItems]);
-
-  useEffect(() => {
-    localStorage.setItem('mf_tables', JSON.stringify(tables));
-  }, [tables]);
-
-  useEffect(() => {
-    localStorage.setItem('mf_orders', JSON.stringify(orders));
-  }, [orders]);
-
-  useEffect(() => {
-    localStorage.setItem('mf_staff', JSON.stringify(staff));
-  }, [staff]);
-
-  useEffect(() => {
-    localStorage.setItem('mf_logs', JSON.stringify(logs));
-  }, [logs]);
-
-  useEffect(() => {
-    localStorage.setItem('mf_active_tenant_id', activeTenantId);
     // Auto-update active branch when tenant changes
     const tenantBranches = branches.filter(b => b.tenantId === activeTenantId);
     if (tenantBranches.length > 0 && !tenantBranches.some(b => b.id === activeBranchId)) {
       setActiveBranchId(tenantBranches[0].id);
     }
   }, [activeTenantId, branches, activeBranchId]);
-
+  useEffect(() => {}, [activeBranchId]);
   useEffect(() => {
-    localStorage.setItem('mf_active_branch_id', activeBranchId);
-  }, [activeBranchId]);
-
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('mf_current_user', JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem('mf_current_user');
-    }
+    if (currentUser) {} else {}
   }, [currentUser]);
 
   // Actions implementation
@@ -1042,26 +403,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     setLogs(prev => [newLog, ...prev]);
   };
-
-  const login = async (emailOrInput: string, uid?: string): Promise<{ success: boolean; message: string; user?: any }> => {
+  const login = async (emailOrInput: string, uid?: string): Promise<{
+    success: boolean;
+    message: string;
+    user?: any;
+  }> => {
     const cleanEmail = (typeof emailOrInput === 'string' ? emailOrInput : '').toLowerCase().trim();
 
     // 1. Check Super Admin
     if (cleanEmail === 'naolnigatu2025@gmail.com') {
       const name = 'Naol Nigatu (Platform Admin)';
-      const user = { id: uid || 'sa-01', uid: uid || 'sa-01', email: cleanEmail, role: 'super_admin' as const, name };
+      const user = {
+        id: uid || 'sa-01',
+        uid: uid || 'sa-01',
+        email: cleanEmail,
+        role: 'super_admin' as const,
+        name
+      };
       setCurrentUser(user);
       addLog('Login', `${name} logged in.`);
-      return { success: true, message: "Signed in as Platform Admin", user };
+      return {
+        success: true,
+        message: "Signed in as Platform Admin",
+        user
+      };
     }
 
     // 2. PRIMARY LOOKUP: Query Firestore by UID or Email directly from database
     try {
-      const { getDB } = await import('../lib/firebase');
+      const {
+        getDB
+      } = await import('../lib/firebase');
       const db = getDB();
       if (db) {
-        const { doc, getDoc, collection, query, where, getDocs } = await import('firebase/firestore');
-
+        const {
+          doc,
+          getDoc,
+          collection,
+          query,
+          where,
+          getDocs
+        } = await import('firebase/firestore');
         let userDocData: any = null;
         let userDocId: string = uid || '';
 
@@ -1100,23 +482,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             userDocId = sQuerySnap.docs[0].id;
           }
         }
-
         if (userDocData) {
           const role = (userDocData.role || 'customer') as UserRole;
           const tenantId = userDocData.tenantId || '';
-          
           let loadedBusiness: Tenant | null = null;
           let loadedPermissions: string[] = [];
-
           if (role !== 'customer' && tenantId) {
             // Load Business from Firestore
             const bSnap = await getDoc(doc(db, 'businesses', tenantId));
             if (bSnap.exists()) {
-              loadedBusiness = { id: bSnap.id, ...bSnap.data() } as Tenant;
+              loadedBusiness = {
+                id: bSnap.id,
+                ...bSnap.data()
+              } as Tenant;
             } else {
               const tSnap = await getDoc(doc(db, 'tenants', tenantId));
               if (tSnap.exists()) {
-                loadedBusiness = { id: tSnap.id, ...tSnap.data() } as Tenant;
+                loadedBusiness = {
+                  id: tSnap.id,
+                  ...tSnap.data()
+                } as Tenant;
               }
             }
 
@@ -1132,7 +517,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               }
             }
           }
-
           const userObj = {
             id: userDocId,
             uid: uid || userDocId,
@@ -1144,21 +528,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             stationId: userDocData.stationId,
             permissions: loadedPermissions
           };
-
           if (loadedBusiness) {
             setTenants(prev => [...prev.filter(t => t.id !== loadedBusiness!.id), loadedBusiness!]);
             setActiveTenantId(loadedBusiness.id);
           } else if (tenantId) {
             setActiveTenantId(tenantId);
           }
-
           if (userDocData.branchId) {
             setActiveBranchId(userDocData.branchId);
           }
-
           setCurrentUser(userObj);
           addLog('Login', `User ${userObj.name} (${userObj.role}) loaded from Firestore.`);
-          return { success: true, message: "Workspace loaded successfully", user: userObj };
+          return {
+            success: true,
+            message: "Workspace loaded successfully",
+            user: userObj
+          };
         }
 
         // D. Direct check for Tenant/Business ownership
@@ -1178,26 +563,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const bByEmailSnap = await getDocs(bByEmail);
           if (!bByEmailSnap.empty) tenantSnapDocs = bByEmailSnap.docs;
         }
-
         if (tenantSnapDocs.length > 0) {
           const docSnap = tenantSnapDocs[0];
           const data = docSnap.data();
-          const tenantObj = { id: docSnap.id, ...data } as Tenant;
+          const tenantObj = {
+            id: docSnap.id,
+            ...data
+          } as Tenant;
           setTenants(prev => [...prev.filter(t => t.id !== docSnap.id), tenantObj]);
-          
           const userObj = {
             id: uid || docSnap.id,
             uid: uid || docSnap.id,
             email: cleanEmail || data.ownerEmail,
             role: 'owner' as const,
-            name: (data.ownerName || data.name || 'Owner'),
+            name: data.ownerName || data.name || 'Owner',
             tenantId: docSnap.id,
             branchId: ''
           };
           setCurrentUser(userObj);
           setActiveTenantId(docSnap.id);
           addLog('Login', `Tenant Owner (${userObj.email}) loaded from Firestore business record.`);
-          return { success: true, message: "Business workspace loaded successfully", user: userObj };
+          return {
+            success: true,
+            message: "Business workspace loaded successfully",
+            user: userObj
+          };
         }
       }
     } catch (err) {
@@ -1206,20 +596,77 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // 3. Fallback for Hardcoded Demo Accounts
     if (cleanEmail === 'aisha@menuflow.com') {
-      const u = { id: 's-01', email: cleanEmail, role: 'owner' as const, name: 'Aisha Jafar', tenantId: 't-01', branchId: 'b-01' };
-      setCurrentUser(u); setActiveTenantId('t-01'); setActiveBranchId('b-01'); return { success: true, message: "Demo account loaded", user: u };
+      const u = {
+        id: 's-01',
+        email: cleanEmail,
+        role: 'owner' as const,
+        name: 'Aisha Jafar',
+        tenantId: 't-01',
+        branchId: 'b-01'
+      };
+      setCurrentUser(u);
+      setActiveTenantId('t-01');
+      setActiveBranchId('b-01');
+      return {
+        success: true,
+        message: "Demo account loaded",
+        user: u
+      };
     }
     if (cleanEmail === 'carlos@menuflow.com') {
-      const u = { id: 's-02', email: cleanEmail, role: 'owner' as const, name: 'Carlos Mwangi', tenantId: 't-02', branchId: 'b-03' };
-      setCurrentUser(u); setActiveTenantId('t-02'); setActiveBranchId('b-03'); return { success: true, message: "Demo account loaded", user: u };
+      const u = {
+        id: 's-02',
+        email: cleanEmail,
+        role: 'owner' as const,
+        name: 'Carlos Mwangi',
+        tenantId: 't-02',
+        branchId: 'b-03'
+      };
+      setCurrentUser(u);
+      setActiveTenantId('t-02');
+      setActiveBranchId('b-03');
+      return {
+        success: true,
+        message: "Demo account loaded",
+        user: u
+      };
     }
     if (cleanEmail === 'fatima@menuflow.com') {
-      const u = { id: 's-03', email: cleanEmail, role: 'waiter' as const, name: 'Fatima Ahmed', tenantId: 't-01', branchId: 'b-01' };
-      setCurrentUser(u); setActiveTenantId('t-01'); setActiveBranchId('b-01'); return { success: true, message: "Demo account loaded", user: u };
+      const u = {
+        id: 's-03',
+        email: cleanEmail,
+        role: 'waiter' as const,
+        name: 'Fatima Ahmed',
+        tenantId: 't-01',
+        branchId: 'b-01'
+      };
+      setCurrentUser(u);
+      setActiveTenantId('t-01');
+      setActiveBranchId('b-01');
+      return {
+        success: true,
+        message: "Demo account loaded",
+        user: u
+      };
     }
     if (cleanEmail === 'yohannes@menuflow.com') {
-      const u = { id: 's-04', email: cleanEmail, role: 'kitchen' as const, name: 'Yohannes Bekele', tenantId: 't-01', branchId: 'b-01', stationId: 'st-01' };
-      setCurrentUser(u); setActiveTenantId('t-01'); setActiveBranchId('b-01'); return { success: true, message: "Demo account loaded", user: u };
+      const u = {
+        id: 's-04',
+        email: cleanEmail,
+        role: 'kitchen' as const,
+        name: 'Yohannes Bekele',
+        tenantId: 't-01',
+        branchId: 'b-01',
+        stationId: 'st-01'
+      };
+      setCurrentUser(u);
+      setActiveTenantId('t-01');
+      setActiveBranchId('b-01');
+      return {
+        success: true,
+        message: "Demo account loaded",
+        user: u
+      };
     }
 
     // 4. In-Memory fallback for active session
@@ -1237,9 +684,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCurrentUser(user);
       if (foundStaff.tenantId) setActiveTenantId(foundStaff.tenantId);
       if (foundStaff.branchId) setActiveBranchId(foundStaff.branchId);
-      return { success: true, message: "Staff profile loaded", user };
+      return {
+        success: true,
+        message: "Staff profile loaded",
+        user
+      };
     }
-
     const foundTenant = tenants.find(t => (t.ownerEmail || '').toLowerCase().trim() === cleanEmail);
     if (foundTenant) {
       const tenantBranch = branches.find(b => b.tenantId === foundTenant.id);
@@ -1254,9 +704,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCurrentUser(user);
       setActiveTenantId(foundTenant.id);
       if (tenantBranch) setActiveBranchId(tenantBranch.id);
-      return { success: true, message: "Business profile loaded", user };
+      return {
+        success: true,
+        message: "Business profile loaded",
+        user
+      };
     }
-
     const foundCustomer = customerProfiles[cleanEmail];
     if (foundCustomer) {
       const user = {
@@ -1268,28 +721,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         branchId: ''
       };
       setCurrentUser(user);
-      return { success: true, message: "Customer profile loaded", user };
+      return {
+        success: true,
+        message: "Customer profile loaded",
+        user
+      };
     }
-
-    return { success: false, message: "Account not found in our records. Please sign up." };
+    return {
+      success: false,
+      message: "Account not found in our records. Please sign up."
+    };
   };
-
   const logout = async () => {
     try {
-      const { logOut } = await import('../lib/firebase');
+      const {
+        logOut
+      } = await import('../lib/firebase');
       await logOut();
     } catch (e) {
       console.warn("Firebase logout error:", e);
     }
     addLog('Logout', `User logged out.`);
     setCurrentUser(null);
-    localStorage.removeItem('mf_current_user');
-    localStorage.removeItem('mf_customer_logged_email');
     setCurrentView('landing');
   };
 
   // Menu Categories
-  const addCategory = (catData: Omit<Category, 'id'>) => {
+  const addCategory = async (catData: Omit<Category, 'id'>) => {
     const id = `cat-${Date.now()}`;
     const newCat: Category = {
       ...catData,
@@ -1303,10 +761,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     });
     addLog('Create Category', `Created menu category: ${catData.name}`);
-    syncToFirestore('categories', id, newCat);
+    await syncToFirestore('categories', id, newCat);
   };
-
-  const updateCategory = (updatedCat: Category) => {
+  const updateCategory = async (updatedCat: Category) => {
     setCategories(prev => {
       const list = prev[updatedCat.tenantId] || [];
       const updated = list.map(c => c.id === updatedCat.id ? updatedCat : c);
@@ -1316,9 +773,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     });
     addLog('Update Category', `Updated menu category: ${updatedCat.name}`);
-    syncToFirestore('categories', updatedCat.id, updatedCat);
+    await syncToFirestore('categories', updatedCat.id, updatedCat);
   };
-
   const deleteCategory = (tenantId: string, categoryId: string) => {
     const catName = categories[tenantId]?.find(c => c.id === categoryId)?.name || '';
     setCategories(prev => {
@@ -1333,7 +789,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Menu Items
-  const addMenuItem = (itemData: Omit<MenuItem, 'id'>) => {
+  const addMenuItem = async (itemData: Omit<MenuItem, 'id'>) => {
     const id = `item-${Date.now()}`;
     const newItem: MenuItem = {
       ...itemData,
@@ -1347,10 +803,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     });
     addLog('Create Menu Item', `Created menu item: ${itemData.name}`);
-    syncToFirestore('menu_items', id, newItem);
+    await syncToFirestore('menu_items', id, newItem);
   };
-
-  const updateMenuItem = (updatedItem: MenuItem) => {
+  const updateMenuItem = async (updatedItem: MenuItem) => {
     setMenuItems(prev => {
       const list = prev[updatedItem.tenantId] || [];
       return {
@@ -1359,9 +814,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     });
     addLog('Update Menu Item', `Updated menu item: ${updatedItem.name}`);
-    syncToFirestore('menu_items', updatedItem.id, updatedItem);
+    await syncToFirestore('menu_items', updatedItem.id, updatedItem);
   };
-
   const deleteMenuItem = (tenantId: string, itemId: string) => {
     const itemName = menuItems[tenantId]?.find(i => i.id === itemId)?.name || '';
     setMenuItems(prev => {
@@ -1374,25 +828,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addLog('Delete Menu Item', `Deleted menu item: ${itemName}`);
     deleteFromFirestore('menu_items', itemId);
   };
-
-  const toggleMenuItemAvailability = (tenantId: string, itemId: string) => {
+  const toggleMenuItemAvailability = async (tenantId: string, itemId: string) => {
     const itemName = menuItems[tenantId]?.find(i => i.id === itemId)?.name || '';
     setMenuItems(prev => {
       const list = prev[tenantId] || [];
       return {
         ...prev,
-        [tenantId]: list.map(i => i.id === itemId ? { ...i, isAvailable: !i.isAvailable } : i)
+        [tenantId]: list.map(i => i.id === itemId ? {
+          ...i,
+          isAvailable: !i.isAvailable
+        } : i)
       };
     });
     const currentItem = menuItems[tenantId]?.find(i => i.id === itemId);
     if (currentItem) {
       addLog('Toggle Availability', `Toggled availability for menu item ${itemName} to ${!currentItem.isAvailable ? 'available' : 'unavailable'}`);
-      syncToFirestore('menu_items', itemId, { ...currentItem, isAvailable: !currentItem.isAvailable });
+      await syncToFirestore('menu_items', itemId, {
+        ...currentItem,
+        isAvailable: !currentItem.isAvailable
+      });
     }
   };
 
   // Tables
-  const addTable = (tableData: Omit<Table, 'id' | 'qrUrl'>) => {
+  const addTable = async (tableData: Omit<Table, 'id' | 'qrUrl'>) => {
     const id = `tab-${Date.now()}`;
     const newTable: Table = {
       ...tableData,
@@ -1401,19 +860,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     setTables(prev => [...prev, newTable]);
     addLog('Create Table', `Created Table: ${tableData.number} in ${tableData.section}`);
-    syncToFirestore('tables', id, newTable);
+    await syncToFirestore('tables', id, newTable);
   };
-
-  const updateTableStatus = (tableId: string, status: Table['status']) => {
-    setTables(prev => prev.map(t => t.id === tableId ? { ...t, status } : t));
+  const updateTableStatus = async (tableId: string, status: Table['status']) => {
+    setTables(prev => prev.map(t => t.id === tableId ? {
+      ...t,
+      status
+    } : t));
     const tbl = tables.find(t => t.id === tableId);
     if (tbl) {
-      syncToFirestore('tables', tableId, { ...tbl, status });
+      await syncToFirestore('tables', tableId, {
+        ...tbl,
+        status
+      });
     }
   };
 
   // Stations
-  const addStation = (stationData: Omit<PreparationStation, 'id'>) => {
+  const addStation = async (stationData: Omit<PreparationStation, 'id'>) => {
     const id = `st-${Date.now()}`;
     const newStation: PreparationStation = {
       ...stationData,
@@ -1421,13 +885,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     setStations(prev => [...prev, newStation]);
     addLog('Create Station', `Created preparation station: ${stationData.name}`);
-    syncToFirestore('stations', id, newStation);
+    await syncToFirestore('stations', id, newStation);
   };
 
   // Orders
-  const placeOrder = (orderData: Omit<Order, 'id' | 'orderNum' | 'createdAt' | 'status' | 'paymentStatus' | 'subtotal' | 'tax' | 'serviceCharge' | 'total' | 'timeline' | 'kitchenNotes'> & { tip?: number }) => {
-    const tenant = tenants.find(t => t.id === orderData.tenantId) || [][0];
-    
+  const placeOrder = async (orderData: Omit<Order, 'id' | 'orderNum' | 'createdAt' | 'status' | 'paymentStatus' | 'subtotal' | 'tax' | 'serviceCharge' | 'total' | 'timeline' | 'kitchenNotes'> & {
+    tip?: number;
+  }) => {
+    const tenant = tenants.find(t => t.id === orderData.tenantId);
+    if (!tenant) return null;
+
     // Calculate financial subtotals
 
     let subtotal = 0;
@@ -1438,28 +905,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       subtotal += itemCost * it.quantity;
     });
-
     if (orderData.type === 'meal_subscription') {
       const durationMatch = orderData.notes?.match(/Subscription Term: (\d+) Days/);
       const subDays = durationMatch ? parseInt(durationMatch[1]) : 30;
       subtotal = subtotal * subDays;
       if (tenant.mealSubscriptionDiscountPercent && tenant.mealSubscriptionDiscountPercent > 0) {
-        subtotal = subtotal - (subtotal * (tenant.mealSubscriptionDiscountPercent / 100));
+        subtotal = subtotal - subtotal * (tenant.mealSubscriptionDiscountPercent / 100);
       }
     }
-
-
-    const taxAmount = parseFloat(((subtotal * tenant.baseTaxRate) / 100).toFixed(2));
-    const serviceChargeAmount = parseFloat(((subtotal * tenant.serviceCharge) / 100).toFixed(2));
+    const taxAmount = parseFloat((subtotal * tenant.baseTaxRate / 100).toFixed(2));
+    const serviceChargeAmount = parseFloat((subtotal * tenant.serviceCharge / 100).toFixed(2));
     const tipAmount = orderData.tip || 0;
     const deliveryFeeAmount = (orderData as any).deliveryFee || 0;
     const totalAmount = parseFloat((subtotal + taxAmount + serviceChargeAmount + tipAmount + deliveryFeeAmount - orderData.discount).toFixed(2));
-
     const hrId = `MF-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    const initialPaymentStatus = orderData.paymentVerificationStatus === 'approved' ? ('paid' as const) : ('pending' as const);
-    const initialStatus = (orderData as any).status || (orderData.paymentVerificationStatus === 'approved' ? ('accepted' as const) : ('pending' as const));
-
+    const initialPaymentStatus = orderData.paymentVerificationStatus === 'approved' ? 'paid' as const : 'pending' as const;
+    const initialStatus = (orderData as any).status || (orderData.paymentVerificationStatus === 'approved' ? 'accepted' as const : 'pending' as const);
     const newOrder: Order = {
       ...orderData,
       id: `ord-${Date.now()}`,
@@ -1473,37 +934,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       total: totalAmount,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      timeline: [
-        { id: `ev-${Date.now()}-1`, time: new Date().toISOString(), label: 'Order Placed', desc: `New order registered. Payment via ${orderData.paymentMethod}`, actor: 'Customer' }
-      ],
+      timeline: [{
+        id: `ev-${Date.now()}-1`,
+        time: new Date().toISOString(),
+        label: 'Order Placed',
+        desc: `New order registered. Payment via ${orderData.paymentMethod}`,
+        actor: 'Customer'
+      }],
       kitchenNotes: []
     };
-
     setOrders(prev => [newOrder, ...prev]);
 
     // Update table status if dine-in
     if (orderData.type === 'dine_in' && orderData.tableId) {
       updateTableStatus(orderData.tableId, 'waiting');
     }
-
     addLog('Place Order', `New order ${hrId} placed. Total: ${tenant.currencySymbol} ${totalAmount}`);
-    syncToFirestore('orders', newOrder.id, newOrder);
+    await syncToFirestore('orders', newOrder.id, newOrder);
     return newOrder;
   };
-
-  const updateOrderStatus = (orderId: string, status: OrderStatus, actor?: string) => {
+  const updateOrderStatus = async (orderId: string, status: OrderStatus, actor?: string) => {
     const existing = orders.find(o => o.id === orderId);
     if (!existing) return;
-
     let items = [...existing.items];
     if (status === 'preparing') {
-      items = items.map(it => it.status === 'received' ? { ...it, status: 'cooking' as const } : it);
+      items = items.map(it => it.status === 'received' ? {
+        ...it,
+        status: 'cooking' as const
+      } : it);
     } else if (status === 'ready') {
-      items = items.map(it => it.status === 'received' || it.status === 'cooking' ? { ...it, status: 'ready' as const } : it);
+      items = items.map(it => it.status === 'received' || it.status === 'cooking' ? {
+        ...it,
+        status: 'ready' as const
+      } : it);
     } else if (status === 'served') {
-      items = items.map(it => ({ ...it, status: 'delivered' as const }));
+      items = items.map(it => ({
+        ...it,
+        status: 'delivered' as const
+      }));
     }
-
     const statusLabels: Record<OrderStatus, string> = {
       pending: 'Pending',
       accepted: 'Accepted',
@@ -1514,7 +983,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       cancelled: 'Cancelled',
       refunded: 'Refunded'
     };
-
     const newEvent: TimelineEvent = {
       id: `ev-${Date.now()}`,
       time: new Date().toISOString(),
@@ -1522,17 +990,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       desc: `Order status set to ${statusLabels[status]}`,
       actor: actor || 'Staff'
     };
-
-    const updated: Order = { 
-      ...existing, 
-      status, 
+    const updated: Order = {
+      ...existing,
+      status,
       items,
       updatedAt: new Date().toISOString(),
       timeline: [...(existing.timeline || []), newEvent]
     };
-
     setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
-
     if (updated.tableId && updated.type === 'dine_in') {
       if (status === 'accepted' || status === 'preparing' || status === 'ready') {
         updateTableStatus(updated.tableId, 'waiting');
@@ -1542,18 +1007,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateTableStatus(updated.tableId, 'empty');
       }
     }
-
     addLog('Update Order Status', `Order ID ${orderId} status set to: ${status}`);
-    syncToFirestore('orders', orderId, updated);
+    await syncToFirestore('orders', orderId, updated);
   };
-
-  const assignDelivery = (orderId: string, staffId: string, staffName: string, deliveryFee: number) => {
+  const assignDelivery = async (orderId: string, staffId: string, staffName: string, deliveryFee: number) => {
     const existing = orders.find(o => o.id === orderId);
     if (!existing) return;
-
     const deliveryFeeAmount = deliveryFee || 0;
     const newTotal = parseFloat((existing.subtotal + existing.tax + existing.serviceCharge + (existing.tip || 0) + deliveryFeeAmount - existing.discount).toFixed(2));
-
     const newEvent = {
       id: `ev-${Date.now()}`,
       time: new Date().toISOString(),
@@ -1561,7 +1022,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       desc: `Assigned to ${staffName} with delivery fee ${deliveryFee}`,
       actor: 'Manager'
     };
-
     const updated: Order = {
       ...existing,
       deliveryStatus: 'pending_acceptance',
@@ -1571,16 +1031,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       total: newTotal,
       timeline: [...(existing.timeline || []), newEvent]
     };
-
     setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Assign Delivery', `Order ${existing.orderNum} assigned to ${staffName} (Fee: ${deliveryFee})`);
-    syncToFirestore('orders', orderId, updated);
+    await syncToFirestore('orders', orderId, updated);
   };
-
-  const acceptDeliveryFee = (orderId: string) => {
+  const acceptDeliveryFee = async (orderId: string) => {
     const existing = orders.find(o => o.id === orderId);
     if (!existing) return;
-
     const newEvent = {
       id: `ev-${Date.now()}`,
       time: new Date().toISOString(),
@@ -1588,29 +1045,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       desc: 'Customer accepted the delivery fee and confirmed the order.',
       actor: 'Customer'
     };
-
     const updated: Order = {
       ...existing,
       status: 'accepted',
       deliveryStatus: 'preparing',
       timeline: [...(existing.timeline || []), newEvent]
     };
-
     setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Accept Delivery Fee', `Customer accepted delivery fee for order ${existing.orderNum}`);
-    syncToFirestore('orders', orderId, updated);
+    await syncToFirestore('orders', orderId, updated);
   };
-
   const reportOrderItemIssue = (orderId: string, itemId: string, reason: string) => {
     setOrders(prev => prev.map(o => {
       if (o.id !== orderId) return o;
       return {
         ...o,
-        items: o.items.map(it => it.id === itemId ? { ...it, status: 'issue_reported', issueReason: reason } : it)
+        items: o.items.map(it => it.id === itemId ? {
+          ...it,
+          status: 'issue_reported',
+          issueReason: reason
+        } : it)
       };
     }));
   };
-
   const resolveOrderItemIssue = (orderId: string, itemId: string, approved: boolean) => {
     setOrders(prev => prev.map(o => {
       if (o.id !== orderId) return o;
@@ -1618,25 +1075,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ...o,
         items: o.items.map(it => {
           if (it.id !== itemId) return it;
-          return { ...it, status: approved ? 'cancelled' : 'received', issueReason: undefined };
+          return {
+            ...it,
+            status: approved ? 'cancelled' : 'received',
+            issueReason: undefined
+          };
         })
       };
     }));
   };
-
-  const updateOrderItemStatus = (orderId: string, itemId: string, itemStatus: OrderItem['status'], actor?: string) => {
+  const updateOrderItemStatus = async (orderId: string, itemId: string, itemStatus: OrderItem['status'], actor?: string) => {
     const existing = orders.find(o => o.id === orderId);
     if (!existing) return;
+    const updatedItems = existing.items.map(it => it.id === itemId ? {
+      ...it,
+      status: itemStatus
+    } : it);
 
-    const updatedItems = existing.items.map(it => it.id === itemId ? { ...it, status: itemStatus } : it);
-    
     // Compute overarching order status based on item states
     let overarchingStatus: OrderStatus = existing.status;
     const allDelivered = updatedItems.every(it => it.status === 'delivered');
     const anyDelivered = updatedItems.some(it => it.status === 'delivered');
     const allReady = updatedItems.every(it => it.status === 'ready' || it.status === 'delivered');
     const anyCooking = updatedItems.some(it => it.status === 'cooking' || it.status === 'ready');
-
     if (allDelivered) {
       overarchingStatus = 'served';
     } else if (allReady) {
@@ -1653,7 +1114,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateTableStatus(existing.tableId, 'waiting');
       }
     }
-
     const itemObj = existing.items.find(it => it.id === itemId);
     const newEvent: TimelineEvent = {
       id: `ev-${Date.now()}`,
@@ -1662,7 +1122,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       desc: `Item moved to ${itemStatus}`,
       actor: actor || 'Staff'
     };
-
     const updated: Order = {
       ...existing,
       items: updatedItems,
@@ -1670,29 +1129,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updatedAt: new Date().toISOString(),
       timeline: [...(existing.timeline || []), newEvent]
     };
-
     setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Update Order Item Status', `Item ${itemObj?.name || itemId} status set to: ${itemStatus}`);
-    syncToFirestore('orders', orderId, updated);
+    await syncToFirestore('orders', orderId, updated);
   };
-
-  const processPayment = (orderId: string, paymentMethod: Order['paymentMethod'], discountPercentage: number, redeemPoints = 0, tipAmount = 0) => {
+  const processPayment = async (orderId: string, paymentMethod: Order['paymentMethod'], discountPercentage: number, redeemPoints = 0, tipAmount = 0) => {
     const targetOrder = orders.find(o => o.id === orderId);
     if (!targetOrder) return;
-
-    const tenant = tenants.find(t => t.id === targetOrder.tenantId) || [][0];
-    const discountVal = parseFloat(((targetOrder.subtotal * discountPercentage) / 100).toFixed(2));
+    const tenant = tenants.find(t => t.id === targetOrder.tenantId);
+    if (!tenant) return;
+    const discountVal = parseFloat((targetOrder.subtotal * discountPercentage / 100).toFixed(2));
     const pointsDiscount = redeemPoints * tenant.loyaltyRedeemValue;
     const finalDiscount = discountVal + pointsDiscount;
-    const taxAmount = parseFloat(((targetOrder.subtotal * tenant.baseTaxRate) / 100).toFixed(2));
-    const serviceChargeAmount = parseFloat(((targetOrder.subtotal * tenant.serviceCharge) / 100).toFixed(2));
+    const taxAmount = parseFloat((targetOrder.subtotal * tenant.baseTaxRate / 100).toFixed(2));
+    const serviceChargeAmount = parseFloat((targetOrder.subtotal * tenant.serviceCharge / 100).toFixed(2));
     const finalTotal = parseFloat((targetOrder.subtotal + taxAmount + serviceChargeAmount + tipAmount - finalDiscount).toFixed(2));
     const loyaltyEarned = Math.floor(finalTotal * tenant.loyaltyPointsRatio);
 
     // Loyalty integration
     if (targetOrder.customerEmail) {
       const email = targetOrder.customerEmail;
-      setCustomerProfiles(prev => {
+      setCustomerProfiles(async prev => {
         const current = prev[email] || {
           id: `cust-${Date.now()}`,
           email,
@@ -1725,7 +1182,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           loyaltyPoints: updatedPoints,
           loyaltyHistory: [...current.loyaltyHistory, newHistoryEntry, ...redeemHistoryEntry]
         };
-        syncToFirestore('users', updatedProfile.id, updatedProfile);
+        await syncToFirestore('users', updatedProfile.id, updatedProfile);
         return {
           ...prev,
           [email]: updatedProfile
@@ -1737,7 +1194,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (targetOrder.tableId && targetOrder.type === 'dine_in') {
       updateTableStatus(targetOrder.tableId, 'dirty');
     }
-
     const newEvent: TimelineEvent = {
       id: `ev-${Date.now()}`,
       time: new Date().toISOString(),
@@ -1745,7 +1201,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       desc: `Paid ${tenant.currencySymbol} ${finalTotal} via ${paymentMethod}. Tip: ${tenant.currencySymbol} ${tipAmount}`,
       actor: 'Cashier'
     };
-
     const updated: Order = {
       ...targetOrder,
       status: 'completed' as const,
@@ -1759,52 +1214,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updatedAt: new Date().toISOString(),
       timeline: [...(targetOrder.timeline || []), newEvent]
     };
-
     setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Record Payment', `Order ${orderId} fully paid via ${paymentMethod}.`);
-    syncToFirestore('orders', orderId, updated);
+    await syncToFirestore('orders', orderId, updated);
   };
-
-  const rateAndFeedback = (orderId: string, rating: number, feedback: string) => {
+  const rateAndFeedback = async (orderId: string, rating: number, feedback: string) => {
     const existing = orders.find(o => o.id === orderId);
     if (!existing) return;
-
     const updated: Order = {
       ...existing,
       rating,
       feedback,
       updatedAt: new Date().toISOString()
     };
-
     setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Customer Review', `Received ${rating}-star rating for order: ${orderId}`);
-    syncToFirestore('orders', orderId, updated);
+    await syncToFirestore('orders', orderId, updated);
   };
-
-  const cancelOrder = (orderId: string, reason: string) => {
+  const cancelOrder = async (orderId: string, reason: string) => {
     const existing = orders.find(o => o.id === orderId);
     if (!existing) return;
-
     if (existing.tableId && existing.type === 'dine_in') {
       updateTableStatus(existing.tableId, 'empty');
     }
-
     const updated: Order = {
       ...existing,
       status: 'cancelled' as const,
       updatedAt: new Date().toISOString(),
-      timeline: [...(existing.timeline || []), { id: `ev-${Date.now()}`, time: new Date().toISOString(), label: 'Order Cancelled', desc: `Reason: ${reason}`, actor: 'Staff' }]
+      timeline: [...(existing.timeline || []), {
+        id: `ev-${Date.now()}`,
+        time: new Date().toISOString(),
+        label: 'Order Cancelled',
+        desc: `Reason: ${reason}`,
+        actor: 'Staff'
+      }]
     };
-
     setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Cancel Order', `Order ${orderId} was cancelled. Reason: ${reason}`);
-    syncToFirestore('orders', orderId, updated);
+    await syncToFirestore('orders', orderId, updated);
   };
-
-  const verifyAdvancePayment = (orderId: string, approve: boolean, rejectionReason?: string) => {
+  const verifyAdvancePayment = async (orderId: string, approve: boolean, rejectionReason?: string) => {
     const existing = orders.find(o => o.id === orderId);
     if (!existing) return;
-
     let updated: Order;
     if (approve) {
       updated = {
@@ -1813,7 +1264,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         paymentStatus: 'paid' as const,
         status: 'accepted' as const,
         updatedAt: new Date().toISOString(),
-        timeline: [...(existing.timeline || []), { id: `ev-${Date.now()}`, time: new Date().toISOString(), label: 'Advance Payment Approved', desc: 'Advance payment verified by cashier', actor: 'Cashier' }]
+        timeline: [...(existing.timeline || []), {
+          id: `ev-${Date.now()}`,
+          time: new Date().toISOString(),
+          label: 'Advance Payment Approved',
+          desc: 'Advance payment verified by cashier',
+          actor: 'Cashier'
+        }]
       };
     } else {
       updated = {
@@ -1823,45 +1280,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         status: 'cancelled' as const,
         notes: rejectionReason ? `${existing.notes || ''} [Rejected: ${rejectionReason}]` : existing.notes,
         updatedAt: new Date().toISOString(),
-        timeline: [...(existing.timeline || []), { id: `ev-${Date.now()}`, time: new Date().toISOString(), label: 'Advance Payment Rejected', desc: `Advance payment rejected. Reason: ${rejectionReason}`, actor: 'Cashier' }]
+        timeline: [...(existing.timeline || []), {
+          id: `ev-${Date.now()}`,
+          time: new Date().toISOString(),
+          label: 'Advance Payment Rejected',
+          desc: `Advance payment rejected. Reason: ${rejectionReason}`,
+          actor: 'Cashier'
+        }]
       };
     }
-
     setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Verify Advance Payment', `Advance payment for order ${orderId} was ${approve ? 'approved' : 'rejected'}.`);
-    syncToFirestore('orders', orderId, updated);
+    await syncToFirestore('orders', orderId, updated);
   };
-
-  const addKitchenNote = (orderId: string, text: string) => {
+  const addKitchenNote = async (orderId: string, text: string) => {
     const existing = orders.find(o => o.id === orderId);
     if (!existing) return;
-
     const newNote: KitchenNote = {
       id: `kn-${Date.now()}`,
       text,
       approved: false // requires Manager approval
     };
-
     const updated: Order = {
       ...existing,
       kitchenNotes: [...(existing.kitchenNotes || []), newNote],
       updatedAt: new Date().toISOString()
     };
-
     setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Add Kitchen Note', `Kitchen note added to Order ${orderId}: "${text}" (Awaiting manager approval)`);
-    syncToFirestore('orders', orderId, updated);
+    await syncToFirestore('orders', orderId, updated);
   };
-
-  const approveKitchenNote = (orderId: string, noteId: string, approve: boolean) => {
+  const approveKitchenNote = async (orderId: string, noteId: string, approve: boolean) => {
     const existing = orders.find(o => o.id === orderId);
     if (!existing) return;
-
     const updatedNotes = (existing.kitchenNotes || []).map(note => {
       if (note.id !== noteId) return note;
-      return { ...note, approved: approve, rejected: !approve };
+      return {
+        ...note,
+        approved: approve,
+        rejected: !approve
+      };
     }).filter(note => approve ? true : false); // remove if rejected
-    
+
     const newEvent: TimelineEvent = {
       id: `ev-${Date.now()}`,
       time: new Date().toISOString(),
@@ -1869,54 +1329,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       desc: `Manager ${approve ? 'approved' : 'rejected'} a kitchen note`,
       actor: 'Manager'
     };
-
     const updated: Order = {
       ...existing,
       kitchenNotes: updatedNotes,
       updatedAt: new Date().toISOString(),
       timeline: [...(existing.timeline || []), newEvent]
     };
-
     setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Approve Kitchen Note', `Manager ${approve ? 'approved' : 'rejected'} kitchen note ${noteId} for Order ${orderId}`);
-    syncToFirestore('orders', orderId, updated);
+    await syncToFirestore('orders', orderId, updated);
   };
-
-  const addTip = (orderId: string, amount: number) => {
+  const addTip = async (orderId: string, amount: number) => {
     const existing = orders.find(o => o.id === orderId);
     if (!existing) return;
-
     const updated: Order = {
       ...existing,
       tip: (existing.tip || 0) + amount,
       total: parseFloat((existing.total + amount).toFixed(2)),
       updatedAt: new Date().toISOString(),
-      timeline: [...(existing.timeline || []), { id: `ev-${Date.now()}`, time: new Date().toISOString(), label: 'Tip Added', desc: `Recorded tip amount of ${amount}`, actor: 'Staff' }]
+      timeline: [...(existing.timeline || []), {
+        id: `ev-${Date.now()}`,
+        time: new Date().toISOString(),
+        label: 'Tip Added',
+        desc: `Recorded tip amount of ${amount}`,
+        actor: 'Staff'
+      }]
     };
-
     setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Add Tip', `Recorded tip of ${amount} for order: ${orderId}`);
-    syncToFirestore('orders', orderId, updated);
+    await syncToFirestore('orders', orderId, updated);
   };
-
-  const deliverTip = (orderId: string) => {
+  const deliverTip = async (orderId: string) => {
     const existing = orders.find(o => o.id === orderId);
     if (!existing) return;
-
     const updated: Order = {
       ...existing,
       tipStatus: 'delivered' as const,
       updatedAt: new Date().toISOString(),
-      timeline: [...(existing.timeline || []), { id: `ev-${Date.now()}`, time: new Date().toISOString(), label: 'Tip Delivered', desc: 'Tip payout delivered to staff', actor: 'Cashier' }]
+      timeline: [...(existing.timeline || []), {
+        id: `ev-${Date.now()}`,
+        time: new Date().toISOString(),
+        label: 'Tip Delivered',
+        desc: 'Tip payout delivered to staff',
+        actor: 'Cashier'
+      }]
     };
-
     setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Deliver Tip', `Tip delivered for order: ${orderId}`);
-    syncToFirestore('orders', orderId, updated);
+    await syncToFirestore('orders', orderId, updated);
   };
 
   // Staff
-  const addStaffMember = (memberData: Omit<Staff, 'id' | 'active'>) => {
+  const addStaffMember = async (memberData: Omit<Staff, 'id' | 'active'>) => {
     const id = `s-${Date.now()}`;
     const newStaff: Staff = {
       ...memberData,
@@ -1925,25 +1389,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     setStaff(prev => [...prev, newStaff]);
     addLog('Invite Staff', `Invited employee ${memberData.name} as ${memberData.role}.`);
-    syncToFirestore('users', id, newStaff);
+    await syncToFirestore('users', id, newStaff);
   };
-
   const toggleStaffStatus = (staffId: string) => {
-    setStaff(prev => prev.map(s => {
+    setStaff(prev => prev.map(async s => {
       if (s.id !== staffId) return s;
       const newState = !s.active;
       addLog('Toggle Staff Status', `Staff member ${s.name} ${newState ? 'activated' : 'deactivated'}.`);
-      const updated = { ...s, active: newState };
-      syncToFirestore('users', staffId, updated);
+      const updated = {
+        ...s,
+        active: newState
+      };
+      await syncToFirestore('users', staffId, updated);
       return updated;
     }));
   };
-
   const updateStaffPermissions = (staffId: string, permissions: string[]) => {
-    setStaff(prev => prev.map(s => {
+    setStaff(prev => prev.map(async s => {
       if (s.id !== staffId) return s;
-      const updated = { ...s, permissions };
-      syncToFirestore('users', staffId, updated);
+      const updated = {
+        ...s,
+        permissions
+      };
+      await syncToFirestore('users', staffId, updated);
       return updated;
     }));
     const found = staff.find(s => s.id === staffId);
@@ -1954,82 +1422,101 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Super Admin
   const toggleTenantStatus = (tenantId: string) => {
-    setTenants(prev => prev.map(t => {
+    setTenants(prev => prev.map(async t => {
       if (t.id !== tenantId) return t;
       const nextStatus = t.subscriptionStatus === 'active' ? 'suspended' : 'active';
       addLog('Platform Admin Override', `Tenant ${t.name} subscription status updated to: ${nextStatus}`);
-      const updated = { ...t, subscriptionStatus: nextStatus };
-      syncToFirestore('businesses', tenantId, updated);
+      const updated = {
+        ...t,
+        subscriptionStatus: nextStatus
+      };
+      await syncToFirestore('businesses', tenantId, updated);
       return updated;
     }));
   };
-
   const updateTenantPlan = (tenantId: string, plan: Tenant['subscriptionPlan']) => {
-    setTenants(prev => prev.map(t => {
+    setTenants(prev => prev.map(async t => {
       if (t.id !== tenantId) return t;
       addLog('Platform Admin Override', `Tenant ${t.name} subscription plan updated to: ${plan}`);
-      const updated = { ...t, subscriptionPlan: plan };
-      syncToFirestore('businesses', tenantId, updated);
+      const updated = {
+        ...t,
+        subscriptionPlan: plan
+      };
+      await syncToFirestore('businesses', tenantId, updated);
       return updated;
     }));
   };
-
   const requestTenantUpgrade = (tenantId: string, plan: Tenant['subscriptionPlan']) => {
-    setTenants(prev => prev.map(t => {
+    setTenants(prev => prev.map(async t => {
       if (t.id !== tenantId) return t;
       addLog('Subscription', `Tenant ${t.name} requested upgrade to: ${plan}. Status changed to pending_approval.`);
-      const updated = { ...t, subscriptionPlan: plan, subscriptionStatus: 'pending_approval' };
-      syncToFirestore('businesses', tenantId, updated);
+      const updated = {
+        ...t,
+        subscriptionPlan: plan,
+        subscriptionStatus: 'pending_approval'
+      };
+      await syncToFirestore('businesses', tenantId, updated);
       return updated;
     }));
   };
-
-  
   const updateTenantType = (tenantId: string, businessType: string) => {
-    setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, businessType } : t));
+    setTenants(prev => prev.map(t => t.id === tenantId ? {
+      ...t,
+      businessType
+    } : t));
   };
-
   const updateTenantCurrency = (tenantId: string, currency: string, currencySymbol: string) => {
-    setTenants(prev => prev.map(t => {
+    setTenants(prev => prev.map(async t => {
       if (t.id !== tenantId) return t;
       addLog('Settings Override', `Tenant ${t.name} currency updated to: ${currency} (${currencySymbol})`);
-      const updated = { ...t, currency, currencySymbol };
-      syncToFirestore('businesses', tenantId, updated);
+      const updated = {
+        ...t,
+        currency,
+        currencySymbol
+      };
+      await syncToFirestore('businesses', tenantId, updated);
       return updated;
     }));
   };
-
   const updateTenantProfile = (tenantId: string, logoUrl: string, bankAccount: string, mealSubscriptionDiscountPercent?: number) => {
-    setTenants(prev => prev.map(t => {
+    setTenants(prev => prev.map(async t => {
       if (t.id !== tenantId) return t;
       addLog('Settings Override', `Tenant ${t.name} logo and bank details updated.`);
-      const updated = { ...t, logoUrl, bankAccount, mealSubscriptionDiscountPercent };
-      syncToFirestore('businesses', tenantId, updated);
+      const updated = {
+        ...t,
+        logoUrl,
+        bankAccount,
+        mealSubscriptionDiscountPercent
+      };
+      await syncToFirestore('businesses', tenantId, updated);
       return updated;
     }));
   };
-
   const approveTenantStatus = (tenantId: string) => {
-    setTenants(prev => prev.map(t => {
+    setTenants(prev => prev.map(async t => {
       if (t.id !== tenantId) return t;
       addLog('Platform Admin Approval', `Business "${t.name}" registration request has been APPROVED.`);
-      const updated = { ...t, subscriptionStatus: 'active' };
-      syncToFirestore('businesses', tenantId, updated);
+      const updated = {
+        ...t,
+        subscriptionStatus: 'active'
+      };
+      await syncToFirestore('businesses', tenantId, updated);
       return updated;
     }));
   };
-
   const rejectTenantStatus = (tenantId: string) => {
-    setTenants(prev => prev.map(t => {
+    setTenants(prev => prev.map(async t => {
       if (t.id !== tenantId) return t;
       addLog('Platform Admin Approval', `Business "${t.name}" registration request has been REJECTED.`);
-      const updated = { ...t, subscriptionStatus: 'rejected' };
-      syncToFirestore('businesses', tenantId, updated);
+      const updated = {
+        ...t,
+        subscriptionStatus: 'rejected'
+      };
+      await syncToFirestore('businesses', tenantId, updated);
       return updated;
     }));
   };
-
-  const addAd = (adData: Omit<PlatformAd, 'id' | 'createdAt' | 'active'>) => {
+  const addAd = async (adData: Omit<PlatformAd, 'id' | 'createdAt' | 'active'>) => {
     const id = `ad-${Date.now()}`;
     const newAd: PlatformAd = {
       ...adData,
@@ -2039,20 +1526,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     setAds(prev => [newAd, ...prev]);
     addLog('Ad Operations', `Published platform ad: ${adData.title}`);
-    syncToFirestore('ads', id, newAd);
+    await syncToFirestore('ads', id, newAd);
   };
-
   const toggleAdStatus = (id: string) => {
-    setAds(prev => prev.map(ad => {
+    setAds(prev => prev.map(async ad => {
       if (ad.id !== id) return ad;
       const nextActive = !ad.active;
       addLog('Ad Operations', `Ad "${ad.title}" is now ${nextActive ? 'Active' : 'Paused'}`);
-      const updated = { ...ad, active: nextActive };
-      syncToFirestore('ads', id, updated);
+      const updated = {
+        ...ad,
+        active: nextActive
+      };
+      await syncToFirestore('ads', id, updated);
       return updated;
     }));
   };
-
   const deleteAd = (id: string) => {
     setAds(prev => {
       const ad = prev.find(a => a.id === id);
@@ -2063,21 +1551,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return prev.filter(a => a.id !== id);
     });
   };
-
-    const updatePlanTabs = (planId: string, enabledTabs: string[]) => {
-    setPricingPlans(prev => prev.map(p => p.id === planId ? { ...p, enabledTabs } : p));
+  const updatePlanTabs = (planId: string, enabledTabs: string[]) => {
+    setPricingPlans(prev => prev.map(p => p.id === planId ? {
+      ...p,
+      enabledTabs
+    } : p));
   };
   const updatePlanPrice = (planId: SubscriptionPlan, newPriceUSD: number, newPriceETB: number) => {
-    setPricingPlans(prev => prev.map(p => {
+    setPricingPlans(prev => prev.map(async p => {
       if (p.id !== planId) return p;
       addLog('Pricing Operations', `Updated ${p.name} price to USD ${newPriceUSD} / ETB ${newPriceETB}`);
-      const updated = { ...p, priceUSD: newPriceUSD, priceETB: newPriceETB };
-      syncToFirestore('pricing_plans', planId, updated);
+      const updated = {
+        ...p,
+        priceUSD: newPriceUSD,
+        priceETB: newPriceETB
+      };
+      await syncToFirestore('pricing_plans', planId, updated);
       return updated;
     }));
   };
-
-  const registerTenant = (data: {
+  const registerTenant = async (data: {
     name: string;
     slug: string;
     description: string;
@@ -2089,7 +1582,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const tenantId = `t-${Date.now()}`;
     const branchId = `b-${Date.now()}`;
     const ownerId = `s-${Date.now()}`;
-
     const newTenant: Tenant = {
       id: tenantId,
       name: data.name,
@@ -2106,17 +1598,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
       loyaltyPointsRatio: 0.05,
       loyaltyMinRedeemPoints: 10,
-      loyaltyRedeemValue: 1,
+      loyaltyRedeemValue: 1
     };
-
     const newBranch: Branch = {
       id: branchId,
       tenantId,
       name: 'Main Branch',
       address: 'Addis Ababa, Ethiopia',
-      phone: '+251 911 000 000',
+      phone: '+251 911 000 000'
     };
-
     const newStaff: Staff = {
       id: ownerId,
       name: data.ownerName,
@@ -2124,50 +1614,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       role: 'owner',
       tenantId,
       branchId,
-      active: true,
+      active: true
     };
-
     const catId1 = `cat-1-${Date.now()}`;
     const catId2 = `cat-2-${Date.now()}`;
 
     // Default categories
-    const newCategories = [
-      { id: catId1, tenantId, name: 'Specialties', orderNum: 1, icon: 'Utensils' },
-      { id: catId2, tenantId, name: 'Beverages', orderNum: 2, icon: 'Coffee' },
-    ];
+    const newCategories = [{
+      id: catId1,
+      tenantId,
+      name: 'Specialties',
+      orderNum: 1,
+      icon: 'Utensils'
+    }, {
+      id: catId2,
+      tenantId,
+      name: 'Beverages',
+      orderNum: 2,
+      icon: 'Coffee'
+    }];
 
     // Default menu items
-    const newMenuItemsList = [
-      {
-        id: `item-1-${Date.now()}`,
-        tenantId,
-        categoryId: catId1,
-        name: 'House Special Dish',
-        description: 'A delicious chef specialty signature dish crafted with premium locally sourced ingredients.',
-        price: data.currency === 'USD' ? 12.99 : 450,
-        photoUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=80',
-        allergenTags: [],
-        dietaryTags: ['Popular'],
-        isAvailable: true,
-        modifiers: [],
-        preparationStationId: ''
-      },
-      {
-        id: `item-2-${Date.now()}`,
-        tenantId,
-        categoryId: catId2,
-        name: 'Ethio-Macchiato / Coffee',
-        description: 'Authentic rich espresso topped with beautifully textured milk micro-foam.',
-        price: data.currency === 'USD' ? 2.50 : 80,
-        photoUrl: 'https://images.unsplash.com/photo-1577968897966-3d4325b36b61?w=500&auto=format&fit=crop&q=80',
-        allergenTags: ['Dairy'],
-        dietaryTags: ['Vegetarian'],
-        isAvailable: true,
-        modifiers: [],
-        preparationStationId: ''
-      }
-    ];
-
+    const newMenuItemsList = [{
+      id: `item-1-${Date.now()}`,
+      tenantId,
+      categoryId: catId1,
+      name: 'House Special Dish',
+      description: 'A delicious chef specialty signature dish crafted with premium locally sourced ingredients.',
+      price: data.currency === 'USD' ? 12.99 : 450,
+      photoUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=80',
+      allergenTags: [],
+      dietaryTags: ['Popular'],
+      isAvailable: true,
+      modifiers: [],
+      preparationStationId: ''
+    }, {
+      id: `item-2-${Date.now()}`,
+      tenantId,
+      categoryId: catId2,
+      name: 'Ethio-Macchiato / Coffee',
+      description: 'Authentic rich espresso topped with beautifully textured milk micro-foam.',
+      price: data.currency === 'USD' ? 2.50 : 80,
+      photoUrl: 'https://images.unsplash.com/photo-1577968897966-3d4325b36b61?w=500&auto=format&fit=crop&q=80',
+      allergenTags: ['Dairy'],
+      dietaryTags: ['Vegetarian'],
+      isAvailable: true,
+      modifiers: [],
+      preparationStationId: ''
+    }];
     setTenants(prev => [...prev, newTenant]);
     setBranches(prev => [...prev, newBranch]);
     setStaff(prev => [...prev, newStaff]);
@@ -2179,15 +1673,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       [tenantId]: newMenuItemsList
     }));
-
     addLog('Tenant Registration', `Registered new tenant: ${data.name} owned by ${data.ownerName}`);
 
     // Sync newly created entities to Firestore
-    syncToFirestore('businesses', tenantId, newTenant);
-    syncToFirestore('branches', branchId, newBranch);
-    syncToFirestore('users', ownerId, newStaff);
-    newCategories.forEach(cat => syncToFirestore('categories', cat.id, cat));
-    newMenuItemsList.forEach(item => syncToFirestore('menu_items', item.id, item));
+    await syncToFirestore('businesses', tenantId, newTenant);
+    await syncToFirestore('branches', branchId, newBranch);
+    await syncToFirestore('users', ownerId, newStaff);
+    newCategories.forEach(async cat => await syncToFirestore('categories', cat.id, cat));
+    newMenuItemsList.forEach(async item => await syncToFirestore('menu_items', item.id, item));
 
     // Set active values
     setActiveTenantId(tenantId);
@@ -2200,12 +1693,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       role: 'owner' as const,
       name: data.ownerName,
       tenantId,
-      branchId,
+      branchId
     };
     setCurrentUser(loggedUser);
   };
-
-  const signUpOwnerOnly = (name: string, email: string) => {
+  const signUpOwnerOnly = async (name: string, email: string) => {
     const cleanEmail = (email || '').toLowerCase().trim();
     // Check if they are already in the system
     const exists = staff.find(s => (s.email || '').toLowerCase().trim() === cleanEmail);
@@ -2213,44 +1705,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       login(cleanEmail);
       return;
     }
-
     const ownerId = `s-${Date.now()}`;
     const newStaff: Staff = {
       id: ownerId,
       name,
       email: cleanEmail,
       role: 'owner',
-      tenantId: '', // No business profile created yet!
+      tenantId: '',
+      // No business profile created yet!
       branchId: '',
-      active: true,
+      active: true
     };
-
     setStaff(prev => [...prev, newStaff]);
     addLog('Platform Owner Sign Up', `Owner signed up: ${name} (${cleanEmail}). Business profile pending creation.`);
-    syncToFirestore('users', ownerId, newStaff);
-
+    await syncToFirestore('users', ownerId, newStaff);
     const loggedUser = {
       id: ownerId,
       email: cleanEmail,
       role: 'owner' as const,
       name,
       tenantId: '',
-      branchId: '',
+      branchId: ''
     };
     setCurrentUser(loggedUser);
   };
-
-  const registerUser = async (
-    userParam: { uid: string; email: string } | string,
-    nameParam?: string,
-    roleParam: 'customer' | 'owner' = 'owner',
-    uidParam?: string
-  ) => {
+  const registerUser = async (userParam: {
+    uid: string;
+    email: string;
+  } | string, nameParam?: string, roleParam: 'customer' | 'owner' = 'owner', uidParam?: string) => {
     let email = '';
     let name = '';
     let role: 'customer' | 'owner' = 'owner';
     let uid = '';
-
     if (typeof userParam === 'string') {
       email = userParam;
       name = nameParam || '';
@@ -2262,13 +1748,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       name = nameParam || '';
       role = roleParam;
     }
-
     const cleanEmail = email.toLowerCase().trim();
     if (!cleanEmail) throw new Error("Email address is required for registration.");
-
     const userUid = uid || `uid-${Date.now()}`;
     const createdAt = new Date().toISOString();
-
     if (role === 'customer') {
       const customerProfile = {
         id: userUid,
@@ -2284,22 +1767,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createdAt,
         updatedAt: createdAt
       };
-
       try {
-        const { getDB } = await import('../lib/firebase');
+        const {
+          getDB
+        } = await import('../lib/firebase');
         const db = getDB();
-        
         if (!db) {
           throw new Error("Firestore database instance (db) is null. Initialization failed.");
         }
-        
         console.log("Starting Firestore batch write for customer signup...");
-        const { doc, writeBatch } = await import('firebase/firestore');
+        const {
+          doc,
+          writeBatch
+        } = await import('firebase/firestore');
         const batch = writeBatch(db);
-        
         console.log(`Writing users/${userUid}`);
-        batch.set(doc(db, 'users', userUid), customerProfile, { merge: true });
-        
+        batch.set(doc(db, 'users', userUid), customerProfile, {
+          merge: true
+        });
         console.log("Committing batch to Firestore...");
         await batch.commit();
         console.log("Batch commit successful.");
@@ -2307,14 +1792,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.error("FATAL: Batch write failed for customer signup:", err);
         throw new Error(`Failed to create customer profile in database: ${err.message || err}`);
       }
-
-      setCustomerProfiles(prev => ({ ...prev, [cleanEmail]: customerProfile }));
+      setCustomerProfiles(prev => ({
+        ...prev,
+        [cleanEmail]: customerProfile
+      }));
       addLog('Customer Signup', `Customer registered: ${name} (${cleanEmail})`);
-
     } else if (role === 'owner') {
       const tenantId = `tenant-${userUid}`;
       const branchId = `branch-${userUid}`;
-
       const userProfile = {
         id: userUid,
         uid: userUid,
@@ -2326,7 +1811,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createdAt,
         updatedAt: createdAt
       };
-
       const businessDoc = {
         id: tenantId,
         name: `${name || 'Restaurant'}'s Business`,
@@ -2342,7 +1826,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createdAt,
         updatedAt: createdAt
       };
-
       const membershipDoc = {
         id: `mem-${userUid}`,
         userId: userUid,
@@ -2352,7 +1835,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         status: 'active',
         createdAt
       };
-
       const roleDoc = {
         id: `role-${userUid}`,
         userId: userUid,
@@ -2361,24 +1843,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         title: 'Business Owner',
         createdAt
       };
-
       const permissionDoc = {
         id: `perm-${userUid}`,
         userId: userUid,
         tenantId,
-        permissions: [
-          'all',
-          'manage_business',
-          'manage_menu',
-          'manage_orders',
-          'manage_staff',
-          'manage_tables',
-          'manage_finances',
-          'view_reports'
-        ],
+        permissions: ['all', 'manage_business', 'manage_menu', 'manage_orders', 'manage_staff', 'manage_tables', 'manage_finances', 'view_reports'],
         createdAt
       };
-
       const branchDoc = {
         id: branchId,
         tenantId,
@@ -2386,7 +1857,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         isMain: true,
         createdAt
       };
-
       const staffDoc = {
         id: userUid,
         uid: userUid,
@@ -2398,43 +1868,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         active: true,
         createdAt
       };
-
       try {
-        const { getDB } = await import('../lib/firebase');
+        const {
+          getDB
+        } = await import('../lib/firebase');
         const db = getDB();
-        
         if (!db) {
           throw new Error("Firestore database instance (db) is null. Initialization failed.");
         }
-        
         console.log("Starting Firestore batch write for owner signup...");
-        const { doc, writeBatch } = await import('firebase/firestore');
+        const {
+          doc,
+          writeBatch
+        } = await import('firebase/firestore');
         const batch = writeBatch(db);
-        
         console.log(`Writing users/${userUid}`);
-        batch.set(doc(db, 'users', userUid), userProfile, { merge: true });
-        
+        batch.set(doc(db, 'users', userUid), userProfile, {
+          merge: true
+        });
         console.log(`Writing businesses/${tenantId}`);
-        batch.set(doc(db, 'businesses', tenantId), businessDoc, { merge: true });
-        
+        batch.set(doc(db, 'businesses', tenantId), businessDoc, {
+          merge: true
+        });
         console.log(`Writing tenants/${tenantId}`);
-        batch.set(doc(db, 'tenants', tenantId), businessDoc, { merge: true });
-        
+        batch.set(doc(db, 'tenants', tenantId), businessDoc, {
+          merge: true
+        });
         console.log(`Writing memberships/${membershipDoc.id}`);
-        batch.set(doc(db, 'memberships', membershipDoc.id), membershipDoc, { merge: true });
-        
+        batch.set(doc(db, 'memberships', membershipDoc.id), membershipDoc, {
+          merge: true
+        });
         console.log(`Writing roles/${roleDoc.id}`);
-        batch.set(doc(db, 'roles', roleDoc.id), roleDoc, { merge: true });
-        
+        batch.set(doc(db, 'roles', roleDoc.id), roleDoc, {
+          merge: true
+        });
         console.log(`Writing permissions/${permissionDoc.id}`);
-        batch.set(doc(db, 'permissions', permissionDoc.id), permissionDoc, { merge: true });
-        
+        batch.set(doc(db, 'permissions', permissionDoc.id), permissionDoc, {
+          merge: true
+        });
         console.log(`Writing branches/${branchId}`);
-        batch.set(doc(db, 'branches', branchId), branchDoc, { merge: true });
-        
+        batch.set(doc(db, 'branches', branchId), branchDoc, {
+          merge: true
+        });
         console.log(`Writing staff/${userUid}`);
-        batch.set(doc(db, 'staff', userUid), staffDoc, { merge: true });
-        
+        batch.set(doc(db, 'staff', userUid), staffDoc, {
+          merge: true
+        });
         console.log("Committing batch to Firestore...");
         await batch.commit();
         console.log("Batch commit successful.");
@@ -2442,16 +1921,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.error("FATAL: Batch write failed for owner signup:", err);
         throw new Error(`Failed to create business profile in database: ${err.message || err}`);
       }
-
       setTenants(prev => [...prev.filter(t => t.id !== tenantId), businessDoc as any]);
       setBranches(prev => [...prev.filter(b => b.id !== branchId), branchDoc as any]);
       setStaff(prev => [...prev.filter(s => s.id !== userUid), staffDoc as any]);
-
       addLog('Owner Signup', `Owner registered: ${name} (${cleanEmail}), Tenant: ${tenantId}`);
     }
   };
-
-  const registerCustomer = (name: string, email: string, phone: string) => {
+  const registerCustomer = async (name: string, email: string, phone: string) => {
     const cleanEmail = (email || '').toLowerCase().trim();
     const id = `cust-${Date.now()}`;
     const newProfile = {
@@ -2468,8 +1944,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       [cleanEmail]: newProfile
     }));
-    syncToFirestore('users', id, newProfile);
-    
+    await syncToFirestore('users', id, newProfile);
     const loggedUser = {
       id,
       email: cleanEmail,
@@ -2479,60 +1954,72 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       branchId: ''
     };
     setCurrentUser(loggedUser);
-    localStorage.setItem('mf_customer_logged_email', cleanEmail);
     addLog('Customer Signup', `Customer registered: ${name} (${cleanEmail})`);
   };
 
   // Sync to Firestore Helper (dynamic, safe imports)
   const syncToFirestore = async (collectionName: string, docId: string, data: any) => {
     try {
-      const { getDB } = await import('../lib/firebase');
+      const {
+        getDB
+      } = await import('../lib/firebase');
       const db = getDB();
       if (!db) throw new Error("Firestore DB instance is null");
-      
-      const { doc, setDoc } = await import('firebase/firestore');
-      await setDoc(doc(db, collectionName, docId), data, { merge: true });
+      const {
+        doc,
+        setDoc
+      } = await import('firebase/firestore');
+      await setDoc(doc(db, collectionName, docId), data, {
+        merge: true
+      });
     } catch (e: any) {
       console.error(`FATAL: Firestore sync failed for ${collectionName}/${docId}:`, e);
       throw e;
     }
   };
-
   const deleteFromFirestore = async (collectionName: string, docId: string) => {
     try {
-      const { getDB } = await import('../lib/firebase');
+      const {
+        getDB
+      } = await import('../lib/firebase');
       const db = getDB();
       if (!db) throw new Error("Firestore DB instance is null");
-      
-      const { doc, deleteDoc } = await import('firebase/firestore');
+      const {
+        doc,
+        deleteDoc
+      } = await import('firebase/firestore');
       await deleteDoc(doc(db, collectionName, docId));
     } catch (e: any) {
       console.error(`FATAL: Firestore delete failed for ${collectionName}/${docId}:`, e);
       throw e;
     }
   };
-
-  const updatePaymentMethodConfig = (tenantId: string, configs: PaymentMethodConfig[]) => {
+  const updatePaymentMethodConfig = async (tenantId: string, configs: PaymentMethodConfig[]) => {
     setPaymentMethodsConfigs(prev => ({
       ...prev,
       [tenantId]: configs
     }));
     addLog('Update Payment Config', `Updated payment methods configurations for tenant ${tenantId}.`);
-    syncToFirestore('businesses', tenantId, { paymentMethods: configs });
+    await syncToFirestore('businesses', tenantId, {
+      paymentMethods: configs
+    });
   };
-
-  const updateLoyaltyConfig = (tenantId: string, config: LoyaltyConfig) => {
+  const updateLoyaltyConfig = async (tenantId: string, config: LoyaltyConfig) => {
     setLoyaltyConfigs(prev => ({
       ...prev,
       [tenantId]: config
     }));
     addLog('Update Loyalty Config', `Updated loyalty program settings for tenant ${tenantId}.`);
-    syncToFirestore('businesses', tenantId, { loyaltyConfig: config });
+    await syncToFirestore('businesses', tenantId, {
+      loyaltyConfig: config
+    });
   };
-
-  const addMealSubscriptionPackage = (plan: Omit<MealSubscriptionPackage, 'id'>) => {
+  const addMealSubscriptionPackage = async (plan: Omit<MealSubscriptionPackage, 'id'>) => {
     const id = `sub-plan-${Date.now()}`;
-    const newPlan: MealSubscriptionPackage = { ...plan, id };
+    const newPlan: MealSubscriptionPackage = {
+      ...plan,
+      id
+    };
     setMealSubscriptionPackages(prev => {
       const list = prev[plan.tenantId] || [];
       return {
@@ -2541,10 +2028,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     });
     addLog('Create Meal Subscription Plan', `Created meal subscription plan: ${plan.name}`);
-    syncToFirestore('meal_subscription_plans', id, newPlan);
+    await syncToFirestore('meal_subscription_plans', id, newPlan);
   };
-
-  const updateMealSubscriptionPackage = (plan: MealSubscriptionPackage) => {
+  const updateMealSubscriptionPackage = async (plan: MealSubscriptionPackage) => {
     setMealSubscriptionPackages(prev => {
       const list = prev[plan.tenantId] || [];
       return {
@@ -2553,9 +2039,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     });
     addLog('Update Meal Subscription Plan', `Updated meal subscription plan: ${plan.name}`);
-    syncToFirestore('meal_subscription_plans', plan.id, plan);
+    await syncToFirestore('meal_subscription_plans', plan.id, plan);
   };
-
   const deleteMealSubscriptionPackage = (tenantId: string, planId: string) => {
     setMealSubscriptionPackages(prev => {
       const list = prev[tenantId] || [];
@@ -2567,34 +2052,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addLog('Delete Meal Subscription Plan', `Deleted meal subscription plan ID: ${planId}`);
     deleteFromFirestore('meal_subscription_plans', planId);
   };
-
-  const subscribeToMealPlan = (subData: Omit<CustomerMealSubscription, 'id'>) => {
+  const subscribeToMealPlan = async (subData: Omit<CustomerMealSubscription, 'id'>) => {
     const id = `cust-sub-${Date.now()}`;
-    const newSub: CustomerMealSubscription = { ...subData, id };
+    const newSub: CustomerMealSubscription = {
+      ...subData,
+      id
+    };
     setCustomerSubscriptions(prev => [...prev, newSub]);
     addLog('Meal Plan Subscription', `Customer subscribed to meal plan ID: ${subData.packageId}`);
-    syncToFirestore('customer_subscriptions', id, newSub);
+    await syncToFirestore('customer_subscriptions', id, newSub);
   };
-
   const updateCustomerMealSubscription = (subId: string, updates: Partial<CustomerMealSubscription>) => {
-    setCustomerSubscriptions(prev => {
+    setCustomerSubscriptions(async prev => {
       const existing = prev.find(s => s.id === subId);
       if (!existing) return prev;
-      const updated = { ...existing, ...updates };
-      syncToFirestore('customer_subscriptions', subId, updated);
+      const updated = {
+        ...existing,
+        ...updates
+      };
+      await syncToFirestore('customer_subscriptions', subId, updated);
       return prev.map(s => s.id === subId ? updated : s);
     });
   };
-
-  const logMealService = (subscriptionId: string) => {
+  const logMealService = async (subscriptionId: string) => {
     const existing = customerSubscriptions.find(sub => sub.id === subscriptionId);
     if (!existing) return;
-
     const todayUsed = existing.mealsUsedToday + 1;
     const weekUsed = existing.mealsUsedThisWeek + 1;
     const totalUsed = existing.mealsUsedTotal + 1;
     const remaining = Math.max(0, existing.mealsRemainingTotal - 1);
-
     const updated: CustomerMealSubscription = {
       ...existing,
       mealsUsedToday: todayUsed,
@@ -2602,14 +2088,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       mealsUsedTotal: totalUsed,
       mealsRemainingTotal: remaining
     };
-
     setCustomerSubscriptions(prev => prev.map(sub => sub.id === subscriptionId ? updated : sub));
     addLog('Log Subscription Meal Served', `Served subscription meal on sub ${subscriptionId}`);
-    syncToFirestore('customer_subscriptions', subscriptionId, updated);
+    await syncToFirestore('customer_subscriptions', subscriptionId, updated);
   };
-
   const refundOrder = (orderId: string, amount: number, reason: string, actor: string) => {
-    setOrders(prev => prev.map(o => {
+    setOrders(prev => prev.map(async o => {
       if (o.id !== orderId) return o;
       const refundDetails: RefundDetails = {
         refundAmount: amount,
@@ -2617,7 +2101,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         refundDate: new Date().toISOString(),
         refundedBy: actor
       };
-      
       const newEvent: TimelineEvent = {
         id: `ev-${Date.now()}`,
         time: new Date().toISOString(),
@@ -2625,7 +2108,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         desc: `Refunded amount: ${amount} | Reason: ${reason} | Refunded by: ${actor}`,
         actor
       };
-
       const updatedOrder = {
         ...o,
         status: 'refunded' as const,
@@ -2633,15 +2115,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         refundDetails,
         timeline: [...(o.timeline || []), newEvent]
       };
-      
-      syncToFirestore('orders', orderId, updatedOrder);
+      await syncToFirestore('orders', orderId, updatedOrder);
       return updatedOrder;
     }));
     addLog('Order Refunded', `Order ${orderId} refunded for amount: ${amount}. Reason: ${reason}`);
   };
-
   const updateCustomerProfile = (email: string, profileData: Partial<CustomerProfile>) => {
-    setCustomerProfiles(prev => {
+    setCustomerProfiles(async prev => {
       const current = prev[email] || {
         id: `cust-${Date.now()}`,
         email,
@@ -2652,17 +2132,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         loyaltyPoints: 0,
         loyaltyHistory: []
       };
-      const updated = { ...current, ...profileData };
-      syncToFirestore('users', updated.id, updated);
+      const updated = {
+        ...current,
+        ...profileData
+      };
+      await syncToFirestore('users', updated.id, updated);
       return {
         ...prev,
         [email]: updated
       };
     });
   };
-
   const addFavoriteItem = (email: string, menuItemId: string) => {
-    setCustomerProfiles(prev => {
+    setCustomerProfiles(async prev => {
       const current = prev[email] || {
         id: `cust-${Date.now()}`,
         email,
@@ -2677,32 +2159,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ...current,
         savedFavorites: [...new Set([...current.savedFavorites, menuItemId])]
       };
-      syncToFirestore('users', updated.id, updated);
+      await syncToFirestore('users', updated.id, updated);
       return {
         ...prev,
         [email]: updated
       };
     });
   };
-
   const removeFavoriteItem = (email: string, menuItemId: string) => {
-    setCustomerProfiles(prev => {
+    setCustomerProfiles(async prev => {
       const current = prev[email];
       if (!current) return prev;
       const updated = {
         ...current,
         savedFavorites: current.savedFavorites.filter(id => id !== menuItemId)
       };
-      syncToFirestore('users', updated.id, updated);
+      await syncToFirestore('users', updated.id, updated);
       return {
         ...prev,
         [email]: updated
       };
     });
   };
-
   const addSavedAddress = (email: string, name: string, address: string) => {
-    setCustomerProfiles(prev => {
+    setCustomerProfiles(async prev => {
       const current = prev[email] || {
         id: `cust-${Date.now()}`,
         email,
@@ -2713,39 +2193,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         loyaltyPoints: 0,
         loyaltyHistory: []
       };
-      const newAddress = { id: `addr-${Date.now()}`, name, address };
+      const newAddress = {
+        id: `addr-${Date.now()}`,
+        name,
+        address
+      };
       const updated = {
         ...current,
         savedAddresses: [...current.savedAddresses, newAddress]
       };
-      syncToFirestore('users', updated.id, updated);
+      await syncToFirestore('users', updated.id, updated);
       return {
         ...prev,
         [email]: updated
       };
     });
   };
-
   const removeSavedAddress = (email: string, addressId: string) => {
-    setCustomerProfiles(prev => {
+    setCustomerProfiles(async prev => {
       const current = prev[email];
       if (!current) return prev;
       const updated = {
         ...current,
         savedAddresses: current.savedAddresses.filter(a => a.id !== addressId)
       };
-      syncToFirestore('users', updated.id, updated);
+      await syncToFirestore('users', updated.id, updated);
       return {
         ...prev,
         [email]: updated
       };
     });
   };
-
   const updateTipStatus = (orderId: string, status: 'pending' | 'delivered' | 'accepted') => {
-    setOrders(prev => prev.map(o => {
+    setOrders(prev => prev.map(async o => {
       if (o.id !== orderId) return o;
-      
       const newEvent: TimelineEvent = {
         id: `ev-${Date.now()}`,
         time: new Date().toISOString(),
@@ -2753,13 +2234,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         desc: status === 'delivered' ? 'Tip has been delivered to staff by Cashier' : 'Staff accepted the tip payout',
         actor: status === 'delivered' ? 'Cashier' : 'Waiter'
       };
-
       const updated = {
         ...o,
         tipStatus: status,
         timeline: [...(o.timeline || []), newEvent]
       };
-      syncToFirestore('orders', orderId, updated);
+      await syncToFirestore('orders', orderId, updated);
       return updated;
     }));
     addLog('Update Tip Status', `Order ${orderId} tip status updated to: ${status}`);
@@ -2772,7 +2252,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...reservation,
       id,
       status: 'pending',
-      timeline: [{ id: `te-${Date.now()}`, time: new Date().toISOString(), label: 'Created', desc: 'Reservation requested' }],
+      timeline: [{
+        id: `te-${Date.now()}`,
+        time: new Date().toISOString(),
+        label: 'Created',
+        desc: 'Reservation requested'
+      }],
       createdAt: new Date().toISOString()
     };
     setReservations(prev => [...prev, newReservation]);
@@ -2783,7 +2268,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addLog('Create Reservation Error', `Failed to create reservation: ${err.message || err}`);
     }
   };
-
   const updateReservationStatus = async (id: string, status: Reservation['status'], tableId?: string) => {
     setReservations(prev => prev.map(res => {
       if (res.id !== id) return res;
@@ -2791,24 +2275,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ...res,
         status,
         tableId: tableId || res.tableId,
-        timeline: [
-          ...res.timeline,
-          { id: `te-${Date.now()}`, time: new Date().toISOString(), label: `Status updated`, desc: `Reservation ${status}` }
-        ]
+        timeline: [...res.timeline, {
+          id: `te-${Date.now()}`,
+          time: new Date().toISOString(),
+          label: `Status updated`,
+          desc: `Reservation ${status}`
+        }]
       };
     }));
-
     try {
       const res = reservations.find(r => r.id === id);
       if (res) {
-        const updated = { 
-          ...res, 
-          status, 
+        const updated = {
+          ...res,
+          status,
           tableId: tableId || res.tableId,
-          timeline: [
-            ...res.timeline,
-            { id: `te-${Date.now()}`, time: new Date().toISOString(), label: `Status updated`, desc: `Reservation ${status}` }
-          ]
+          timeline: [...res.timeline, {
+            id: `te-${Date.now()}`,
+            time: new Date().toISOString(),
+            label: `Status updated`,
+            desc: `Reservation ${status}`
+          }]
         };
         await syncToFirestore('reservations', id, updated);
       }
@@ -2817,10 +2304,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addLog('Update Reservation Status Error', `Failed to update reservation status: ${err.message || err}`);
     }
   };
-
   const addIngredient = async (ingredient: Omit<Ingredient, 'id'>) => {
     const id = `ing-${Date.now()}`;
-    const newIngredient = { ...ingredient, id };
+    const newIngredient = {
+      ...ingredient,
+      id
+    };
     setIngredients(prev => [...prev, newIngredient]);
     try {
       await syncToFirestore('ingredients', id, newIngredient);
@@ -2829,7 +2318,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addLog('Add Ingredient Error', `Failed to add ingredient: ${err.message || err}`);
     }
   };
-
   const updateIngredient = async (ingredient: Ingredient) => {
     setIngredients(prev => prev.map(ing => ing.id === ingredient.id ? ingredient : ing));
     try {
@@ -2839,26 +2327,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addLog('Update Ingredient Error', `Failed to update ingredient: ${err.message || err}`);
     }
   };
-
   const addStockMovement = async (movement: Omit<StockMovement, 'id' | 'date'>) => {
     const id = `sm-${Date.now()}`;
-    const newMovement: StockMovement = { ...movement, id, date: new Date().toISOString() };
+    const newMovement: StockMovement = {
+      ...movement,
+      id,
+      date: new Date().toISOString()
+    };
     setStockMovements(prev => [...prev, newMovement]);
 
     // Update ingredient stock locally
-    setIngredients(prev => prev.map(ing => {
+    setIngredients(prev => prev.map(async ing => {
       if (ing.id !== movement.ingredientId) return ing;
       let newStock = ing.stockQuantity;
-      if (movement.type === 'in') newStock += movement.quantity;
-      else if (movement.type === 'out' || movement.type === 'waste') newStock -= movement.quantity;
-      else if (movement.type === 'adjustment') newStock = movement.quantity;
-      
-      const updatedIngredient = { ...ing, stockQuantity: newStock };
+      if (movement.type === 'in') newStock += movement.quantity;else if (movement.type === 'out' || movement.type === 'waste') newStock -= movement.quantity;else if (movement.type === 'adjustment') newStock = movement.quantity;
+      const updatedIngredient = {
+        ...ing,
+        stockQuantity: newStock
+      };
       // Sync the updated ingredient to Firestore in the background
-      syncToFirestore('ingredients', ing.id, updatedIngredient);
+      await syncToFirestore('ingredients', ing.id, updatedIngredient);
       return updatedIngredient;
     }));
-
     try {
       await syncToFirestore('stock_movements', id, newMovement);
       addLog('Stock Movement Processed', `Recorded ${movement.type} movement of ${movement.quantity} units for ingredient ID ${movement.ingredientId}.`);
@@ -2866,20 +2356,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addLog('Stock Movement Error', `Failed to log stock movement: ${err.message || err}`);
     }
   };
-
   const markNotificationRead = async (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    setNotifications(prev => prev.map(n => n.id === id ? {
+      ...n,
+      read: true
+    } : n));
     try {
       const notif = notifications.find(n => n.id === id);
       if (notif) {
-        const updated = { ...notif, read: true };
+        const updated = {
+          ...notif,
+          read: true
+        };
         await syncToFirestore('notifications', id, updated);
       }
     } catch (err: any) {
       console.error("Failed to mark notification read:", err);
     }
   };
-
   const deleteNotification = async (id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
     try {
@@ -2888,10 +2382,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to delete notification:", err);
     }
   };
-
   const addNotification = async (notification: Omit<DinexNotification, 'id' | 'createdAt' | 'read'>) => {
     const id = `notif-${Date.now()}`;
-    const newNotif = { ...notification, id, read: false, createdAt: new Date().toISOString() };
+    const newNotif = {
+      ...notification,
+      id,
+      read: false,
+      createdAt: new Date().toISOString()
+    };
     setNotifications(prev => [newNotif, ...prev]);
     try {
       await syncToFirestore('notifications', id, newNotif);
@@ -2899,10 +2397,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to add notification:", err);
     }
   };
-
   const installExtension = async (tenantId: string, extensionId: string) => {
     const id = `${tenantId}_${extensionId}`;
-    const newInstalled = { id: extensionId, tenantId, installedAt: new Date().toISOString(), status: 'active' as const };
+    const newInstalled = {
+      id: extensionId,
+      tenantId,
+      installedAt: new Date().toISOString(),
+      status: 'active' as const
+    };
     setInstalledExtensions(prev => [...prev, newInstalled]);
     try {
       await syncToFirestore('installed_extensions', id, newInstalled);
@@ -2911,7 +2413,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addLog('Install Extension Error', `Failed to install extension: ${err.message || err}`);
     }
   };
-
   const uninstallExtension = async (tenantId: string, extensionId: string) => {
     const id = `${tenantId}_${extensionId}`;
     setInstalledExtensions(prev => prev.filter(inst => !(inst.tenantId === tenantId && inst.id === extensionId)));
@@ -2922,9 +2423,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addLog('Uninstall Extension Error', `Failed to uninstall extension: ${err.message || err}`);
     }
   };
-
   const updateLandingPageConfig = async (settings: Partial<LandingPageConfig>) => {
-    const updated = { ...landingPageConfig, ...settings };
+    const updated = {
+      ...landingPageConfig,
+      ...settings
+    };
     setLandingPageConfig(updated);
     try {
       await syncToFirestore('landing_page_settings', 'global', updated);
@@ -2934,9 +2437,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addLog('Update Landing Page Settings Error', `Failed to update landing page settings: ${err.message || err}`);
     }
   };
-
   const updateGlobalSettings = async (settings: Partial<GlobalSettings>) => {
-    const updated = { ...globalSettings, ...settings };
+    const updated = {
+      ...globalSettings,
+      ...settings
+    };
     setGlobalSettings(updated);
     try {
       await syncToFirestore('system_settings', 'global', updated);
@@ -2945,135 +2450,125 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addLog('Update Global Settings Error', `Failed to update global settings: ${err.message || err}`);
     }
   };
-
-  return (
-    <AppContext.Provider value={{
-      tenants,
-      branches,
-      stations,
-      categories,
-      menuItems,
-      tables,
-      orders,
-      staff,
-      logs,
-      currentUser,
-      activeTenantId,
-      activeBranchId,
-      currentLanguage,
-      registerUser,
-      login,
-      logout,
-      setActiveTenantId,
-      setActiveBranchId,
-      setLanguage,
-      addCategory,
-      updateCategory,
-      deleteCategory,
-      addMenuItem,
-      updateMenuItem,
-      deleteMenuItem,
-      toggleMenuItemAvailability,
-      addTable,
-      updateTableStatus,
-      addStation,
-      placeOrder,
-      updateOrderStatus,
-      assignDelivery,
-      acceptDeliveryFee,
-      updateOrderItemStatus,
-      reportOrderItemIssue,
-      resolveOrderItemIssue,
-      processPayment,
-      rateAndFeedback,
-      cancelOrder,
-      verifyAdvancePayment,
-      addKitchenNote,
-      approveKitchenNote,
-      addTip,
-      deliverTip,
-      addStaffMember,
-      toggleStaffStatus,
-      updateStaffPermissions,
-      toggleTenantStatus,
-      updateTenantPlan,
-      subscriptionRequests,
-      superAdminPaymentInfo,
-      setSuperAdminPaymentInfo,
-      requestSubscriptionUpgrade,
-      approveSubscriptionRequest,
-      rejectSubscriptionRequest,
-      requestTenantUpgrade,
-      updateTenantCurrency,
-      updateTenantType,
-      updateTenantProfile,
-      approveTenantStatus,
-      rejectTenantStatus,
-      ads,
-      addAd,
-      toggleAdStatus,
-      deleteAd,
-      pricingPlans,
-      updatePlanPrice,
-      updatePlanTabs,
-      registerTenant,
-      signUpOwnerOnly,
-      registerCustomer,
-      currentView,
-      setCurrentView,
-      addLog,
-      
-      paymentMethodsConfigs,
-      updatePaymentMethodConfig,
-      loyaltyConfigs,
-      updateLoyaltyConfig,
-      mealSubscriptionPlans,
-      customerSubscriptions,
-      addMealSubscriptionPackage,
-      updateMealSubscriptionPackage,
-      deleteMealSubscriptionPackage,
-      subscribeToMealPlan,
-      updateCustomerMealSubscription,
-      logMealService,
-      refundOrder,
-      customerProfiles,
-      updateCustomerProfile,
-      addFavoriteItem,
-      removeFavoriteItem,
-      addSavedAddress,
-      removeSavedAddress,
-      updateTipStatus,
-
-      reservations,
-      addReservation,
-      updateReservationStatus,
-
-      ingredients,
-      addIngredient,
-      updateIngredient,
-      stockMovements,
-      addStockMovement,
-
-      notifications,
-      markNotificationRead,
-      deleteNotification,
-      addNotification,
-
-      marketplaceExtensions,
-      installedExtensions,
-      installExtension,
-      uninstallExtension,
-
-      globalSettings,
-      updateGlobalSettings,
-      landingPageConfig,
-      updateLandingPageConfig
-    }}>
+  return <AppContext.Provider value={{
+    tenants,
+    branches,
+    stations,
+    categories,
+    menuItems,
+    tables,
+    orders,
+    staff,
+    logs,
+    currentUser,
+    activeTenantId,
+    activeBranchId,
+    currentLanguage,
+    registerUser,
+    login,
+    logout,
+    setActiveTenantId,
+    setActiveBranchId,
+    setLanguage,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    addMenuItem,
+    updateMenuItem,
+    deleteMenuItem,
+    toggleMenuItemAvailability,
+    addTable,
+    updateTableStatus,
+    addStation,
+    placeOrder,
+    updateOrderStatus,
+    assignDelivery,
+    acceptDeliveryFee,
+    updateOrderItemStatus,
+    reportOrderItemIssue,
+    resolveOrderItemIssue,
+    processPayment,
+    rateAndFeedback,
+    cancelOrder,
+    verifyAdvancePayment,
+    addKitchenNote,
+    approveKitchenNote,
+    addTip,
+    deliverTip,
+    addStaffMember,
+    toggleStaffStatus,
+    updateStaffPermissions,
+    toggleTenantStatus,
+    updateTenantPlan,
+    subscriptionRequests,
+    superAdminPaymentInfo,
+    setSuperAdminPaymentInfo,
+    requestSubscriptionUpgrade,
+    approveSubscriptionRequest,
+    rejectSubscriptionRequest,
+    requestTenantUpgrade,
+    updateTenantCurrency,
+    updateTenantType,
+    updateTenantProfile,
+    approveTenantStatus,
+    rejectTenantStatus,
+    ads,
+    addAd,
+    toggleAdStatus,
+    deleteAd,
+    pricingPlans,
+    updatePlanPrice,
+    updatePlanTabs,
+    registerTenant,
+    signUpOwnerOnly,
+    registerCustomer,
+    currentView,
+    setCurrentView,
+    addLog,
+    paymentMethodsConfigs,
+    updatePaymentMethodConfig,
+    loyaltyConfigs,
+    updateLoyaltyConfig,
+    mealSubscriptionPlans,
+    customerSubscriptions,
+    addMealSubscriptionPackage,
+    updateMealSubscriptionPackage,
+    deleteMealSubscriptionPackage,
+    subscribeToMealPlan,
+    updateCustomerMealSubscription,
+    logMealService,
+    refundOrder,
+    customerProfiles,
+    updateCustomerProfile,
+    addFavoriteItem,
+    removeFavoriteItem,
+    addSavedAddress,
+    removeSavedAddress,
+    updateTipStatus,
+    reservations,
+    addReservation,
+    updateReservationStatus,
+    ingredients,
+    addIngredient,
+    updateIngredient,
+    stockMovements,
+    addStockMovement,
+    notifications,
+    markNotificationRead,
+    deleteNotification,
+    addNotification,
+    marketplaceExtensions,
+    installedExtensions,
+    installExtension,
+    uninstallExtension,
+    globalSettings,
+    updateGlobalSettings,
+    landingPageConfig,
+    updateLandingPageConfig
+  }}>
       {children}
-    </AppContext.Provider>
-  );
+    </AppContext.Provider>;
 }
-
 export function useApp() {
   const context = useContext(AppContext);
   if (context === undefined) {

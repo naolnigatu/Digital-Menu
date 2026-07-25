@@ -137,19 +137,19 @@ export default function SuperAdminView() {
   const { globalSettings, updateGlobalSettings } = useApp();
   const [globalTaxRate, setGlobalTaxRate] = useState(15);
   const [supportEmail, setSupportEmail] = useState('naolnigatu2025@gmail.com');
-  const [maintenanceMode, setMaintenanceMode] = useState(globalSettings.maintenanceMode);
+  const [maintenanceMode, setMaintenanceMode] = useState(globalSettings?.maintenanceMode);
   const [usdEtbRate, setUsdEtbRate] = useState(115);
   const [isSavingGlobalSettings, setIsSavingGlobalSettings] = useState(false);
-  const [supportedCountriesText, setSupportedCountriesText] = useState(globalSettings.supportedCountries.join(', '));
-  const [supportedCurrenciesText, setSupportedCurrenciesText] = useState(globalSettings.supportedCurrencies.join(', '));
+  const [supportedCountriesText, setSupportedCountriesText] = useState((globalSettings?.supportedCountries || []).join(', '));
+  const [supportedCurrenciesText, setSupportedCurrenciesText] = useState((globalSettings?.supportedCurrencies || []).join(', '));
   const [allowedServiceTypes, setAllowedServiceTypes] = useState<string[]>(
-    globalSettings.allowedDiningServiceTypes || ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription']
+    globalSettings?.allowedDiningServiceTypes || ['dine_in', 'takeaway', 'delivery', 'drive_through', 'pickup', 'meal_subscription']
   );
   const [allowedDurationsText, setAllowedDurationsText] = useState<string>(
-    (globalSettings.allowedSubscriptionDurations || [7, 14, 30]).join(', ')
+    (globalSettings?.allowedSubscriptionDurations || [7, 14, 30]).join(', ')
   );
   const [allowedPaymentMethods, setAllowedPaymentMethods] = useState<string[]>(
-    globalSettings.allowedPaymentMethods || ['cash', 'stripe', 'mobile_money', 'bank_transfer', 'binance_id', 'binance_wallet']
+    globalSettings?.allowedPaymentMethods || ['cash', 'stripe', 'mobile_money', 'bank_transfer', 'binance_id', 'binance_wallet']
   );
 
   // User search

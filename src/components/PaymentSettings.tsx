@@ -21,7 +21,7 @@ export default function PaymentSettings({ tenantId, onClose }: PaymentSettingsPr
   const isProPlan = plan === 'growth' || plan === 'enterprise';
 
   // Get active payment methods allowed by platform admin (Super Admin)
-  const allowedByPlatform = globalSettings.allowedPaymentMethods || [
+  const allowedByPlatform = globalSettings?.allowedPaymentMethods || [
     'cash', 'stripe', 'mobile_money', 'bank_transfer', 'binance_id', 'binance_wallet'
   ];
 
@@ -209,7 +209,7 @@ export default function PaymentSettings({ tenantId, onClose }: PaymentSettingsPr
                             Pro Gateway
                           </span>
                         )}
-                        {!globalSettings.allowedPaymentMethods?.includes(methodId) && (
+                        {!globalSettings?.allowedPaymentMethods?.includes(methodId) && (
                           <span className="rounded bg-slate-100 text-slate-500 text-[8px] font-medium px-1.5 py-0.2">
                             Allowed by Platform
                           </span>
