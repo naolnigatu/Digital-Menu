@@ -54,6 +54,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [subscriptionRequests, setSubscriptionRequests] = useState<any[]>([]);
   const [superAdminPaymentInfo, setSuperAdminPaymentInfo] = useState<any>(null);
   
+  // Active configurations
+  const [activeTenantId, setActiveTenantId] = useState<string>('t-01');
+  const [activeBranchId, setActiveBranchId] = useState<string>('t-01');
+  const [currentLanguage, setLanguage] = useState<'en' | 'am'>('en');
+  const [currentView, setCurrentView] = useState<'landing' | 'login' | 'signup' | 'customer' | 'dashboard'>('landing');
+
   const requestSubscriptionUpgrade = async () => {};
   const approveSubscriptionRequest = async () => {};
   const rejectSubscriptionRequest = async () => {};
@@ -75,6 +81,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     let unsubscribeFn: (() => void) | undefined;
     const initializeListeners = async () => {
       try {
+        const { query, where, documentId } = await import('firebase/firestore');
         const {
           getDB
         } = await import('../lib/firebase');
@@ -85,7 +92,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             onSnapshot,
             doc: firestoreDoc
           } = await import('firebase/firestore');
-          const unsubscribeTenants = onSnapshot(collection(db, 'tenants'), snapshot => {
+          const unsubscribeTenants = onSnapshot(((currentUser?.role === 'super_admin' || currentUser?.role === 'customer' || !currentUser?.tenantId) ? collection(db, 'tenants') : query(collection(db, 'tenants'), where(documentId(), '==', currentUser?.tenantId))), snapshot => {
             const list: Tenant[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -104,7 +111,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
               });
             }
           }, err => console.warn("Tenants listener error:", err));
-          const unsubscribeBusinesses = onSnapshot(collection(db, 'businesses'), snapshot => {
+          const unsubscribeBusinesses = onSnapshot(((currentUser?.role === 'super_admin' || currentUser?.role === 'customer' || !currentUser?.tenantId) ? collection(db, 'businesses') : query(collection(db, 'businesses'), where(documentId(), '==', currentUser?.tenantId))), snapshot => {
             const list: Tenant[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -123,7 +130,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
               });
             }
           }, err => console.warn("Businesses listener error:", err));
-          const unsubscribeStaff = onSnapshot(collection(db, 'staff'), snapshot => {
+          const unsubscribeStaff = onSnapshot((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'staff') : query(collection(db, 'staff'), where('tenantId', '==', currentUser?.tenantId))), snapshot => {
             const list: Staff[] = [];
             snapshot.forEach(docSnap => {
               const data = docSnap.data();
@@ -143,7 +150,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
               });
             }
           }, err => console.warn("Staff listener error:", err));
-          const unsubscribeUsers = onSnapshot(collection(db, 'users'), snapshot => {
+          const unsubscribeUsers = onSnapshot((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'users') : query(collection(db, 'users'), where('tenantId', '==', currentUser?.tenantId))), snapshot => {
             const staffList: Staff[] = [];
             const custMap: Record<string, CustomerProfile> = {};
             snapshot.forEach(docSnap => {
@@ -180,7 +187,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
               }));
             }
           }, err => console.warn("Users listener error:", err));
-          const unsubscribeBranches = onSnapshot(collection(db, 'branches'), snapshot => {
+          const unsubscribeBranches = onSnapshot((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'branches') : query(collection(db, 'branches'), where('tenantId', '==', currentUser?.tenantId))), snapshot => {
             const list: Branch[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -199,7 +206,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
               });
             }
           }, err => console.warn("Branches listener error:", err));
-          const unsubscribeReservations = onSnapshot(collection(db, 'reservations'), snapshot => {
+          const unsubscribeReservations = onSnapshot((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'reservations') : query(collection(db, 'reservations'), where('tenantId', '==', currentUser?.tenantId))), snapshot => {
             const list: Reservation[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -211,7 +218,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           }, err => {
             console.warn("Firestore reservations listener error:", err);
           });
-          const unsubscribeIngredients = onSnapshot(collection(db, 'ingredients'), snapshot => {
+          const unsubscribeIngredients = onSnapshot((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'ingredients') : query(collection(db, 'ingredients'), where('tenantId', '==', currentUser?.tenantId))), snapshot => {
             const list: Ingredient[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -223,7 +230,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           }, err => {
             console.warn("Firestore ingredients listener error:", err);
           });
-          const unsubscribeStockMovements = onSnapshot(collection(db, 'stock_movements'), snapshot => {
+          const unsubscribeStockMovements = onSnapshot((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'stock_movements') : query(collection(db, 'stock_movements'), where('tenantId', '==', currentUser?.tenantId))), snapshot => {
             const list: StockMovement[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -235,7 +242,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           }, err => {
             console.warn("Firestore stock movements listener error:", err);
           });
-          const unsubscribeNotifications = onSnapshot(collection(db, 'notifications'), snapshot => {
+          const unsubscribeNotifications = onSnapshot((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'notifications') : query(collection(db, 'notifications'), where('tenantId', '==', currentUser?.tenantId))), snapshot => {
             const list: DinexNotification[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -260,7 +267,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           }, err => {
             console.warn("Firestore marketplace extensions listener error:", err);
           });
-          const unsubscribeInstalledExtensions = onSnapshot(collection(db, 'installed_extensions'), snapshot => {
+          const unsubscribeInstalledExtensions = onSnapshot((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'installed_extensions') : query(collection(db, 'installed_extensions'), where('tenantId', '==', currentUser?.tenantId))), snapshot => {
             const list: InstalledExtension[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -286,6 +293,23 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           }, err => {
             console.warn("Firestore global settings listener error:", err);
           });
+          const targetOrdersTenantId = currentUser?.tenantId || activeTenantId;
+          const ordersQuery = (currentUser?.role === 'super_admin' || !targetOrdersTenantId)
+            ? collection(db, 'orders')
+            : query(collection(db, 'orders'), where('tenantId', '==', targetOrdersTenantId));
+          const unsubscribeOrders = onSnapshot(ordersQuery, snapshot => {
+            const list: Order[] = [];
+            snapshot.forEach(docSnap => {
+              list.push({
+                id: docSnap.id,
+                ...docSnap.data()
+              } as Order);
+            });
+            list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+            setOrders(list);
+          }, err => {
+            console.warn("Firestore orders listener error:", err);
+          });
           return () => {
             unsubscribeTenants();
             unsubscribeBusinesses();
@@ -300,23 +324,22 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             unsubscribeInstalledExtensions();
             unsubscribeGlobalSettings();
             unsubscribeLandingPageConfig();
+            unsubscribeOrders();
           };
         }
       } catch (err) {
         console.warn("Error setting up Firestore realtime listeners:", err);
       }
     };
-    if (currentUser) {
-      initializeListeners().then(unsub => {
-        unsubscribeFn = unsub;
-      });
-    }
+    initializeListeners().then(unsub => {
+      unsubscribeFn = unsub;
+    });
     return () => {
       if (unsubscribeFn) {
         unsubscribeFn();
       }
     };
-  }, [currentUser]);
+  }, [currentUser, activeTenantId]);
 
   useEffect(() => {
     let unsubAuth: (() => void) | undefined;
@@ -352,12 +375,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // 5. Customer Profiles State
   const [customerProfiles, setCustomerProfiles] = useState<Record<string, CustomerProfile>>({});
   useEffect(() => {}, [customerProfiles]);
-
-  // Active configurations
-  const [activeTenantId, setActiveTenantId] = useState<string>('t-01');
-  const [activeBranchId, setActiveBranchId] = useState<string>('t-01');
-  const [currentLanguage, setLanguage] = useState<'en' | 'am'>('en');
-  const [currentView, setCurrentView] = useState<'landing' | 'login' | 'signup' | 'customer' | 'dashboard'>('landing');
   useEffect(() => {}, [currentView]);
 
   useEffect(() => {
@@ -458,7 +475,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
         // B. Secondary Lookup by Email in 'users' collection
         if (!userDocData && cleanEmail) {
-          const uQuery = query(collection(db, 'users'), where('email', '==', cleanEmail));
+          const uQuery = query((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'users') : query(collection(db, 'users'), where('tenantId', '==', currentUser?.tenantId))), where('email', '==', cleanEmail));
           const uQuerySnap = await getDocs(uQuery);
           if (!uQuerySnap.empty) {
             userDocData = uQuerySnap.docs[0].data();
@@ -475,7 +492,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           }
         }
         if (!userDocData && cleanEmail) {
-          const sQuery = query(collection(db, 'staff'), where('email', '==', cleanEmail));
+          const sQuery = query((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'staff') : query(collection(db, 'staff'), where('tenantId', '==', currentUser?.tenantId))), where('email', '==', cleanEmail));
           const sQuerySnap = await getDocs(sQuery);
           if (!sQuerySnap.empty) {
             userDocData = sQuerySnap.docs[0].data();
@@ -1055,34 +1072,38 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     addLog('Accept Delivery Fee', `Customer accepted delivery fee for order ${existing.orderNum}`);
     await syncToFirestore('orders', orderId, updated);
   };
-  const reportOrderItemIssue = (orderId: string, itemId: string, reason: string) => {
-    setOrders(prev => prev.map(o => {
-      if (o.id !== orderId) return o;
-      return {
-        ...o,
-        items: o.items.map(it => it.id === itemId ? {
-          ...it,
-          status: 'issue_reported',
-          issueReason: reason
-        } : it)
-      };
-    }));
+  const reportOrderItemIssue = async (orderId: string, itemId: string, reason: string) => {
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
+    const updated: Order = {
+      ...existing,
+      items: existing.items.map(it => it.id === itemId ? {
+        ...it,
+        status: 'issue_reported' as const,
+        issueReason: reason
+      } : it),
+      updatedAt: new Date().toISOString()
+    };
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    await syncToFirestore('orders', orderId, updated);
   };
-  const resolveOrderItemIssue = (orderId: string, itemId: string, approved: boolean) => {
-    setOrders(prev => prev.map(o => {
-      if (o.id !== orderId) return o;
-      return {
-        ...o,
-        items: o.items.map(it => {
-          if (it.id !== itemId) return it;
-          return {
-            ...it,
-            status: approved ? 'cancelled' : 'received',
-            issueReason: undefined
-          };
-        })
-      };
-    }));
+  const resolveOrderItemIssue = async (orderId: string, itemId: string, approved: boolean) => {
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
+    const updated: Order = {
+      ...existing,
+      items: existing.items.map(it => {
+        if (it.id !== itemId) return it;
+        return {
+          ...it,
+          status: approved ? ('cancelled' as const) : ('received' as const),
+          issueReason: undefined
+        };
+      }),
+      updatedAt: new Date().toISOString()
+    };
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    await syncToFirestore('orders', orderId, updated);
   };
   const updateOrderItemStatus = async (orderId: string, itemId: string, itemStatus: OrderItem['status'], actor?: string) => {
     const existing = orders.find(o => o.id === orderId);
@@ -2092,33 +2113,33 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     addLog('Log Subscription Meal Served', `Served subscription meal on sub ${subscriptionId}`);
     await syncToFirestore('customer_subscriptions', subscriptionId, updated);
   };
-  const refundOrder = (orderId: string, amount: number, reason: string, actor: string) => {
-    setOrders(prev => prev.map(async o => {
-      if (o.id !== orderId) return o;
-      const refundDetails: RefundDetails = {
-        refundAmount: amount,
-        refundReason: reason,
-        refundDate: new Date().toISOString(),
-        refundedBy: actor
-      };
-      const newEvent: TimelineEvent = {
-        id: `ev-${Date.now()}`,
-        time: new Date().toISOString(),
-        label: 'Order Refunded',
-        desc: `Refunded amount: ${amount} | Reason: ${reason} | Refunded by: ${actor}`,
-        actor
-      };
-      const updatedOrder = {
-        ...o,
-        status: 'refunded' as const,
-        paymentStatus: 'refunded' as const,
-        refundDetails,
-        timeline: [...(o.timeline || []), newEvent]
-      };
-      await syncToFirestore('orders', orderId, updatedOrder);
-      return updatedOrder;
-    }));
+  const refundOrder = async (orderId: string, amount: number, reason: string, actor: string) => {
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
+    const refundDetails: RefundDetails = {
+      refundAmount: amount,
+      refundReason: reason,
+      refundDate: new Date().toISOString(),
+      refundedBy: actor
+    };
+    const newEvent: TimelineEvent = {
+      id: `ev-${Date.now()}`,
+      time: new Date().toISOString(),
+      label: 'Order Refunded',
+      desc: `Refunded amount: ${amount} | Reason: ${reason} | Refunded by: ${actor}`,
+      actor
+    };
+    const updatedOrder: Order = {
+      ...existing,
+      status: 'refunded' as const,
+      paymentStatus: 'refunded' as const,
+      refundDetails,
+      updatedAt: new Date().toISOString(),
+      timeline: [...(existing.timeline || []), newEvent]
+    };
+    setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
     addLog('Order Refunded', `Order ${orderId} refunded for amount: ${amount}. Reason: ${reason}`);
+    await syncToFirestore('orders', orderId, updatedOrder);
   };
   const updateCustomerProfile = (email: string, profileData: Partial<CustomerProfile>) => {
     setCustomerProfiles(async prev => {
@@ -2224,25 +2245,25 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       };
     });
   };
-  const updateTipStatus = (orderId: string, status: 'pending' | 'delivered' | 'accepted') => {
-    setOrders(prev => prev.map(async o => {
-      if (o.id !== orderId) return o;
-      const newEvent: TimelineEvent = {
-        id: `ev-${Date.now()}`,
-        time: new Date().toISOString(),
-        label: status === 'delivered' ? 'Tip Delivered' : status === 'accepted' ? 'Tip Accepted by Staff' : 'Tip Logged',
-        desc: status === 'delivered' ? 'Tip has been delivered to staff by Cashier' : 'Staff accepted the tip payout',
-        actor: status === 'delivered' ? 'Cashier' : 'Waiter'
-      };
-      const updated = {
-        ...o,
-        tipStatus: status,
-        timeline: [...(o.timeline || []), newEvent]
-      };
-      await syncToFirestore('orders', orderId, updated);
-      return updated;
-    }));
+  const updateTipStatus = async (orderId: string, status: 'pending' | 'delivered' | 'accepted') => {
+    const existing = orders.find(o => o.id === orderId);
+    if (!existing) return;
+    const newEvent: TimelineEvent = {
+      id: `ev-${Date.now()}`,
+      time: new Date().toISOString(),
+      label: status === 'delivered' ? 'Tip Delivered' : status === 'accepted' ? 'Tip Accepted by Staff' : 'Tip Logged',
+      desc: status === 'delivered' ? 'Tip has been delivered to staff by Cashier' : 'Staff accepted the tip payout',
+      actor: status === 'delivered' ? 'Cashier' : 'Waiter'
+    };
+    const updated: Order = {
+      ...existing,
+      tipStatus: status,
+      updatedAt: new Date().toISOString(),
+      timeline: [...(existing.timeline || []), newEvent]
+    };
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
     addLog('Update Tip Status', `Order ${orderId} tip status updated to: ${status}`);
+    await syncToFirestore('orders', orderId, updated);
   };
 
   // Final Features Actions

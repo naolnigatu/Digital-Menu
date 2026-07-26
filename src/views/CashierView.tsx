@@ -23,7 +23,8 @@ export default function CashierView() {
 
   const activeUnpaidOrders = useMemo(() => orders.filter(
     o => o.branchId === activeBranchId && 
-         o.paymentStatus === 'unpaid' && 
+         o.paymentStatus !== 'paid' && 
+         o.paymentStatus !== 'refunded' &&
          o.status !== 'cancelled' && 
          o.paymentVerificationStatus !== 'pending' && 
          o.paymentVerificationStatus !== 'rejected'
