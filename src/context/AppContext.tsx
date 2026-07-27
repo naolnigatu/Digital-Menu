@@ -92,7 +92,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             onSnapshot,
             doc: firestoreDoc
           } = await import('firebase/firestore');
-          const unsubscribeTenants = onSnapshot(((currentUser?.role === 'super_admin' || currentUser?.role === 'customer' || !currentUser?.tenantId) ? collection(db, 'tenants') : query(collection(db, 'tenants'), where(documentId(), '==', currentUser?.tenantId))), snapshot => {
+          const unsubscribeTenants = onSnapshot(collection(db, 'tenants'), snapshot => {
             const list: Tenant[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -100,18 +100,16 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 ...docSnap.data()
               } as Tenant);
             });
-            if (list.length > 0) {
-              setTenants(prev => {
-                const map = new Map<string, Tenant>(prev.map(t => [t.id, t]));
-                list.forEach(t => {
-                  const existing = map.get(t.id);
-                  map.set(t.id, existing ? Object.assign({}, existing, t) : t);
-                });
-                return Array.from(map.values());
+            setTenants(prev => {
+              const map = new Map<string, Tenant>(prev.map(t => [t.id, t]));
+              list.forEach(t => {
+                map.set(t.id, t);
               });
-            }
+              return Array.from(map.values());
+            });
           }, err => console.warn("Tenants listener error:", err));
-          const unsubscribeBusinesses = onSnapshot(((currentUser?.role === 'super_admin' || currentUser?.role === 'customer' || !currentUser?.tenantId) ? collection(db, 'businesses') : query(collection(db, 'businesses'), where(documentId(), '==', currentUser?.tenantId))), snapshot => {
+
+          const unsubscribeBusinesses = onSnapshot(collection(db, 'businesses'), snapshot => {
             const list: Tenant[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -119,17 +117,41 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 ...docSnap.data()
               } as Tenant);
             });
-            if (list.length > 0) {
-              setTenants(prev => {
-                const map = new Map<string, Tenant>(prev.map(t => [t.id, t]));
-                list.forEach(t => {
-                  const existing = map.get(t.id);
-                  map.set(t.id, existing ? Object.assign({}, existing, t) : t);
-                });
-                return Array.from(map.values());
+            setTenants(prev => {
+              const map = new Map<string, Tenant>(prev.map(t => [t.id, t]));
+              list.forEach(t => {
+                map.set(t.id, t);
               });
-            }
+              return Array.from(map.values());
+            });
           }, err => console.warn("Businesses listener error:", err));
+
+          const unsubscribeCategories = onSnapshot(collection(db, 'categories'), snapshot => {
+            const grouped: Record<string, Category[]> = {};
+            snapshot.forEach(docSnap => {
+              const data = { id: docSnap.id, ...docSnap.data() } as Category;
+              if (data.tenantId) {
+                if (!grouped[data.tenantId]) grouped[data.tenantId] = [];
+                grouped[data.tenantId].push(data);
+              }
+            });
+            Object.keys(grouped).forEach(tId => {
+              grouped[tId].sort((a, b) => (a.orderNum || 0) - (b.orderNum || 0));
+            });
+            setCategories(grouped);
+          }, err => console.warn("Categories listener error:", err));
+
+          const unsubscribeMenuItems = onSnapshot(collection(db, 'menu_items'), snapshot => {
+            const grouped: Record<string, MenuItem[]> = {};
+            snapshot.forEach(docSnap => {
+              const data = { id: docSnap.id, ...docSnap.data() } as MenuItem;
+              if (data.tenantId) {
+                if (!grouped[data.tenantId]) grouped[data.tenantId] = [];
+                grouped[data.tenantId].push(data);
+              }
+            });
+            setMenuItems(grouped);
+          }, err => console.warn("MenuItems listener error:", err));
           const unsubscribeStaff = onSnapshot((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'staff') : query(collection(db, 'staff'), where('tenantId', '==', currentUser?.tenantId))), snapshot => {
             const list: Staff[] = [];
             snapshot.forEach(docSnap => {
@@ -313,6 +335,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           return () => {
             unsubscribeTenants();
             unsubscribeBusinesses();
+            unsubscribeCategories();
+            unsubscribeMenuItems();
             unsubscribeStaff();
             unsubscribeUsers();
             unsubscribeBranches();
@@ -770,39 +794,17 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       ...catData,
       id
     };
-    setCategories(prev => {
-      const list = prev[catData.tenantId] || [];
-      return {
-        ...prev,
-        [catData.tenantId]: [...list, newCat].sort((a, b) => a.orderNum - b.orderNum)
-      };
-    });
     addLog('Create Category', `Created menu category: ${catData.name}`);
     await syncToFirestore('categories', id, newCat);
   };
   const updateCategory = async (updatedCat: Category) => {
-    setCategories(prev => {
-      const list = prev[updatedCat.tenantId] || [];
-      const updated = list.map(c => c.id === updatedCat.id ? updatedCat : c);
-      return {
-        ...prev,
-        [updatedCat.tenantId]: updated.sort((a, b) => a.orderNum - b.orderNum)
-      };
-    });
     addLog('Update Category', `Updated menu category: ${updatedCat.name}`);
     await syncToFirestore('categories', updatedCat.id, updatedCat);
   };
-  const deleteCategory = (tenantId: string, categoryId: string) => {
+  const deleteCategory = async (tenantId: string, categoryId: string) => {
     const catName = categories[tenantId]?.find(c => c.id === categoryId)?.name || '';
-    setCategories(prev => {
-      const list = prev[tenantId] || [];
-      return {
-        ...prev,
-        [tenantId]: list.filter(c => c.id !== categoryId)
-      };
-    });
     addLog('Delete Category', `Deleted menu category: ${catName}`);
-    deleteFromFirestore('categories', categoryId);
+    await deleteFromFirestore('categories', categoryId);
   };
 
   // Menu Items
@@ -812,58 +814,27 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       ...itemData,
       id
     };
-    setMenuItems(prev => {
-      const list = prev[itemData.tenantId] || [];
-      return {
-        ...prev,
-        [itemData.tenantId]: [...list, newItem]
-      };
-    });
     addLog('Create Menu Item', `Created menu item: ${itemData.name}`);
     await syncToFirestore('menu_items', id, newItem);
   };
   const updateMenuItem = async (updatedItem: MenuItem) => {
-    setMenuItems(prev => {
-      const list = prev[updatedItem.tenantId] || [];
-      return {
-        ...prev,
-        [updatedItem.tenantId]: list.map(i => i.id === updatedItem.id ? updatedItem : i)
-      };
-    });
     addLog('Update Menu Item', `Updated menu item: ${updatedItem.name}`);
     await syncToFirestore('menu_items', updatedItem.id, updatedItem);
   };
-  const deleteMenuItem = (tenantId: string, itemId: string) => {
+  const deleteMenuItem = async (tenantId: string, itemId: string) => {
     const itemName = menuItems[tenantId]?.find(i => i.id === itemId)?.name || '';
-    setMenuItems(prev => {
-      const list = prev[tenantId] || [];
-      return {
-        ...prev,
-        [tenantId]: list.filter(i => i.id !== itemId)
-      };
-    });
     addLog('Delete Menu Item', `Deleted menu item: ${itemName}`);
-    deleteFromFirestore('menu_items', itemId);
+    await deleteFromFirestore('menu_items', itemId);
   };
   const toggleMenuItemAvailability = async (tenantId: string, itemId: string) => {
-    const itemName = menuItems[tenantId]?.find(i => i.id === itemId)?.name || '';
-    setMenuItems(prev => {
-      const list = prev[tenantId] || [];
-      return {
-        ...prev,
-        [tenantId]: list.map(i => i.id === itemId ? {
-          ...i,
-          isAvailable: !i.isAvailable
-        } : i)
-      };
-    });
     const currentItem = menuItems[tenantId]?.find(i => i.id === itemId);
     if (currentItem) {
-      addLog('Toggle Availability', `Toggled availability for menu item ${itemName} to ${!currentItem.isAvailable ? 'available' : 'unavailable'}`);
-      await syncToFirestore('menu_items', itemId, {
+      const updated = {
         ...currentItem,
         isAvailable: !currentItem.isAvailable
-      });
+      };
+      addLog('Toggle Availability', `Toggled availability for menu item ${currentItem.name} to ${!currentItem.isAvailable ? 'available' : 'unavailable'}`);
+      await syncToFirestore('menu_items', itemId, updated);
     }
   };
 
@@ -1412,130 +1383,130 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     addLog('Invite Staff', `Invited employee ${memberData.name} as ${memberData.role}.`);
     await syncToFirestore('users', id, newStaff);
   };
-  const toggleStaffStatus = (staffId: string) => {
-    setStaff(prev => prev.map(async s => {
-      if (s.id !== staffId) return s;
-      const newState = !s.active;
-      addLog('Toggle Staff Status', `Staff member ${s.name} ${newState ? 'activated' : 'deactivated'}.`);
-      const updated = {
-        ...s,
-        active: newState
-      };
-      await syncToFirestore('users', staffId, updated);
-      return updated;
-    }));
+  const toggleStaffStatus = async (staffId: string) => {
+    const existing = staff.find(s => s.id === staffId);
+    if (!existing) return;
+    const newState = !existing.active;
+    addLog('Toggle Staff Status', `Staff member ${existing.name} ${newState ? 'activated' : 'deactivated'}.`);
+    const updated = {
+      ...existing,
+      active: newState
+    };
+    setStaff(prev => prev.map(s => s.id === staffId ? updated : s));
+    await syncToFirestore('users', staffId, updated);
   };
-  const updateStaffPermissions = (staffId: string, permissions: string[]) => {
-    setStaff(prev => prev.map(async s => {
-      if (s.id !== staffId) return s;
-      const updated = {
-        ...s,
-        permissions
-      };
-      await syncToFirestore('users', staffId, updated);
-      return updated;
-    }));
-    const found = staff.find(s => s.id === staffId);
-    if (found) {
-      addLog('Update Staff Permissions', `Updated custom permissions for employee: ${found.name}.`);
-    }
+  const updateStaffPermissions = async (staffId: string, permissions: string[]) => {
+    const existing = staff.find(s => s.id === staffId);
+    if (!existing) return;
+    const updated = {
+      ...existing,
+      permissions
+    };
+    setStaff(prev => prev.map(s => s.id === staffId ? updated : s));
+    await syncToFirestore('users', staffId, updated);
+    addLog('Update Staff Permissions', `Updated custom permissions for employee: ${existing.name}.`);
   };
 
   // Super Admin
-  const toggleTenantStatus = (tenantId: string) => {
-    setTenants(prev => prev.map(async t => {
-      if (t.id !== tenantId) return t;
-      const nextStatus = t.subscriptionStatus === 'active' ? 'suspended' : 'active';
-      addLog('Platform Admin Override', `Tenant ${t.name} subscription status updated to: ${nextStatus}`);
-      const updated = {
-        ...t,
-        subscriptionStatus: nextStatus
-      };
-      await syncToFirestore('businesses', tenantId, updated);
-      return updated;
-    }));
+  const toggleTenantStatus = async (tenantId: string) => {
+    const existing = tenants.find(t => t.id === tenantId);
+    if (!existing) return;
+    const nextStatus: Tenant['subscriptionStatus'] = existing.subscriptionStatus === 'active' ? 'suspended' : 'active';
+    addLog('Platform Admin Override', `Tenant ${existing.name} subscription status updated to: ${nextStatus}`);
+    const updated = {
+      ...existing,
+      subscriptionStatus: nextStatus
+    };
+    setTenants(prev => prev.map(t => t.id === tenantId ? updated : t));
+    await syncToFirestore('businesses', tenantId, updated);
+    await syncToFirestore('tenants', tenantId, updated);
   };
-  const updateTenantPlan = (tenantId: string, plan: Tenant['subscriptionPlan']) => {
-    setTenants(prev => prev.map(async t => {
-      if (t.id !== tenantId) return t;
-      addLog('Platform Admin Override', `Tenant ${t.name} subscription plan updated to: ${plan}`);
-      const updated = {
-        ...t,
-        subscriptionPlan: plan
-      };
-      await syncToFirestore('businesses', tenantId, updated);
-      return updated;
-    }));
+  const updateTenantPlan = async (tenantId: string, plan: Tenant['subscriptionPlan']) => {
+    const existing = tenants.find(t => t.id === tenantId);
+    if (!existing) return;
+    addLog('Platform Admin Override', `Tenant ${existing.name} subscription plan updated to: ${plan}`);
+    const updated = {
+      ...existing,
+      subscriptionPlan: plan
+    };
+    setTenants(prev => prev.map(t => t.id === tenantId ? updated : t));
+    await syncToFirestore('businesses', tenantId, updated);
+    await syncToFirestore('tenants', tenantId, updated);
   };
-  const requestTenantUpgrade = (tenantId: string, plan: Tenant['subscriptionPlan']) => {
-    setTenants(prev => prev.map(async t => {
-      if (t.id !== tenantId) return t;
-      addLog('Subscription', `Tenant ${t.name} requested upgrade to: ${plan}. Status changed to pending_approval.`);
-      const updated = {
-        ...t,
-        subscriptionPlan: plan,
-        subscriptionStatus: 'pending_approval'
-      };
-      await syncToFirestore('businesses', tenantId, updated);
-      return updated;
-    }));
+  const requestTenantUpgrade = async (tenantId: string, plan: Tenant['subscriptionPlan']) => {
+    const existing = tenants.find(t => t.id === tenantId);
+    if (!existing) return;
+    addLog('Subscription', `Tenant ${existing.name} requested upgrade to: ${plan}. Status changed to pending_approval.`);
+    const updated = {
+      ...existing,
+      subscriptionPlan: plan,
+      subscriptionStatus: 'pending_approval' as const
+    };
+    setTenants(prev => prev.map(t => t.id === tenantId ? updated : t));
+    await syncToFirestore('businesses', tenantId, updated);
+    await syncToFirestore('tenants', tenantId, updated);
   };
-  const updateTenantType = (tenantId: string, businessType: string) => {
-    setTenants(prev => prev.map(t => t.id === tenantId ? {
-      ...t,
+  const updateTenantType = async (tenantId: string, businessType: string) => {
+    const existing = tenants.find(t => t.id === tenantId);
+    if (!existing) return;
+    const updated = {
+      ...existing,
       businessType
-    } : t));
+    };
+    setTenants(prev => prev.map(t => t.id === tenantId ? updated : t));
+    await syncToFirestore('businesses', tenantId, updated);
+    await syncToFirestore('tenants', tenantId, updated);
   };
-  const updateTenantCurrency = (tenantId: string, currency: string, currencySymbol: string) => {
-    setTenants(prev => prev.map(async t => {
-      if (t.id !== tenantId) return t;
-      addLog('Settings Override', `Tenant ${t.name} currency updated to: ${currency} (${currencySymbol})`);
-      const updated = {
-        ...t,
-        currency,
-        currencySymbol
-      };
-      await syncToFirestore('businesses', tenantId, updated);
-      return updated;
-    }));
+  const updateTenantCurrency = async (tenantId: string, currency: string, currencySymbol: string) => {
+    const existing = tenants.find(t => t.id === tenantId);
+    if (!existing) return;
+    addLog('Settings Override', `Tenant ${existing.name} currency updated to: ${currency} (${currencySymbol})`);
+    const updated = {
+      ...existing,
+      currency,
+      currencySymbol
+    };
+    setTenants(prev => prev.map(t => t.id === tenantId ? updated : t));
+    await syncToFirestore('businesses', tenantId, updated);
+    await syncToFirestore('tenants', tenantId, updated);
   };
-  const updateTenantProfile = (tenantId: string, logoUrl: string, bankAccount: string, mealSubscriptionDiscountPercent?: number) => {
-    setTenants(prev => prev.map(async t => {
-      if (t.id !== tenantId) return t;
-      addLog('Settings Override', `Tenant ${t.name} logo and bank details updated.`);
-      const updated = {
-        ...t,
-        logoUrl,
-        bankAccount,
-        mealSubscriptionDiscountPercent
-      };
-      await syncToFirestore('businesses', tenantId, updated);
-      return updated;
-    }));
+  const updateTenantProfile = async (tenantId: string, logoUrl: string, bankAccount: string, mealSubscriptionDiscountPercent?: number) => {
+    const existing = tenants.find(t => t.id === tenantId);
+    if (!existing) return;
+    addLog('Settings Override', `Tenant ${existing.name} logo and bank details updated.`);
+    const updated = {
+      ...existing,
+      logoUrl,
+      bankAccount,
+      mealSubscriptionDiscountPercent
+    };
+    setTenants(prev => prev.map(t => t.id === tenantId ? updated : t));
+    await syncToFirestore('businesses', tenantId, updated);
+    await syncToFirestore('tenants', tenantId, updated);
   };
-  const approveTenantStatus = (tenantId: string) => {
-    setTenants(prev => prev.map(async t => {
-      if (t.id !== tenantId) return t;
-      addLog('Platform Admin Approval', `Business "${t.name}" registration request has been APPROVED.`);
-      const updated = {
-        ...t,
-        subscriptionStatus: 'active'
-      };
-      await syncToFirestore('businesses', tenantId, updated);
-      return updated;
-    }));
+  const approveTenantStatus = async (tenantId: string) => {
+    const existing = tenants.find(t => t.id === tenantId);
+    if (!existing) return;
+    addLog('Platform Admin Approval', `Business "${existing.name}" registration request has been APPROVED.`);
+    const updated = {
+      ...existing,
+      subscriptionStatus: 'active' as const
+    };
+    setTenants(prev => prev.map(t => t.id === tenantId ? updated : t));
+    await syncToFirestore('businesses', tenantId, updated);
+    await syncToFirestore('tenants', tenantId, updated);
   };
-  const rejectTenantStatus = (tenantId: string) => {
-    setTenants(prev => prev.map(async t => {
-      if (t.id !== tenantId) return t;
-      addLog('Platform Admin Approval', `Business "${t.name}" registration request has been REJECTED.`);
-      const updated = {
-        ...t,
-        subscriptionStatus: 'rejected'
-      };
-      await syncToFirestore('businesses', tenantId, updated);
-      return updated;
-    }));
+  const rejectTenantStatus = async (tenantId: string) => {
+    const existing = tenants.find(t => t.id === tenantId);
+    if (!existing) return;
+    addLog('Platform Admin Approval', `Business "${existing.name}" registration request has been REJECTED.`);
+    const updated = {
+      ...existing,
+      subscriptionStatus: 'rejected' as const
+    };
+    setTenants(prev => prev.map(t => t.id === tenantId ? updated : t));
+    await syncToFirestore('businesses', tenantId, updated);
+    await syncToFirestore('tenants', tenantId, updated);
   };
   const addAd = async (adData: Omit<PlatformAd, 'id' | 'createdAt' | 'active'>) => {
     const id = `ad-${Date.now()}`;
@@ -1549,18 +1520,17 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     addLog('Ad Operations', `Published platform ad: ${adData.title}`);
     await syncToFirestore('ads', id, newAd);
   };
-  const toggleAdStatus = (id: string) => {
-    setAds(prev => prev.map(async ad => {
-      if (ad.id !== id) return ad;
-      const nextActive = !ad.active;
-      addLog('Ad Operations', `Ad "${ad.title}" is now ${nextActive ? 'Active' : 'Paused'}`);
-      const updated = {
-        ...ad,
-        active: nextActive
-      };
-      await syncToFirestore('ads', id, updated);
-      return updated;
-    }));
+  const toggleAdStatus = async (id: string) => {
+    const existing = ads.find(a => a.id === id);
+    if (!existing) return;
+    const nextActive = !existing.active;
+    addLog('Ad Operations', `Ad "${existing.title}" is now ${nextActive ? 'Active' : 'Paused'}`);
+    const updated = {
+      ...existing,
+      active: nextActive
+    };
+    setAds(prev => prev.map(ad => ad.id === id ? updated : ad));
+    await syncToFirestore('ads', id, updated);
   };
   const deleteAd = (id: string) => {
     setAds(prev => {
@@ -1578,18 +1548,17 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       enabledTabs
     } : p));
   };
-  const updatePlanPrice = (planId: SubscriptionPlan, newPriceUSD: number, newPriceETB: number) => {
-    setPricingPlans(prev => prev.map(async p => {
-      if (p.id !== planId) return p;
-      addLog('Pricing Operations', `Updated ${p.name} price to USD ${newPriceUSD} / ETB ${newPriceETB}`);
-      const updated = {
-        ...p,
-        priceUSD: newPriceUSD,
-        priceETB: newPriceETB
-      };
-      await syncToFirestore('pricing_plans', planId, updated);
-      return updated;
-    }));
+  const updatePlanPrice = async (planId: SubscriptionPlan, newPriceUSD: number, newPriceETB: number) => {
+    const existing = pricingPlans.find(p => p.id === planId);
+    if (!existing) return;
+    addLog('Pricing Operations', `Updated ${existing.name} price to USD ${newPriceUSD} / ETB ${newPriceETB}`);
+    const updated = {
+      ...existing,
+      priceUSD: newPriceUSD,
+      priceETB: newPriceETB
+    };
+    setPricingPlans(prev => prev.map(p => p.id === planId ? updated : p));
+    await syncToFirestore('pricing_plans', planId, updated);
   };
   const registerTenant = async (data: {
     name: string;
@@ -1698,10 +1667,15 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Sync newly created entities to Firestore
     await syncToFirestore('businesses', tenantId, newTenant);
+    await syncToFirestore('tenants', tenantId, newTenant);
     await syncToFirestore('branches', branchId, newBranch);
     await syncToFirestore('users', ownerId, newStaff);
-    newCategories.forEach(async cat => await syncToFirestore('categories', cat.id, cat));
-    newMenuItemsList.forEach(async item => await syncToFirestore('menu_items', item.id, item));
+    for (const cat of newCategories) {
+      await syncToFirestore('categories', cat.id, cat);
+    }
+    for (const item of newMenuItemsList) {
+      await syncToFirestore('menu_items', item.id, item);
+    }
 
     // Set active values
     setActiveTenantId(tenantId);
@@ -2357,19 +2331,20 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     };
     setStockMovements(prev => [...prev, newMovement]);
 
-    // Update ingredient stock locally
-    setIngredients(prev => prev.map(async ing => {
-      if (ing.id !== movement.ingredientId) return ing;
-      let newStock = ing.stockQuantity;
-      if (movement.type === 'in') newStock += movement.quantity;else if (movement.type === 'out' || movement.type === 'waste') newStock -= movement.quantity;else if (movement.type === 'adjustment') newStock = movement.quantity;
+    // Update ingredient stock
+    const targetIng = ingredients.find(ing => ing.id === movement.ingredientId);
+    if (targetIng) {
+      let newStock = targetIng.stockQuantity;
+      if (movement.type === 'in') newStock += movement.quantity;
+      else if (movement.type === 'out' || movement.type === 'waste') newStock -= movement.quantity;
+      else if (movement.type === 'adjustment') newStock = movement.quantity;
       const updatedIngredient = {
-        ...ing,
+        ...targetIng,
         stockQuantity: newStock
       };
-      // Sync the updated ingredient to Firestore in the background
-      await syncToFirestore('ingredients', ing.id, updatedIngredient);
-      return updatedIngredient;
-    }));
+      setIngredients(prev => prev.map(ing => ing.id === movement.ingredientId ? updatedIngredient : ing));
+      await syncToFirestore('ingredients', targetIng.id, updatedIngredient);
+    }
     try {
       await syncToFirestore('stock_movements', id, newMovement);
       addLog('Stock Movement Processed', `Recorded ${movement.type} movement of ${movement.quantity} units for ingredient ID ${movement.ingredientId}.`);

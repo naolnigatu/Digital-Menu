@@ -81,6 +81,8 @@ export interface Category {
   name: string;
   orderNum: number;
   icon?: string;
+  isAvailable?: boolean;
+  disabled?: boolean;
   translations?: Record<string, string>; // language code -> translated name
 }
 

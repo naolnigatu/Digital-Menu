@@ -1291,6 +1291,7 @@ const currentItemPrice = useMemo(() => {
 
             {activeCategories
               .filter(cat => {
+                if (cat.disabled === true || cat.isAvailable === false) return false;
                 try {
                   const disabledCats = JSON.parse(localStorage.getItem('mf_disabled_categories') || '[]');
                   if (disabledCats.includes(cat.id)) return false;
@@ -1316,6 +1317,8 @@ const currentItemPrice = useMemo(() => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {filteredItems
               .filter(item => {
+                const itemCat = activeCategories.find(c => c.id === item.categoryId);
+                if (itemCat && (itemCat.disabled === true || itemCat.isAvailable === false)) return false;
                 try {
                   const disabledCats = JSON.parse(localStorage.getItem('mf_disabled_categories') || '[]');
                   if (disabledCats.includes(item.categoryId)) return false;

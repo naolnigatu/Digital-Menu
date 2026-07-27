@@ -550,11 +550,13 @@ export default function BusinessOwnerView() {
   });
 
   const handleToggleCategoryDisable = (catId: string) => {
-    setDisabledCategoryIds(prev => {
-      const next = prev.includes(catId) ? prev.filter(id => id !== catId) : [...prev, catId];
-      localStorage.setItem('mf_disabled_categories', JSON.stringify(next));
-      return next;
-    });
+    const cat = tenantCategories.find(c => c.id === catId);
+    if (cat) {
+      updateCategory({
+        ...cat,
+        disabled: !cat.disabled
+      });
+    }
   };
 
   const handleMoveCategory = (catId: string, direction: 'up' | 'down') => {
@@ -2505,7 +2507,7 @@ export default function BusinessOwnerView() {
               <h4 className="font-sans font-bold text-xs text-slate-400 uppercase tracking-wider">Active Categories</h4>
               <div className="space-y-2">
                 {tenantCategories.map((cat, catIdx) => {
-                  const isDisabled = disabledCategoryIds.includes(cat.id);
+                  const isDisabled = cat.disabled === true || disabledCategoryIds.includes(cat.id);
                   return (
                     <div key={cat.id} className={`flex items-center justify-between rounded-lg p-2.5 border transition-all ${
                       isDisabled ? 'bg-slate-100/70 border-slate-200/60 opacity-75' : 'bg-slate-50 border-transparent hover:border-slate-200'
