@@ -35,6 +35,7 @@ export interface Branch {
 
 export interface PreparationStation {
   id: string;
+  tenantId?: string;
   branchId: string;
   name: string;
 }
@@ -88,6 +89,7 @@ export interface Category {
 
 export interface Table {
   id: string;
+  tenantId?: string;
   branchId: string;
   number: string;
   section: 'Indoor' | 'Outdoor' | 'Terrace';

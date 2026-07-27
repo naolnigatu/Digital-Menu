@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Business, Membership, DinexBranch, BusinessSettings, BusinessType, SubscriptionPlan, CustomRole } from '../types';
+import { Business, Membership, DinexBranch, BusinessSettings, BusinessType, SubscriptionPlan, CustomRole, Tenant, Branch } from '../types';
 import { useApp } from './AppContext';
 import { Lock, AlertTriangle } from 'lucide-react';
 
@@ -310,158 +310,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function BusinessProvider({ children }: { children: React.ReactNode }) {
   const { userId, userRole, userEmail } = useDinexAuth();
-  const { activeTenantId, setActiveTenantId, tenants } = useApp();
+  const { activeTenantId, setActiveTenantId, tenants, syncToFirestore, currentUser } = useApp();
 
-  const [businesses, setBusinesses] = useState<Business[]>(() => {
-    const local = localStorage.getItem('dinex_businesses');
-    return local ? JSON.parse(local) : DEFAULT_BUSINESSES;
-  });
+  // Single source of truth: Map tenants from AppContext (which syncs directly with Firestore)
+  const businesses: Business[] = tenants.map((tenant) => ({
+    id: tenant.id,
+    name: tenant.name,
+    businessType: (tenant.businessType as BusinessType) || 'Ethiopian Restaurant',
+    logo: tenant.logoUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?w=150&auto=format&fit=crop&q=80',
+    country: 'Ethiopia',
+    city: 'Addis Ababa',
+    phone: '+251 911 000 000',
+    email: tenant.ownerEmail,
+    currency: tenant.currency || 'ETB',
+    language: 'am',
+    ownerId: tenant.ownerEmail === 'naolnigatu2025@gmail.com' ? 'u-admin' : `u-${(tenant.ownerEmail || 'owner').split('@')[0]}`,
+    createdAt: tenant.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    status: tenant.subscriptionStatus === 'active' ? 'active' : tenant.subscriptionStatus === 'suspended' ? 'suspended' : tenant.subscriptionStatus === 'rejected' ? 'rejected' : 'pending_approval',
+    subscriptionPlan: tenant.subscriptionPlan || 'free',
+  }));
 
-  const [memberships, setMemberships] = useState<Membership[]>(() => {
-    const local = localStorage.getItem('dinex_memberships');
-    return local ? JSON.parse(local) : DEFAULT_MEMBERSHIPS;
-  });
+  const myMemberships: Membership[] = businesses.map(b => ({
+    userId: userId || 'u-user',
+    businessId: b.id,
+    role: userRole || 'Owner',
+    branchIds: [],
+    permissions: ['business.edit', 'menu.create', 'orders.manage', 'payments.verify', 'staff.manage', 'reports.view'],
+    status: 'active',
+    createdAt: b.createdAt
+  }));
 
-  const [activeBusinessId, setActiveBusinessIdState] = useState<string | null>(() => {
-    return localStorage.getItem('dinex_active_business_id');
-  });
-
-  // Keep business list and memberships updated in localStorage
-  useEffect(() => {
-    localStorage.setItem('dinex_businesses', JSON.stringify(businesses));
-  }, [businesses]);
-
-  // Keep businesses synchronized with any custom tenants created in AppContext
-  useEffect(() => {
-    let changed = false;
-    const updatedBusinesses = [...businesses];
-
-    tenants.forEach((tenant) => {
-      // Map standard/mock tenants to the static business IDs
-      let matchingBizId = tenant.id;
-      if (tenant.id === 't-01') matchingBizId = 'biz-01';
-      else if (tenant.id === 't-02') matchingBizId = 'biz-02';
-
-      const bizIndex = updatedBusinesses.findIndex((b) => b.id === matchingBizId);
-      
-      if (bizIndex === -1) {
-        // Create new Dinex Business based on Tenant
-        const newBiz: Business = {
-          id: tenant.id,
-          name: tenant.name,
-          businessType: 'Custom',
-          logo: tenant.logoUrl || 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80',
-          country: 'Ethiopia',
-          city: 'Addis Ababa',
-          phone: '+251 911 000 000',
-          email: tenant.ownerEmail,
-          currency: tenant.currency,
-          language: 'en',
-          ownerId: tenant.ownerEmail === 'naolnigatu2025@gmail.com' ? 'u-admin' : `u-${tenant.ownerEmail.split('@')[0]}`,
-          createdAt: tenant.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          status: tenant.subscriptionStatus === 'active' ? 'active' : tenant.subscriptionStatus === 'suspended' ? 'suspended' : tenant.subscriptionStatus === 'rejected' ? 'rejected' : 'pending_approval'
-        };
-        updatedBusinesses.push(newBiz);
-        changed = true;
-      } else {
-        // Update existing business status if tenant status changed
-        const biz = updatedBusinesses[bizIndex];
-        const targetStatus = tenant.subscriptionStatus === 'active' ? 'active' : tenant.subscriptionStatus === 'suspended' ? 'suspended' : tenant.subscriptionStatus === 'rejected' ? 'rejected' : 'pending_approval';
-        if (biz.status !== targetStatus || biz.name !== tenant.name || biz.currency !== tenant.currency) {
-          updatedBusinesses[bizIndex] = {
-            ...biz,
-            name: tenant.name,
-            currency: tenant.currency,
-            status: targetStatus
-          };
-          changed = true;
-        }
-      }
-    });
-
-    if (changed) {
-      setBusinesses(updatedBusinesses);
-    }
-  }, [tenants]);
-
-  useEffect(() => {
-    localStorage.setItem('dinex_memberships', JSON.stringify(memberships));
-  }, [memberships]);
-
-  // Sync with AppContext legacy tenant ID to maintain full compatibility!
-  const setActiveBusinessId = (id: string) => {
-    setActiveBusinessIdState(id);
-    localStorage.setItem('dinex_active_business_id', id);
-
-    // Map business to legacy tenant
-    if (id === 'biz-01') {
-      setActiveTenantId('t-01');
-    } else if (id === 'biz-02') {
-      setActiveTenantId('t-02');
-    } else {
-      // For dynamic custom businesses, find or fallback
-      const found = businesses.find(b => b.id === id);
-      if (found) {
-        // Create matching legacy tenant if missing
-        const tenantExists = tenants.some(t => t.id === id);
-        if (!tenantExists) {
-          // Just set it
-          setActiveTenantId(id);
-        } else {
-          setActiveTenantId(id);
-        }
-      }
-    }
-  };
-
-  // Filter memberships and businesses owned/managed by this user
-  const myMemberships = memberships.filter((m) => m.userId === userId || (userRole === 'super_admin'));
-  
-  // Available businesses: either owned/membership or all if Super Admin
-  const myBusinesses = userRole === 'super_admin'
+  const myBusinesses = (userRole === 'super_admin' || !userRole)
     ? businesses
-    : businesses.filter((b) => 
-        myMemberships.some((m) => m.businessId === b.id && m.status === 'active') || 
-        b.ownerId === userId
+    : businesses.filter((b) =>
+        b.email === userEmail || b.ownerId === userId || userRole === 'owner' || myMemberships.some(m => m.businessId === b.id)
       );
 
-  const activeBusiness = myBusinesses.find((b) => b.id === activeBusinessId) || myBusinesses[0] || null;
+  const activeBusiness = businesses.find((b) => b.id === activeTenantId) || myBusinesses[0] || businesses[0] || null;
 
-  // Auto-set active business on user change
-  useEffect(() => {
-    if (activeBusiness && activeBusiness.id !== activeBusinessId) {
-      setActiveBusinessIdState(activeBusiness.id);
-      localStorage.setItem('dinex_active_business_id', activeBusiness.id);
-    }
-  }, [activeBusiness, activeBusinessId]);
+  const setActiveBusinessId = (id: string) => {
+    setActiveTenantId(id);
+  };
 
-  // Sync activeBusinessId when activeTenantId changes (e.g. via Super Admin override)
-  useEffect(() => {
-    if (!activeTenantId) return;
-    if (activeTenantId === 't-01') {
-      if (activeBusinessId !== 'biz-01') {
-        setActiveBusinessIdState('biz-01');
-        localStorage.setItem('dinex_active_business_id', 'biz-01');
-      }
-    } else if (activeTenantId === 't-02') {
-      if (activeBusinessId !== 'biz-02') {
-        setActiveBusinessIdState('biz-02');
-        localStorage.setItem('dinex_active_business_id', 'biz-02');
-      }
-    } else {
-      if (activeBusinessId !== activeTenantId) {
-        const hasBiz = businesses.some(b => b.id === activeTenantId);
-        if (hasBiz) {
-          setActiveBusinessIdState(activeTenantId);
-          localStorage.setItem('dinex_active_business_id', activeTenantId);
-        }
-      }
-    }
-  }, [activeTenantId, activeBusinessId, businesses]);
-
-  const activeMembership = memberships.find(
-    (m) => m.userId === userId && m.businessId === (activeBusiness?.id || '')
+  const activeMembership = myMemberships.find(
+    (m) => m.businessId === (activeBusiness?.id || '')
   ) || null;
 
   const createBusiness = (data: {
@@ -474,8 +367,27 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     currency: string;
     language: string;
   }): Business => {
-    const newId = `biz-${Math.random().toString(36).substr(2, 9)}`;
-    const ownerId = userId || 'u-unknown';
+    const newId = `t-${Date.now()}`;
+    const ownerEmail = (data.email || currentUser?.email || '').toLowerCase().trim();
+
+    const newTenant: Tenant = {
+      id: newId,
+      name: data.name,
+      slug: data.name.toLowerCase().replace(/\s+/g, '-'),
+      businessType: data.businessType,
+      description: `Welcome to ${data.name}!`,
+      currency: data.currency || 'ETB',
+      currencySymbol: data.currency === 'USD' ? '$' : 'Br',
+      baseTaxRate: 15,
+      serviceCharge: 0,
+      subscriptionPlan: 'free',
+      subscriptionStatus: 'active',
+      ownerEmail,
+      createdAt: new Date().toISOString(),
+      loyaltyPointsRatio: 0.05,
+      loyaltyMinRedeemPoints: 10,
+      loyaltyRedeemValue: 1,
+    };
 
     const newBiz: Business = {
       id: newId,
@@ -487,75 +399,39 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
       email: data.email,
       currency: data.currency,
       language: data.language,
-      ownerId,
+      ownerId: ownerEmail === 'naolnigatu2025@gmail.com' ? 'u-admin' : `u-${ownerEmail.split('@')[0]}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       status: 'active',
+      subscriptionPlan: 'free',
     };
 
-    const newMembership: Membership = {
-      userId: ownerId,
-      businessId: newId,
-      role: 'Owner',
-      branchIds: [`br-def-${newId}`],
-      permissions: ['business.edit', 'menu.create', 'orders.manage', 'payments.verify', 'staff.manage', 'reports.view'],
-      status: 'active',
-      createdAt: new Date().toISOString(),
-    };
+    // Write directly to Firestore so all clients get real-time update
+    syncToFirestore('tenants', newId, newTenant);
+    syncToFirestore('businesses', newId, newBiz);
 
-    // Update in-memory and trigger state updates
-    setBusinesses((prev) => [...prev, newBiz]);
-    setMemberships((prev) => [...prev, newMembership]);
-
-    // Automatically trigger branch and settings creation via custom event or direct local storage write
-    // to keep them fully synced. We do it here or let downstream providers resolve.
-    const defaultBranch: DinexBranch = {
-      id: `br-def-${newId}`,
-      businessId: newId,
-      name: 'Default Branch',
-      location: `${data.city}, ${data.country}`,
-      phone: data.phone,
-      status: 'active',
-      createdAt: new Date().toISOString(),
-    };
-
-    const defaultSettings: BusinessSettings = {
-      orderingEnabled: true,
-      tableManagementEnabled: true,
-      reservationEnabled: false,
-      loyaltyEnabled: false,
-      tipsEnabled: true,
-      customerAccountsEnabled: true,
-      kitchenEnabled: true,
-      takeawayEnabled: true,
-      deliveryEnabled: true,
-    };
-
-    // Store in branch & settings storage directly to keep them in sync
-    const currentBranches = JSON.parse(localStorage.getItem('dinex_branches') || '[]');
-    localStorage.setItem('dinex_branches', JSON.stringify([...currentBranches, defaultBranch]));
-
-    const currentSettings = JSON.parse(localStorage.getItem('dinex_settings') || '{}');
-    currentSettings[newId] = defaultSettings;
-    localStorage.setItem('dinex_settings', JSON.stringify(currentSettings));
-
-    // Force context reload of branch/settings as well by writing to store
-    // Set as active business instantly
-    setActiveBusinessId(newId);
+    // Set as active tenant
+    setActiveTenantId(newId);
 
     return newBiz;
   };
 
   const updateBusinessStatus = (id: string, status: Business['status']) => {
-    setBusinesses((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, status, updatedAt: new Date().toISOString() } : b))
-    );
+    const existing = tenants.find(t => t.id === id);
+    if (existing) {
+      const updatedTenant: Tenant = {
+        ...existing,
+        subscriptionStatus: status === 'active' ? 'active' : status === 'suspended' ? 'suspended' : status === 'rejected' ? 'rejected' : 'pending_approval'
+      };
+      syncToFirestore('tenants', id, updatedTenant);
+      syncToFirestore('businesses', id, updatedTenant);
+    }
   };
 
   return (
     <BusinessContext.Provider
       value={{
-        businesses,
+        businesses: businesses.length > 0 ? businesses : myBusinesses,
         activeBusiness,
         myMemberships,
         activeMembership,
@@ -570,61 +446,34 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function BranchProvider({ children }: { children: React.ReactNode }) {
-  const { activeBusiness, activeMembership } = useDinexBusiness();
-  const { setActiveBranchId: setLegacyBranchId } = useApp();
+  const { activeBusiness } = useDinexBusiness();
+  const { branches: appBranches, activeBranchId, setActiveBranchId, syncToFirestore, activeTenantId } = useApp();
 
-  const [branches, setBranches] = useState<DinexBranch[]>(() => {
-    const local = localStorage.getItem('dinex_branches');
-    return local ? JSON.parse(local) : DEFAULT_BRANCHES;
-  });
+  const branches: DinexBranch[] = appBranches.map(b => ({
+    id: b.id,
+    businessId: b.tenantId || activeTenantId,
+    name: b.name,
+    location: b.address || 'Default Location',
+    phone: b.phone || '',
+    status: 'active',
+    createdAt: new Date().toISOString()
+  }));
 
-  const [activeBranchId, setActiveBranchIdState] = useState<string | null>(() => {
-    return localStorage.getItem('dinex_active_branch_id');
-  });
-
-  useEffect(() => {
-    localStorage.setItem('dinex_branches', JSON.stringify(branches));
-  }, [branches]);
-
-  // Sync to legacy AppContext branch
-  const setActiveBranchId = (id: string | null) => {
-    setActiveBranchIdState(id);
-    if (id) {
-      localStorage.setItem('dinex_active_branch_id', id);
-      // Map to legacy branch IDs
-      if (id === 'br-01') setLegacyBranchId('b-01');
-      else if (id === 'br-02') setLegacyBranchId('b-02');
-      else if (id === 'br-03') setLegacyBranchId('b-03');
-      else setLegacyBranchId(id);
-    } else {
-      localStorage.removeItem('dinex_active_branch_id');
-    }
-  };
-
-  // Filter branches by business
-  const businessBranches = branches.filter((b) => b.businessId === (activeBusiness?.id || ''));
-
-  // Filter based on user membership scoped branch IDs (unless Owner/Super Admin, who sees all)
-  const allowedBranches = !activeMembership || activeMembership.role === 'Owner'
-    ? businessBranches
-    : businessBranches.filter((b) => (activeMembership.branchIds || []).includes(b.id));
-
-  const activeBranch = allowedBranches.find((b) => b.id === activeBranchId) || allowedBranches[0] || null;
-
-  // Auto-set active branch
-  useEffect(() => {
-    if (activeBranch && activeBranch.id !== activeBranchId) {
-      setActiveBranchIdState(activeBranch.id);
-      localStorage.setItem('dinex_active_branch_id', activeBranch.id);
-    }
-  }, [activeBranch, activeBranchId]);
+  const activeBranch = branches.find(b => b.id === activeBranchId) || branches[0] || null;
 
   const createBranch = (name: string, location: string, phone: string): DinexBranch => {
-    if (!activeBusiness) throw new Error('No active business selected');
-    const newId = `br-${Math.random().toString(36).substr(2, 9)}`;
-    const newBranch: DinexBranch = {
+    const targetTenantId = activeBusiness?.id || activeTenantId;
+    const newId = `b-${Date.now()}`;
+    const newBranch: Branch = {
       id: newId,
-      businessId: activeBusiness.id,
+      tenantId: targetTenantId,
+      name,
+      address: location,
+      phone
+    };
+    const newDinexBranch: DinexBranch = {
+      id: newId,
+      businessId: targetTenantId,
       name,
       location,
       phone,
@@ -632,15 +481,16 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
     };
 
-    setBranches((prev) => [...prev, newBranch]);
+    syncToFirestore('branches', newId, newBranch);
     setActiveBranchId(newId);
-    return newBranch;
+    return newDinexBranch;
   };
 
   const updateBranchStatus = (id: string, status: DinexBranch['status']) => {
-    setBranches((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, status } : b))
-    );
+    const found = appBranches.find(b => b.id === id);
+    if (found) {
+      syncToFirestore('branches', id, { ...found, status });
+    }
   };
 
   return (

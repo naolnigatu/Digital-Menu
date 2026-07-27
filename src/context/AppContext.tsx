@@ -92,7 +92,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             onSnapshot,
             doc: firestoreDoc
           } = await import('firebase/firestore');
-          const unsubscribeTenants = onSnapshot(collection(db, 'tenants'), snapshot => {
+          const targetTenantId = currentUser?.tenantId || activeTenantId;
+
+          const tenantsQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
+            ? collection(db, 'tenants')
+            : query(collection(db, 'tenants'), where('id', '==', targetTenantId));
+
+          const unsubscribeTenants = onSnapshot(tenantsQuery, snapshot => {
             const list: Tenant[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -109,7 +115,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             });
           }, err => console.warn("Tenants listener error:", err));
 
-          const unsubscribeBusinesses = onSnapshot(collection(db, 'businesses'), snapshot => {
+          const businessesQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
+            ? collection(db, 'businesses')
+            : query(collection(db, 'businesses'), where('id', '==', targetTenantId));
+
+          const unsubscribeBusinesses = onSnapshot(businessesQuery, snapshot => {
             const list: Tenant[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -126,7 +136,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             });
           }, err => console.warn("Businesses listener error:", err));
 
-          const unsubscribeCategories = onSnapshot(collection(db, 'categories'), snapshot => {
+          const categoriesQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
+            ? collection(db, 'categories')
+            : query(collection(db, 'categories'), where('tenantId', '==', targetTenantId));
+
+          const unsubscribeCategories = onSnapshot(categoriesQuery, snapshot => {
             const grouped: Record<string, Category[]> = {};
             snapshot.forEach(docSnap => {
               const data = { id: docSnap.id, ...docSnap.data() } as Category;
@@ -138,10 +152,22 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             Object.keys(grouped).forEach(tId => {
               grouped[tId].sort((a, b) => (a.orderNum || 0) - (b.orderNum || 0));
             });
-            setCategories(grouped);
+            setCategories(prev => {
+              if (currentUser?.role === 'super_admin' || !targetTenantId) {
+                return grouped;
+              }
+              return {
+                ...prev,
+                [targetTenantId]: grouped[targetTenantId] || []
+              };
+            });
           }, err => console.warn("Categories listener error:", err));
 
-          const unsubscribeMenuItems = onSnapshot(collection(db, 'menu_items'), snapshot => {
+          const menuItemsQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
+            ? collection(db, 'menu_items')
+            : query(collection(db, 'menu_items'), where('tenantId', '==', targetTenantId));
+
+          const unsubscribeMenuItems = onSnapshot(menuItemsQuery, snapshot => {
             const grouped: Record<string, MenuItem[]> = {};
             snapshot.forEach(docSnap => {
               const data = { id: docSnap.id, ...docSnap.data() } as MenuItem;
@@ -150,9 +176,22 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 grouped[data.tenantId].push(data);
               }
             });
-            setMenuItems(grouped);
+            setMenuItems(prev => {
+              if (currentUser?.role === 'super_admin' || !targetTenantId) {
+                return grouped;
+              }
+              return {
+                ...prev,
+                [targetTenantId]: grouped[targetTenantId] || []
+              };
+            });
           }, err => console.warn("MenuItems listener error:", err));
-          const unsubscribeStaff = onSnapshot((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'staff') : query(collection(db, 'staff'), where('tenantId', '==', currentUser?.tenantId))), snapshot => {
+
+          const staffQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
+            ? collection(db, 'staff')
+            : query(collection(db, 'staff'), where('tenantId', '==', targetTenantId));
+
+          const unsubscribeStaff = onSnapshot(staffQuery, snapshot => {
             const list: Staff[] = [];
             snapshot.forEach(docSnap => {
               const data = docSnap.data();
@@ -172,7 +211,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
               });
             }
           }, err => console.warn("Staff listener error:", err));
-          const unsubscribeUsers = onSnapshot((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'users') : query(collection(db, 'users'), where('tenantId', '==', currentUser?.tenantId))), snapshot => {
+
+          const usersQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
+            ? collection(db, 'users')
+            : query(collection(db, 'users'), where('tenantId', '==', targetTenantId));
+
+          const unsubscribeUsers = onSnapshot(usersQuery, snapshot => {
             const staffList: Staff[] = [];
             const custMap: Record<string, CustomerProfile> = {};
             snapshot.forEach(docSnap => {
@@ -209,7 +253,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
               }));
             }
           }, err => console.warn("Users listener error:", err));
-          const unsubscribeBranches = onSnapshot((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'branches') : query(collection(db, 'branches'), where('tenantId', '==', currentUser?.tenantId))), snapshot => {
+
+          const branchesQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
+            ? collection(db, 'branches')
+            : query(collection(db, 'branches'), where('tenantId', '==', targetTenantId));
+
+          const unsubscribeBranches = onSnapshot(branchesQuery, snapshot => {
             const list: Branch[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -228,6 +277,36 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
               });
             }
           }, err => console.warn("Branches listener error:", err));
+
+          const tablesQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
+            ? collection(db, 'tables')
+            : query(collection(db, 'tables'), where('tenantId', '==', targetTenantId));
+
+          const unsubscribeTables = onSnapshot(tablesQuery, snapshot => {
+            const list: Table[] = [];
+            snapshot.forEach(docSnap => {
+              list.push({
+                id: docSnap.id,
+                ...docSnap.data()
+              } as Table);
+            });
+            setTables(list);
+          }, err => console.warn("Tables listener error:", err));
+
+          const stationsQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
+            ? collection(db, 'stations')
+            : query(collection(db, 'stations'), where('tenantId', '==', targetTenantId));
+
+          const unsubscribeStations = onSnapshot(stationsQuery, snapshot => {
+            const list: PreparationStation[] = [];
+            snapshot.forEach(docSnap => {
+              list.push({
+                id: docSnap.id,
+                ...docSnap.data()
+              } as PreparationStation);
+            });
+            setStations(list);
+          }, err => console.warn("Stations listener error:", err));
           const unsubscribeReservations = onSnapshot((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'reservations') : query(collection(db, 'reservations'), where('tenantId', '==', currentUser?.tenantId))), snapshot => {
             const list: Reservation[] = [];
             snapshot.forEach(docSnap => {
@@ -340,6 +419,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             unsubscribeStaff();
             unsubscribeUsers();
             unsubscribeBranches();
+            unsubscribeTables();
+            unsubscribeStations();
             unsubscribeReservations();
             unsubscribeIngredients();
             unsubscribeStockMovements();
@@ -843,6 +924,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const id = `tab-${Date.now()}`;
     const newTable: Table = {
       ...tableData,
+      tenantId: tableData.tenantId || activeTenantId,
       id,
       qrUrl: `https://menuflow.io/${activeTenantId}/${tableData.branchId}/${id}`
     };
@@ -869,6 +951,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const id = `st-${Date.now()}`;
     const newStation: PreparationStation = {
       ...stationData,
+      tenantId: stationData.tenantId || activeTenantId,
       id
     };
     setStations(prev => [...prev, newStation]);
