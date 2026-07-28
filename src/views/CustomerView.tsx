@@ -860,7 +860,7 @@ const currentItemPrice = useMemo(() => {
 
   if (showDirectory) {
     const sortedTenants = [...tenants]
-      .filter(t => t.subscriptionPlan !== 'free')
+      .filter(t => t.subscriptionStatus !== 'rejected' && t.subscriptionStatus !== 'suspended')
       .sort((a, b) => {
         const rankA = getTierRank(a.subscriptionPlan);
         const rankB = getTierRank(b.subscriptionPlan);

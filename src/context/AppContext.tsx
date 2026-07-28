@@ -94,9 +94,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           } = await import('firebase/firestore');
           const targetTenantId = currentUser?.tenantId || activeTenantId;
 
-          const tenantsQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
-            ? collection(db, 'tenants')
-            : query(collection(db, 'tenants'), where('id', '==', targetTenantId));
+          const tenantsQuery = collection(db, 'tenants');
 
           const unsubscribeTenants = onSnapshot(tenantsQuery, snapshot => {
             const list: Tenant[] = [];
@@ -115,9 +113,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             });
           }, err => console.warn("Tenants listener error:", err));
 
-          const businessesQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
-            ? collection(db, 'businesses')
-            : query(collection(db, 'businesses'), where('id', '==', targetTenantId));
+          const businessesQuery = collection(db, 'businesses');
 
           const unsubscribeBusinesses = onSnapshot(businessesQuery, snapshot => {
             const list: Tenant[] = [];
