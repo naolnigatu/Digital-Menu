@@ -586,7 +586,7 @@ const currentItemPrice = useMemo(() => {
     );
   };
 
-  const executeOrderSubmission = () => {
+  const executeOrderSubmission = async () => {
     const chosenConfig = enabledPaymentConfigs.find(c => c.id === selectedPaymentMethodId);
     
     const orderItems: OrderItem[] = cart.map((cartItem, idx) => ({
@@ -692,7 +692,7 @@ const currentItemPrice = useMemo(() => {
       ? (isAutoApproval ? (activeSettings?.predefinedDeliveryFee || 150) : 0)
       : undefined;
 
-    const submitted = placeOrder({
+    const submitted = await placeOrder({
       tenantId: activeTenantId,
       branchId: activeBranchId,
       tableId: (orderType === 'dine_in' || orderType === 'meal_subscription') ? activeTableId : undefined,
@@ -723,8 +723,12 @@ const currentItemPrice = useMemo(() => {
       deliveryFee: initDeliveryFee,
     } as any);
 
-    saveOrderId(submitted.id);
+    if (!submitted) {
+      showToast('Failed to place order. Please try again.', 'error');
+      return;
+    }
 
+    saveOrderId(submitted.id);
 
     // If subscribed to meal plan
     if (orderType === 'meal_subscription') {
@@ -768,13 +772,14 @@ const currentItemPrice = useMemo(() => {
       } as any);
     }
 
-
     // Process customer profiles loyalty logic if logged in
     if (customerEmailForDashboard) {
       updateCustomerProfile(customerEmailForDashboard, {
         loyaltyPoints: Math.max(0, profile.loyaltyPoints + Math.floor(calculatedSubtotal * 0.05) - pointsToRedeem)
       });
     }
+
+    showToast(`Order #${submitted.orderNum} placed successfully! Tracking ID: ${submitted.orderNum}`, 'success');
 
     // Reset checkout states
     setPaymentScreenshot('');
@@ -789,6 +794,8 @@ const currentItemPrice = useMemo(() => {
     setActiveCustomerOrder(submitted);
     setCart([]);
     setIsCartOpen(false);
+    setIsDirectCheckoutOpen(false);
+    setDirectCheckoutItem(null);
     setReviewSubmitted(false);
     setFeedback('');
     setRating(5);

@@ -176,9 +176,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             });
           }, err => console.warn("Businesses listener error:", err));
 
-          const categoriesQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
-            ? collection(db, 'categories')
-            : query(collection(db, 'categories'), where('tenantId', '==', targetTenantId));
+          const categoriesQuery = collection(db, 'categories');
 
           const unsubscribeCategories = onSnapshot(categoriesQuery, snapshot => {
             const grouped: Record<string, Category[]> = {};
@@ -192,20 +190,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             Object.keys(grouped).forEach(tId => {
               grouped[tId].sort((a, b) => (a.orderNum || 0) - (b.orderNum || 0));
             });
-            setCategories(prev => {
-              if (currentUser?.role === 'super_admin' || !targetTenantId) {
-                return grouped;
-              }
-              return {
-                ...prev,
-                [targetTenantId]: grouped[targetTenantId] || []
-              };
-            });
+            setCategories(prev => ({
+              ...prev,
+              ...grouped
+            }));
           }, err => console.warn("Categories listener error:", err));
 
-          const menuItemsQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
-            ? collection(db, 'menu_items')
-            : query(collection(db, 'menu_items'), where('tenantId', '==', targetTenantId));
+          const menuItemsQuery = collection(db, 'menu_items');
 
           const unsubscribeMenuItems = onSnapshot(menuItemsQuery, snapshot => {
             const grouped: Record<string, MenuItem[]> = {};
@@ -216,15 +207,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 grouped[data.tenantId].push(data);
               }
             });
-            setMenuItems(prev => {
-              if (currentUser?.role === 'super_admin' || !targetTenantId) {
-                return grouped;
-              }
-              return {
-                ...prev,
-                [targetTenantId]: grouped[targetTenantId] || []
-              };
-            });
+            setMenuItems(prev => ({
+              ...prev,
+              ...grouped
+            }));
           }, err => console.warn("MenuItems listener error:", err));
 
           const staffQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
@@ -915,15 +901,37 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       ...catData,
       id
     };
+    setCategories(prev => {
+      const tenantCats = prev[catData.tenantId] || [];
+      if (tenantCats.some(c => c.id === id)) return prev;
+      return {
+        ...prev,
+        [catData.tenantId]: [...tenantCats, newCat]
+      };
+    });
     addLog('Create Category', `Created menu category: ${catData.name}`);
     await syncToFirestore('categories', id, newCat);
   };
   const updateCategory = async (updatedCat: Category) => {
+    setCategories(prev => {
+      const tenantCats = prev[updatedCat.tenantId] || [];
+      return {
+        ...prev,
+        [updatedCat.tenantId]: tenantCats.map(c => c.id === updatedCat.id ? updatedCat : c)
+      };
+    });
     addLog('Update Category', `Updated menu category: ${updatedCat.name}`);
     await syncToFirestore('categories', updatedCat.id, updatedCat);
   };
   const deleteCategory = async (tenantId: string, categoryId: string) => {
     const catName = categories[tenantId]?.find(c => c.id === categoryId)?.name || '';
+    setCategories(prev => {
+      const tenantCats = prev[tenantId] || [];
+      return {
+        ...prev,
+        [tenantId]: tenantCats.filter(c => c.id !== categoryId)
+      };
+    });
     addLog('Delete Category', `Deleted menu category: ${catName}`);
     await deleteFromFirestore('categories', categoryId);
   };
@@ -935,15 +943,37 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       ...itemData,
       id
     };
+    setMenuItems(prev => {
+      const tenantItems = prev[itemData.tenantId] || [];
+      if (tenantItems.some(i => i.id === id)) return prev;
+      return {
+        ...prev,
+        [itemData.tenantId]: [...tenantItems, newItem]
+      };
+    });
     addLog('Create Menu Item', `Created menu item: ${itemData.name}`);
     await syncToFirestore('menu_items', id, newItem);
   };
   const updateMenuItem = async (updatedItem: MenuItem) => {
+    setMenuItems(prev => {
+      const tenantItems = prev[updatedItem.tenantId] || [];
+      return {
+        ...prev,
+        [updatedItem.tenantId]: tenantItems.map(i => i.id === updatedItem.id ? updatedItem : i)
+      };
+    });
     addLog('Update Menu Item', `Updated menu item: ${updatedItem.name}`);
     await syncToFirestore('menu_items', updatedItem.id, updatedItem);
   };
   const deleteMenuItem = async (tenantId: string, itemId: string) => {
     const itemName = menuItems[tenantId]?.find(i => i.id === itemId)?.name || '';
+    setMenuItems(prev => {
+      const tenantItems = prev[tenantId] || [];
+      return {
+        ...prev,
+        [tenantId]: tenantItems.filter(i => i.id !== itemId)
+      };
+    });
     addLog('Delete Menu Item', `Deleted menu item: ${itemName}`);
     await deleteFromFirestore('menu_items', itemId);
   };
@@ -954,6 +984,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         ...currentItem,
         isAvailable: !currentItem.isAvailable
       };
+      setMenuItems(prev => {
+        const tenantItems = prev[tenantId] || [];
+        return {
+          ...prev,
+          [tenantId]: tenantItems.map(i => i.id === itemId ? updated : i)
+        };
+      });
       addLog('Toggle Availability', `Toggled availability for menu item ${currentItem.name} to ${!currentItem.isAvailable ? 'available' : 'unavailable'}`);
       await syncToFirestore('menu_items', itemId, updated);
     }
