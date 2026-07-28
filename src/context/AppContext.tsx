@@ -2643,7 +2643,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     globalSettings,
     updateGlobalSettings,
     landingPageConfig,
-    updateLandingPageConfig
+    updateLandingPageConfig,
+    syncToFirestore,
+    deleteFromFirestore
   }}>
       {children}
     </AppContext.Provider>;
