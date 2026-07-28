@@ -370,8 +370,9 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     const newId = `t-${Date.now()}`;
     const ownerEmail = (data.email || currentUser?.email || '').toLowerCase().trim();
 
-    const newTenant: Tenant = {
+    const newTenant: Tenant & { tenantId?: string; ownerUid?: string } = {
       id: newId,
+      tenantId: newId,
       name: data.name,
       slug: data.name.toLowerCase().replace(/\s+/g, '-'),
       businessType: data.businessType,
@@ -383,14 +384,16 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
       subscriptionPlan: 'free',
       subscriptionStatus: 'active',
       ownerEmail,
+      ownerUid: currentUser?.id,
       createdAt: new Date().toISOString(),
       loyaltyPointsRatio: 0.05,
       loyaltyMinRedeemPoints: 10,
       loyaltyRedeemValue: 1,
     };
 
-    const newBiz: Business = {
+    const newBiz: Business & { tenantId?: string; ownerUid?: string } = {
       id: newId,
+      tenantId: newId,
       name: data.name,
       businessType: data.businessType,
       country: data.country,
@@ -400,6 +403,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
       currency: data.currency,
       language: data.language,
       ownerId: ownerEmail === 'naolnigatu2025@gmail.com' ? 'u-admin' : `u-${ownerEmail.split('@')[0]}`,
+      ownerUid: currentUser?.id,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       status: 'active',

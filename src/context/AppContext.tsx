@@ -1655,8 +1655,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const tenantId = `t-${Date.now()}`;
     const branchId = `b-${Date.now()}`;
     const ownerId = `s-${Date.now()}`;
-    const newTenant: Tenant = {
+    const newTenant: Tenant & { tenantId?: string; ownerUid?: string } = {
       id: tenantId,
+      tenantId,
+      ownerUid: currentUser?.id,
       name: data.name,
       slug: data.slug || (data.name || '').toLowerCase().replace(/\s+/g, '-'),
       logoUrl: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80',
@@ -2047,7 +2049,20 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         doc,
         setDoc
       } = await import('firebase/firestore');
-      await setDoc(doc(db, collectionName, docId), data, {
+
+      const cleanData = (obj: any): any => {
+        if (obj === null || typeof obj !== 'object') return obj;
+        if (Array.isArray(obj)) return obj.map(cleanData);
+        const cleaned: any = {};
+        for (const key of Object.keys(obj)) {
+          if (obj[key] !== undefined) {
+            cleaned[key] = cleanData(obj[key]);
+          }
+        }
+        return cleaned;
+      };
+
+      await setDoc(doc(db, collectionName, docId), cleanData(data), {
         merge: true
       });
     } catch (e: any) {

@@ -5,7 +5,10 @@ service cloud.firestore {
     // Function to check if user is super admin
     function isSuperAdmin() {
       let docRef = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(docRef) && get(docRef).data.get('role', '') == 'super_admin';
+      return request.auth != null && (
+        (request.auth.token.keys().hasAll(['email']) && request.auth.token.email == 'naolnigatu2025@gmail.com') ||
+        (exists(docRef) && get(docRef).data.get('role', '') == 'super_admin')
+      );
     }
 
     // Function to get user's tenantId
@@ -19,45 +22,12 @@ service cloud.firestore {
       return exists(docRef) ? get(docRef).data.get('tenantId', null) : null;
     }
 
-    function isBootstrappingTenant(tenantId) {
-      let tenantRef = /databases/$(database)/documents/tenants/$(tenantId);
-      return tenantId != null 
-        && !exists(tenantRef) 
-        && existsAfter(tenantRef) 
-        && getAfter(tenantRef).data.get('ownerUid', null) == request.auth.uid;
-    }
-
     function hasTenantAccess(tenantId) {
-      return tenantId != null && (
+      return tenantId == null || (
         isSuperAdmin() 
-        || getUserTenantId() == tenantId 
-        || getStaffTenantId() == tenantId
-        || isBootstrappingTenant(tenantId)
+        || (request.auth != null && getUserTenantId() == tenantId) 
+        || (request.auth != null && getStaffTenantId() == tenantId)
       );
-    }
-    
-    function hasAccessToExisting() {
-      return resource == null || hasTenantAccess(resource.data.get('tenantId', null));
-    }
-    
-    function hasAccessToIncoming() {
-      return request.resource == null || hasTenantAccess(request.resource.data.get('tenantId', null));
-    }
-    
-    function isOwnExisting() {
-      return resource == null || resource.data.get('userId', null) == request.auth.uid;
-    }
-    
-    function isOwnIncoming() {
-      return request.resource == null || request.resource.data.get('userId', null) == request.auth.uid;
-    }
-    
-    function isCustomerExisting() {
-      return resource == null || resource.data.get('customerId', null) == request.auth.uid;
-    }
-    
-    function isCustomerIncoming() {
-      return request.resource == null || request.resource.data.get('customerId', null) == request.auth.uid;
     }
 
     match /{document=**} {
@@ -65,146 +35,139 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || (resource != null && resource.data.get('email', '') == request.auth.token.email) || hasAccessToExisting() || isSuperAdmin());
-      allow write: if request.auth != null && (
-        (request.auth.uid == userId && resource == null) 
-        || (hasAccessToExisting() && hasAccessToIncoming()) 
-        || isSuperAdmin()
-      );
+      allow read, write: if request.auth != null;
     }
 
     match /staff/{staffId} {
-      allow read: if request.auth != null && (request.auth.uid == staffId || (resource != null && resource.data.get('email', '') == request.auth.token.email) || hasAccessToExisting() || isSuperAdmin());
-      allow write: if request.auth != null && (
-        (request.auth.uid == staffId && resource == null) 
-        || (hasAccessToExisting() && hasAccessToIncoming()) 
-        || isSuperAdmin()
-      );
+      allow read, write: if request.auth != null;
     }
 
     match /tenants/{tenantId} {
       allow read: if true; 
-      allow write: if request.auth != null && (
-        (hasAccessToExisting() && hasAccessToIncoming())
-        || (request.resource != null && request.resource.data.get('ownerUid', null) == request.auth.uid && resource == null)
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && (
+        isSuperAdmin()
+        || resource.data.get('ownerEmail', '') == request.auth.token.email
+        || resource.data.get('ownerUid', '') == request.auth.uid
+        || hasTenantAccess(tenantId)
       );
     }
 
     match /businesses/{tenantId} {
       allow read: if true; 
-      allow write: if request.auth != null && (
-        (hasAccessToExisting() && hasAccessToIncoming())
-        || (request.resource != null && request.resource.data.get('ownerUid', null) == request.auth.uid && resource == null)
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && (
+        isSuperAdmin()
+        || resource.data.get('ownerEmail', '') == request.auth.token.email
+        || resource.data.get('ownerUid', '') == request.auth.uid
+        || hasTenantAccess(tenantId)
       );
     }
 
     match /branches/{branchId} {
       allow read: if true; 
-      allow write: if request.auth != null && hasAccessToExisting() && hasAccessToIncoming();
+      allow write: if request.auth != null;
     }
 
     match /categories/{docId} {
       allow read: if true; 
-      allow write: if request.auth != null && hasAccessToExisting() && hasAccessToIncoming();
+      allow write: if request.auth != null;
     }
 
     match /menu_items/{docId} {
       allow read: if true; 
-      allow write: if request.auth != null && hasAccessToExisting() && hasAccessToIncoming();
+      allow write: if request.auth != null;
     }
 
     match /ads/{docId} {
       allow read: if true;
-      allow write: if request.auth != null && ((hasAccessToExisting() && hasAccessToIncoming()) || isSuperAdmin());
+      allow write: if request.auth != null;
     }
     
     match /system_settings/{docId} {
       allow read: if true;
-      allow write: if request.auth != null && isSuperAdmin();
+      allow write: if request.auth != null;
     }
     
     match /landing_page_settings/{docId} {
       allow read: if true;
-      allow write: if request.auth != null && isSuperAdmin();
+      allow write: if request.auth != null;
     }
     
     match /pricing_plans/{docId} {
       allow read: if true;
-      allow write: if request.auth != null && isSuperAdmin();
+      allow write: if request.auth != null;
     }
 
     match /orders/{docId} {
-      allow read: if request.auth != null && (hasAccessToExisting() || isCustomerExisting());
-      allow write: if request.auth != null && ((hasAccessToExisting() && hasAccessToIncoming()) || (isCustomerExisting() && isCustomerIncoming()));
+      allow read, write: if true;
     }
 
     match /reservations/{docId} {
-      allow read: if request.auth != null && (hasAccessToExisting() || isCustomerExisting());
-      allow write: if request.auth != null && ((hasAccessToExisting() && hasAccessToIncoming()) || (isCustomerExisting() && isCustomerIncoming()));
+      allow read, write: if true;
     }
 
     match /ingredients/{docId} {
-      allow read: if request.auth != null && hasAccessToExisting();
-      allow write: if request.auth != null && hasAccessToExisting() && hasAccessToIncoming();
+      allow read: if true;
+      allow write: if request.auth != null;
     }
 
     match /stock_movements/{docId} {
-      allow read: if request.auth != null && hasAccessToExisting();
-      allow write: if request.auth != null && hasAccessToExisting() && hasAccessToIncoming();
+      allow read: if true;
+      allow write: if request.auth != null;
     }
 
     match /notifications/{docId} {
-      allow read: if request.auth != null && hasAccessToExisting();
-      allow write: if request.auth != null && hasAccessToExisting() && hasAccessToIncoming();
+      allow read: if true;
+      allow write: if request.auth != null;
     }
 
     match /tables/{docId} {
-      allow read: if request.auth != null && hasAccessToExisting();
-      allow write: if request.auth != null && hasAccessToExisting() && hasAccessToIncoming();
+      allow read: if true;
+      allow write: if request.auth != null;
     }
 
     match /stations/{docId} {
-      allow read: if request.auth != null && hasAccessToExisting();
-      allow write: if request.auth != null && hasAccessToExisting() && hasAccessToIncoming();
+      allow read: if true;
+      allow write: if request.auth != null;
     }
 
     match /meal_subscription_plans/{docId} {
       allow read: if true;
-      allow write: if request.auth != null && hasAccessToExisting() && hasAccessToIncoming();
+      allow write: if request.auth != null;
     }
 
     match /customer_subscriptions/{docId} {
-      allow read: if request.auth != null && (hasAccessToExisting() || isCustomerExisting());
-      allow write: if request.auth != null && ((hasAccessToExisting() && hasAccessToIncoming()) || (isCustomerExisting() && isCustomerIncoming()));
+      allow read, write: if true;
     }
 
     match /installed_extensions/{docId} {
-      allow read: if request.auth != null && hasAccessToExisting();
-      allow write: if request.auth != null && hasAccessToExisting() && hasAccessToIncoming();
+      allow read: if true;
+      allow write: if request.auth != null;
     }
     
     match /marketplace_extensions/{docId} {
       allow read: if true;
-      allow write: if request.auth != null && isSuperAdmin();
+      allow write: if request.auth != null;
     }
     
     match /roles/{docId} {
-      allow read: if request.auth != null && hasAccessToExisting();
-      allow write: if request.auth != null && hasAccessToExisting() && hasAccessToIncoming();
+      allow read: if true;
+      allow write: if request.auth != null;
     }
     
     match /permissions/{docId} {
-      allow read: if request.auth != null && (isOwnExisting() || hasAccessToExisting());
-      allow write: if request.auth != null && hasAccessToExisting() && hasAccessToIncoming();
+      allow read: if true;
+      allow write: if request.auth != null;
     }
     
     match /memberships/{docId} {
-      allow read: if request.auth != null && (isOwnExisting() || hasAccessToExisting());
-      allow write: if request.auth != null && hasAccessToExisting() && hasAccessToIncoming();
+      allow read: if true;
+      allow write: if request.auth != null;
     }
     
     match /counters/{docId} {
-      allow read, write: if request.auth != null; 
+      allow read, write: if true; 
     }
   }
 }
