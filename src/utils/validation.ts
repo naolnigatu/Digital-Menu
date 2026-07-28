@@ -13,11 +13,25 @@ export const sanitizeName = (text: string): { valid: boolean; value: string; err
   return { valid: true, value: sanitized };
 };
 
-export const validatePhone = (phone: string): { valid: boolean; value: string; error?: string } => {
-  if (!phone) return { valid: false, value: '', error: 'Phone number is required.' };
-  let sanitized = phone.trim().replace(/\s+/g, '');
+export const sanitizePhoneInput = (input: string): string => {
+  if (!input) return '';
+  const trimmed = input.trim();
+  const hasLeadingPlus = trimmed.startsWith('+');
+  const digitsOnly = input.replace(/[^0-9]/g, '');
+  if (hasLeadingPlus) {
+    return `+${digitsOnly}`;
+  }
+  return digitsOnly;
+};
+
+export const validatePhone = (phone?: string, optional = false): { valid: boolean; value: string; error?: string } => {
+  if (!phone || !phone.trim()) {
+    if (optional) return { valid: true, value: '' };
+    return { valid: false, value: '', error: 'Phone number is required.' };
+  }
+  const sanitized = sanitizePhoneInput(phone);
   if (!/^\+?[0-9]{7,15}$/.test(sanitized)) {
-    return { valid: false, value: sanitized, error: 'Invalid phone number format. Use numbers and optional leading +.' };
+    return { valid: false, value: sanitized, error: 'Phone number must contain 7-15 digits with optional leading +.' };
   }
   return { valid: true, value: sanitized };
 };

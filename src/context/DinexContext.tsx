@@ -341,13 +341,21 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     createdAt: b.createdAt
   }));
 
-  const myBusinesses = (userRole === 'super_admin' || !userRole)
+  const myBusinesses = (userRole === 'super_admin' || currentUser?.role === 'super_admin')
     ? businesses
-    : businesses.filter((b) =>
-        b.email === userEmail || b.ownerId === userId || userRole === 'owner' || myMemberships.some(m => m.businessId === b.id)
-      );
+    : (userRole === 'owner' || userRole === 'business_owner' || currentUser?.role === 'business_owner' || currentUser?.role === 'owner')
+    ? businesses.filter((b) => {
+        const isOwner = (b.email && userEmail && b.email.toLowerCase() === userEmail.toLowerCase()) ||
+                        (b.email && currentUser?.email && b.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+                        b.ownerId === userId ||
+                        (currentUser?.id && (b as any).ownerUid === currentUser.id) ||
+                        b.id === currentUser?.tenantId ||
+                        myMemberships.some(m => m.businessId === b.id);
+        return isOwner;
+      })
+    : businesses.filter((b) => b.status !== 'suspended' && b.status !== 'rejected');
 
-  const activeBusiness = businesses.find((b) => b.id === activeTenantId) || myBusinesses[0] || businesses[0] || null;
+  const activeBusiness = myBusinesses.find((b) => b.id === activeTenantId) || myBusinesses[0] || null;
 
   const setActiveBusinessId = (id: string) => {
     setActiveTenantId(id);
@@ -435,7 +443,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
   return (
     <BusinessContext.Provider
       value={{
-        businesses: businesses.length > 0 ? businesses : myBusinesses,
+        businesses: myBusinesses,
         activeBusiness,
         myMemberships,
         activeMembership,

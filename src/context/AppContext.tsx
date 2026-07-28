@@ -94,17 +94,39 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           } = await import('firebase/firestore');
           const targetTenantId = currentUser?.tenantId || activeTenantId;
 
-          const tenantsQuery = collection(db, 'tenants');
+          let tenantsQuery;
+          if (currentUser?.role === 'super_admin') {
+            tenantsQuery = collection(db, 'tenants');
+          } else if (currentUser?.role === 'business_owner' || currentUser?.role === 'owner' || currentUser?.role === 'staff') {
+            if (currentUser.id) {
+              tenantsQuery = query(collection(db, 'tenants'), where('ownerUid', '==', currentUser.id));
+            } else if (currentUser.email) {
+              tenantsQuery = query(collection(db, 'tenants'), where('ownerEmail', '==', currentUser.email));
+            } else if (currentUser.tenantId) {
+              tenantsQuery = query(collection(db, 'tenants'), where('id', '==', currentUser.tenantId));
+            } else {
+              tenantsQuery = collection(db, 'tenants');
+            }
+          } else {
+            tenantsQuery = collection(db, 'tenants');
+          }
 
           const unsubscribeTenants = onSnapshot(tenantsQuery, snapshot => {
             const list: Tenant[] = [];
             snapshot.forEach(docSnap => {
+              const data = docSnap.data() as Tenant;
+              if (!currentUser || currentUser.role === 'customer') {
+                if (data.subscriptionStatus === 'suspended' || data.subscriptionStatus === 'rejected') return;
+              }
               list.push({
                 id: docSnap.id,
-                ...docSnap.data()
-              } as Tenant);
+                ...data
+              });
             });
             setTenants(prev => {
+              if (currentUser?.role === 'business_owner' || currentUser?.role === 'owner') {
+                return list;
+              }
               const map = new Map<string, Tenant>(prev.map(t => [t.id, t]));
               list.forEach(t => {
                 map.set(t.id, t);
@@ -113,17 +135,39 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             });
           }, err => console.warn("Tenants listener error:", err));
 
-          const businessesQuery = collection(db, 'businesses');
+          let businessesQuery;
+          if (currentUser?.role === 'super_admin') {
+            businessesQuery = collection(db, 'businesses');
+          } else if (currentUser?.role === 'business_owner' || currentUser?.role === 'owner' || currentUser?.role === 'staff') {
+            if (currentUser.id) {
+              businessesQuery = query(collection(db, 'businesses'), where('ownerUid', '==', currentUser.id));
+            } else if (currentUser.email) {
+              businessesQuery = query(collection(db, 'businesses'), where('ownerEmail', '==', currentUser.email));
+            } else if (currentUser.tenantId) {
+              businessesQuery = query(collection(db, 'businesses'), where('id', '==', currentUser.tenantId));
+            } else {
+              businessesQuery = collection(db, 'businesses');
+            }
+          } else {
+            businessesQuery = collection(db, 'businesses');
+          }
 
           const unsubscribeBusinesses = onSnapshot(businessesQuery, snapshot => {
             const list: Tenant[] = [];
             snapshot.forEach(docSnap => {
+              const data = docSnap.data() as Tenant;
+              if (!currentUser || currentUser.role === 'customer') {
+                if (data.subscriptionStatus === 'suspended' || data.subscriptionStatus === 'rejected') return;
+              }
               list.push({
                 id: docSnap.id,
-                ...docSnap.data()
-              } as Tenant);
+                ...data
+              });
             });
             setTenants(prev => {
+              if (currentUser?.role === 'business_owner' || currentUser?.role === 'owner') {
+                return list;
+              }
               const map = new Map<string, Tenant>(prev.map(t => [t.id, t]));
               list.forEach(t => {
                 map.set(t.id, t);
@@ -391,7 +435,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             console.warn("Firestore global settings listener error:", err);
           });
           const targetOrdersTenantId = currentUser?.tenantId || activeTenantId;
-          const ordersQuery = (currentUser?.role === 'super_admin' || !targetOrdersTenantId)
+          const ordersQuery = (currentUser?.role === 'super_admin' || currentUser?.role === 'customer' || !currentUser)
             ? collection(db, 'orders')
             : query(collection(db, 'orders'), where('tenantId', '==', targetOrdersTenantId));
           const unsubscribeOrders = onSnapshot(ordersQuery, snapshot => {

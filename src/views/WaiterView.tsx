@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { sanitizePhoneInput } from '../utils/validation';
 import { useApp } from '../context/AppContext';
 import { Table, MenuItem, Order, OrderItem } from '../types';
 import { 
@@ -418,10 +419,17 @@ export default function WaiterView() {
                       <div className="grid gap-2 text-xs">
                         <input
                           type="text"
-                          
+                          placeholder="Guest Name (Optional)"
                           value={guestName}
                           onChange={(e) => setGuestName(e.target.value)}
                           className="w-full rounded-lg border border-slate-200 px-3 py-1.5"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Guest Phone (0-9, optional +)"
+                          value={guestPhone}
+                          onChange={(e) => setGuestPhone(sanitizePhoneInput(e.target.value))}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-1.5 font-mono"
                         />
                       </div>
 

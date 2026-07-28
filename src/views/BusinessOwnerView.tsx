@@ -1,4 +1,4 @@
-import { sanitizeName, validatePhone, validateEmail, validateNumber } from '../utils/validation';
+import { sanitizeName, validatePhone, validateEmail, validateNumber, sanitizePhoneInput } from '../utils/validation';
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { MenuItem, Category, Table, Staff, ModifierGroup, BusinessType, Order, OrderItem } from '../types';
@@ -1949,7 +1949,7 @@ export default function BusinessOwnerView() {
                           <input
                             type="text"
                             value={newOrderPhone}
-                            onChange={(e) => setNewOrderPhone(e.target.value)}
+                            onChange={(e) => setNewOrderPhone(sanitizePhoneInput(e.target.value))}
                             
                             className="w-full rounded-lg border border-slate-200 p-2 text-xs font-semibold focus:border-indigo-400 focus:outline-none"
                           />
@@ -3823,7 +3823,7 @@ export default function BusinessOwnerView() {
                         type="text"
                         
                         value={registerUserPhone}
-                        onChange={(e) => setRegisterUserPhone(e.target.value)}
+                        onChange={(e) => setRegisterUserPhone(sanitizePhoneInput(e.target.value))}
                         className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-slate-400 focus:outline-none"
                       />
                     </div>
@@ -4631,7 +4631,7 @@ export default function BusinessOwnerView() {
                     required
                     
                     value={newBizPhone}
-                    onChange={(e) => setNewBizPhone(e.target.value)}
+                    onChange={(e) => setNewBizPhone(sanitizePhoneInput(e.target.value))}
                     className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none"
                   />
                 </div>

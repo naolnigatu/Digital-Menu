@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { sanitizeName, validatePhone } from '../utils/validation';
+import { sanitizeName, validatePhone, sanitizePhoneInput } from '../utils/validation';
 import { useApp } from '../context/AppContext';
 import { MenuItem, OrderItem, Order, Category, PaymentMethodConfig, MealSubscriptionPackage } from '../types';
 import { 
@@ -822,8 +822,17 @@ const currentItemPrice = useMemo(() => {
   }, [customerEmailForDashboard]);
 
   const currentLiveOrder = activeCustomerOrder 
-    ? orders.find(o => o.id === activeCustomerOrder.id) 
+    ? (orders.find(o => o.id === activeCustomerOrder.id) || activeCustomerOrder) 
     : null;
+
+  useEffect(() => {
+    if (activeCustomerOrder) {
+      const updated = orders.find(o => o.id === activeCustomerOrder.id);
+      if (updated && (updated.status !== activeCustomerOrder.status || updated.updatedAt !== activeCustomerOrder.updatedAt)) {
+        setActiveCustomerOrder(updated);
+      }
+    }
+  }, [orders, activeCustomerOrder]);
 
   const handleReviewSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1512,9 +1521,15 @@ const currentItemPrice = useMemo(() => {
                         return;
                       }
                       
+                      const cleanQuery = query.toLowerCase();
+                      const sanitizedQueryPhone = sanitizePhoneInput(query);
                       const foundOrder = orders.find(o => 
-                        o.tenantId === activeTenantId && 
-                        (o.customerPhone === query || (o.id || '').includes(query) || (o.orderNum || '').includes(query) || (o.customerEmail || '').toLowerCase() === (query || '').toLowerCase())
+                        (o.id || '').toLowerCase() === cleanQuery ||
+                        (o.id || '').toLowerCase().includes(cleanQuery) ||
+                        (o.orderNum || '').toLowerCase() === cleanQuery ||
+                        (o.orderNum || '').toLowerCase().includes(cleanQuery) ||
+                        (o.customerPhone && (o.customerPhone === query || o.customerPhone === sanitizedQueryPhone || o.customerPhone.includes(sanitizedQueryPhone))) ||
+                        (o.customerEmail && o.customerEmail.toLowerCase() === cleanQuery)
                       );
 
                       if (foundOrder) {
@@ -1534,7 +1549,7 @@ const currentItemPrice = useMemo(() => {
                       <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Recent Device Orders</p>
                       <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
                         {orders
-                          .filter(o => o.tenantId === activeTenantId && myOrderIds.includes(o.id))
+                          .filter(o => myOrderIds.includes(o.id))
                           .sort((a, b) => b.createdAt - a.createdAt)
                           .map(o => (
                             <button
@@ -1617,7 +1632,7 @@ const currentItemPrice = useMemo(() => {
                       type="text"
                       
                       value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      onChange={(e) => setCustomerPhone(sanitizePhoneInput(e.target.value))}
                       className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-gray-900 font-mono"
                     />
                     {['pickup', 'delivery', 'drive_through', 'meal_subscription'].includes(orderType) && (
