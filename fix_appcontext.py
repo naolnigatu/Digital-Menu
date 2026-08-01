@@ -3,48 +3,43 @@ import re
 with open("src/context/AppContext.tsx", "r") as f:
     content = f.read()
 
-if "import { createSecondaryUser }" not in content:
-    content = content.replace("import { getDB }", "import { getDB, createSecondaryUser }")
-
-old_func = """  const addStaffMember = async (memberData: Omit<Staff, 'id' | 'active'>) => {
-    const id = `s-${Date.now()}`;
-    const newStaff: Staff = {
-      ...memberData,
-      id,
-      active: true
-    };
-    setStaff(prev => [...prev, newStaff]);
-    addLog('Invite Staff', `Invited employee ${memberData.name} as ${memberData.role}.`);
-    await syncToFirestore('users', id, newStaff);
-  };"""
-
-new_func = """  const addStaffMember = async (memberData: Omit<Staff, 'id' | 'active'>, tempPassword?: string) => {
-    let id = `s-${Date.now()}`;
-    
-    if (tempPassword) {
-      try {
-        const authUser = await createSecondaryUser(memberData.email, tempPassword);
-        if (authUser) {
-          id = authUser.uid;
+# Fix createBusiness
+bad_block1 = """    setStaff(prev => {
+        if (prev.some(s => s.id === id)) {
+          return prev.map(s => s.id === id ? newStaff : s);
         }
-      } catch (err: any) {
-        console.error("Error creating auth user:", err);
-        throw new Error(err.message || "Failed to create authentication account");
-      }
-    }
+        return [...prev, newStaff];
+      });
+    setCategories"""
 
-    const newStaff: Staff & { mustChangePassword?: boolean } = {
-      ...memberData,
-      id,
-      active: true,
-      mustChangePassword: !!tempPassword
-    };
-    setStaff(prev => [...prev, newStaff]);
-    addLog('Add Staff', `Added employee ${memberData.name} as ${memberData.role}.`);
-    await syncToFirestore('users', id, newStaff);
-  };"""
+good_block1 = """    setStaff(prev => {
+        if (prev.some(s => s.id === ownerId)) {
+          return prev.map(s => s.id === ownerId ? newStaff : s);
+        }
+        return [...prev, newStaff];
+      });
+    setCategories"""
 
-content = content.replace(old_func, new_func)
+content = content.replace(bad_block1, good_block1)
+
+# Fix registerPlatformOwner
+bad_block2 = """    setStaff(prev => {
+        if (prev.some(s => s.id === id)) {
+          return prev.map(s => s.id === id ? newStaff : s);
+        }
+        return [...prev, newStaff];
+      });
+    addLog('Platform Owner Sign Up'"""
+
+good_block2 = """    setStaff(prev => {
+        if (prev.some(s => s.id === ownerId)) {
+          return prev.map(s => s.id === ownerId ? newStaff : s);
+        }
+        return [...prev, newStaff];
+      });
+    addLog('Platform Owner Sign Up'"""
+
+content = content.replace(bad_block2, good_block2)
 
 with open("src/context/AppContext.tsx", "w") as f:
     f.write(content)

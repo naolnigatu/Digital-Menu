@@ -97,18 +97,17 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           let tenantsQuery;
           if (currentUser?.role === 'super_admin') {
             tenantsQuery = collection(db, 'tenants');
-          } else if (currentUser?.role === 'business_owner' || currentUser?.role === 'owner' || currentUser?.role === 'staff') {
-            if (currentUser.id) {
-              tenantsQuery = query(collection(db, 'tenants'), where('ownerUid', '==', currentUser.id));
-            } else if (currentUser.email) {
-              tenantsQuery = query(collection(db, 'tenants'), where('ownerEmail', '==', currentUser.email));
-            } else if (currentUser.tenantId) {
+          } else if (currentUser?.role === 'customer' || !currentUser) {
+            tenantsQuery = collection(db, 'tenants');
+          } else {
+            // Any business role (owner, manager, waiter, etc.)
+            if (currentUser.tenantId) {
               tenantsQuery = query(collection(db, 'tenants'), where('id', '==', currentUser.tenantId));
+            } else if (currentUser.role === 'owner' && currentUser.id) {
+              tenantsQuery = query(collection(db, 'tenants'), where('ownerUid', '==', currentUser.id));
             } else {
               tenantsQuery = collection(db, 'tenants');
             }
-          } else {
-            tenantsQuery = collection(db, 'tenants');
           }
 
           const unsubscribeTenants = onSnapshot(tenantsQuery, snapshot => {
@@ -138,18 +137,16 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           let businessesQuery;
           if (currentUser?.role === 'super_admin') {
             businessesQuery = collection(db, 'businesses');
-          } else if (currentUser?.role === 'business_owner' || currentUser?.role === 'owner' || currentUser?.role === 'staff') {
-            if (currentUser.id) {
-              businessesQuery = query(collection(db, 'businesses'), where('ownerUid', '==', currentUser.id));
-            } else if (currentUser.email) {
-              businessesQuery = query(collection(db, 'businesses'), where('ownerEmail', '==', currentUser.email));
-            } else if (currentUser.tenantId) {
+          } else if (currentUser?.role === 'customer' || !currentUser) {
+            businessesQuery = collection(db, 'businesses');
+          } else {
+            if (currentUser.tenantId) {
               businessesQuery = query(collection(db, 'businesses'), where('id', '==', currentUser.tenantId));
+            } else if (currentUser.role === 'owner' && currentUser.id) {
+              businessesQuery = query(collection(db, 'businesses'), where('ownerUid', '==', currentUser.id));
             } else {
               businessesQuery = collection(db, 'businesses');
             }
-          } else {
-            businessesQuery = collection(db, 'businesses');
           }
 
           const unsubscribeBusinesses = onSnapshot(businessesQuery, snapshot => {
@@ -176,7 +173,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             });
           }, err => console.warn("Businesses listener error:", err));
 
-          const categoriesQuery = collection(db, 'categories');
+          const categoriesQuery = (currentUser?.role === 'super_admin' || currentUser?.role === 'customer' || !currentUser)
+            ? collection(db, 'categories')
+            : query(collection(db, 'categories'), where('tenantId', '==', targetTenantId));
 
           const unsubscribeCategories = onSnapshot(categoriesQuery, snapshot => {
             const grouped: Record<string, Category[]> = {};
@@ -196,7 +195,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             }));
           }, err => console.warn("Categories listener error:", err));
 
-          const menuItemsQuery = collection(db, 'menu_items');
+          const menuItemsQuery = (currentUser?.role === 'super_admin' || currentUser?.role === 'customer' || !currentUser)
+            ? collection(db, 'menu_items')
+            : query(collection(db, 'menu_items'), where('tenantId', '==', targetTenantId));
 
           const unsubscribeMenuItems = onSnapshot(menuItemsQuery, snapshot => {
             const grouped: Record<string, MenuItem[]> = {};
@@ -595,27 +596,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         let userDocData: any = null;
         let userDocId: string = uid || '';
 
-        // A. Primary Lookup by Firebase UID in 'users' collection
+        // 1. Check 'staff' collection FIRST (Staff take priority over generic customer accounts)
         if (uid) {
-          const uSnap = await getDoc(doc(db, 'users', uid));
-          if (uSnap.exists()) {
-            userDocData = uSnap.data();
-            userDocId = uSnap.id;
-          }
-        }
-
-        // B. Secondary Lookup by Email in 'users' collection
-        if (!userDocData && cleanEmail) {
-          const uQuery = query((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'users') : query(collection(db, 'users'), where('tenantId', '==', currentUser?.tenantId))), where('email', '==', cleanEmail));
-          const uQuerySnap = await getDocs(uQuery);
-          if (!uQuerySnap.empty) {
-            userDocData = uQuerySnap.docs[0].data();
-            userDocId = uQuerySnap.docs[0].id;
-          }
-        }
-
-        // C. Check 'staff' collection by UID or Email
-        if (!userDocData && uid) {
           const sSnap = await getDoc(doc(db, 'staff', uid));
           if (sSnap.exists()) {
             userDocData = sSnap.data();
@@ -623,11 +605,28 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           }
         }
         if (!userDocData && cleanEmail) {
-          const sQuery = query((currentUser?.role === 'super_admin' || !currentUser?.tenantId ? collection(db, 'staff') : query(collection(db, 'staff'), where('tenantId', '==', currentUser?.tenantId))), where('email', '==', cleanEmail));
+          const sQuery = query(collection(db, 'staff'), where('email', '==', cleanEmail));
           const sQuerySnap = await getDocs(sQuery);
           if (!sQuerySnap.empty) {
             userDocData = sQuerySnap.docs[0].data();
             userDocId = sQuerySnap.docs[0].id;
+          }
+        }
+
+        // 2. If not staff, check 'users' collection
+        if (!userDocData && uid) {
+          const uSnap = await getDoc(doc(db, 'users', uid));
+          if (uSnap.exists()) {
+            userDocData = uSnap.data();
+            userDocId = uSnap.id;
+          }
+        }
+        if (!userDocData && cleanEmail) {
+          const uQuery = query(collection(db, 'users'), where('email', '==', cleanEmail));
+          const uQuerySnap = await getDocs(uQuery);
+          if (!uQuerySnap.empty) {
+            userDocData = uQuerySnap.docs[0].data();
+            userDocId = uQuerySnap.docs[0].id;
           }
         }
         if (userDocData) {
@@ -666,11 +665,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             }
           }
           const userObj = {
+            ...userDocData,
             id: userDocId,
             uid: uid || userDocId,
             email: cleanEmail || userDocData.email,
             role,
-            name: userDocData.name || cleanEmail.split('@')[0],
+            name: userDocData.name || (userDocData.firstName ? `${userDocData.firstName} ${userDocData.lastName || ''}`.trim() : cleanEmail.split('@')[0]),
             tenantId: tenantId || loadedBusiness?.id || '',
             branchId: userDocData.branchId || '',
             stationId: userDocData.stationId,
@@ -686,6 +686,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             setActiveBranchId(userDocData.branchId);
           }
           setCurrentUser(userObj);
+          console.log("STAFF LOGIN DEBUG:", {
+            role: userObj.role,
+            tenantId: userObj.tenantId,
+            branchId: userObj.branchId,
+            uid: userObj.uid
+          });
           addLog('Login', `User ${userObj.name} (${userObj.role}) loaded from Firestore.`);
           return {
             success: true,
@@ -1604,7 +1610,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     // Create exactly one Firestore document in the staff collection, not users
     try {
       await syncToFirestore('staff', id, newStaff);
-      setStaff(prev => [...prev, newStaff]);
+      setStaff(prev => {
+        if (prev.some(s => s.id === id)) {
+          return prev.map(s => s.id === id ? newStaff : s);
+        }
+        return [...prev, newStaff];
+      });
       addLog('Add Staff', `Added employee ${memberData.name || memberData.firstName} as ${memberData.role}.`);
     } catch (err: any) {
       console.error("Error creating staff doc:", err);
@@ -1892,7 +1903,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     }];
     setTenants(prev => [...prev, newTenant]);
     setBranches(prev => [...prev, newBranch]);
-    setStaff(prev => [...prev, newStaff]);
+    setStaff(prev => {
+        if (prev.some(s => s.id === ownerId)) {
+          return prev.map(s => s.id === ownerId ? newStaff : s);
+        }
+        return [...prev, newStaff];
+      });
     setCategories(prev => ({
       ...prev,
       [tenantId]: newCategories
@@ -1949,7 +1965,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       branchId: '',
       active: true
     };
-    setStaff(prev => [...prev, newStaff]);
+    setStaff(prev => {
+        if (prev.some(s => s.id === ownerId)) {
+          return prev.map(s => s.id === ownerId ? newStaff : s);
+        }
+        return [...prev, newStaff];
+      });
     addLog('Platform Owner Sign Up', `Owner signed up: ${name} (${cleanEmail}). Business profile pending creation.`);
     await syncToFirestore('users', ownerId, newStaff);
     const loggedUser = {
