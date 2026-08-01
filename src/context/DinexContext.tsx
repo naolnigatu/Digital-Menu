@@ -56,6 +56,8 @@ interface BranchContextType {
   activeBranch: DinexBranch | null;
   setActiveBranchId: (id: string | null) => void;
   createBranch: (name: string, location: string, phone: string) => DinexBranch;
+  updateBranch: (id: string, name: string, location: string, phone: string) => void;
+  deleteBranch: (id: string) => void;
   updateBranchStatus: (id: string, status: DinexBranch['status']) => void;
 }
 const BranchContext = createContext<BranchContextType | undefined>(undefined);
@@ -459,7 +461,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
 
 export function BranchProvider({ children }: { children: React.ReactNode }) {
   const { activeBusiness } = useDinexBusiness();
-  const { branches: appBranches, activeBranchId, setActiveBranchId, syncToFirestore, activeTenantId } = useApp();
+  const { branches: appBranches, activeBranchId, setActiveBranchId, syncToFirestore, deleteFromFirestore, activeTenantId } = useApp();
 
   const branches: DinexBranch[] = appBranches.map(b => ({
     id: b.id,
@@ -498,6 +500,20 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     return newDinexBranch;
   };
 
+  const updateBranch = (id: string, name: string, location: string, phone: string) => {
+    const found = appBranches.find(b => b.id === id);
+    if (found) {
+      syncToFirestore('branches', id, { ...found, name, address: location, phone });
+    }
+  };
+
+  const deleteBranch = (id: string) => {
+    if (activeBranchId === id) {
+      setActiveBranchId(null);
+    }
+    deleteFromFirestore('branches', id);
+  };
+
   const updateBranchStatus = (id: string, status: DinexBranch['status']) => {
     const found = appBranches.find(b => b.id === id);
     if (found) {
@@ -512,6 +528,8 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         activeBranch,
         setActiveBranchId,
         createBranch,
+        updateBranch,
+        deleteBranch,
         updateBranchStatus,
       }}
     >

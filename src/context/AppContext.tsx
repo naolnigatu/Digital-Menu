@@ -1031,9 +1031,25 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       tenantId: stationData.tenantId || activeTenantId,
       id
     };
-    setStations(prev => [...prev, newStation]);
+    setStations(prev => {
+      if (prev.some(s => s.id === id)) return prev;
+      return [...prev, newStation];
+    });
     addLog('Create Station', `Created preparation station: ${stationData.name}`);
     await syncToFirestore('stations', id, newStation);
+  };
+
+  const updateStation = async (updatedStation: PreparationStation) => {
+    setStations(prev => prev.map(s => s.id === updatedStation.id ? updatedStation : s));
+    addLog('Update Station', `Updated preparation station: ${updatedStation.name}`);
+    await syncToFirestore('stations', updatedStation.id, updatedStation);
+  };
+
+  const deleteStation = async (stationId: string) => {
+    const stationName = stations.find(s => s.id === stationId)?.name || '';
+    setStations(prev => prev.filter(s => s.id !== stationId));
+    addLog('Delete Station', `Deleted preparation station: ${stationName}`);
+    await deleteFromFirestore('stations', stationId);
   };
 
   // Orders
@@ -1105,6 +1121,15 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const existing = orders.find(o => o.id === orderId);
     if (!existing) return;
     let items = [...existing.items];
+    let estimatedReadyTime = existing.estimatedReadyTime;
+    if (status === 'accepted' && !estimatedReadyTime) {
+      let maxPrep = 15;
+      existing.items.forEach(it => {
+        const p = it.item.prepTime || 15;
+        if (p > maxPrep) maxPrep = p;
+      });
+      estimatedReadyTime = new Date(Date.now() + maxPrep * 60000).toISOString();
+    }
     if (status === 'preparing') {
       items = items.map(it => it.status === 'received' ? {
         ...it,
@@ -1142,6 +1167,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       ...existing,
       status,
       items,
+      estimatedReadyTime,
       updatedAt: new Date().toISOString(),
       timeline: [...(existing.timeline || []), newEvent]
     };
@@ -1532,16 +1558,66 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   // Staff
-  const addStaffMember = async (memberData: Omit<Staff, 'id' | 'active'>) => {
-    const id = `s-${Date.now()}`;
-    const newStaff: Staff = {
+  const addStaffMember = async (memberData: Omit<Staff, 'id' | 'active'>, tempPassword?: string) => {
+    let id = `s-${Date.now()}`;
+    
+    // Check permissions
+    if (currentUser) {
+      const allowedRolesForOwner = ['manager', 'cashier', 'waiter', 'kitchen', 'bar', 'coffee', 'delivery', 'reception', 'inventory'];
+      const allowedRolesForManager = ['cashier', 'waiter', 'kitchen', 'bar', 'coffee', 'delivery', 'reception', 'inventory'];
+      
+      if (currentUser.role === 'manager' && !allowedRolesForManager.includes(memberData.role)) {
+        throw new Error("Branch Managers cannot create staff with role: " + memberData.role);
+      }
+      if ((currentUser.role === 'owner' || currentUser.role === 'super_admin') && !allowedRolesForOwner.includes(memberData.role)) {
+        throw new Error("Owners cannot create staff with role: " + memberData.role);
+      }
+    }
+
+    let uid = undefined;
+    let authUserObj: any = null;
+    if (tempPassword && memberData.email) {
+      try {
+        const { createSecondaryUser } = await import('../lib/firebase');
+        authUserObj = await createSecondaryUser(memberData.email, tempPassword);
+        if (authUserObj) {
+          id = authUserObj.uid;
+          uid = authUserObj.uid;
+        }
+      } catch (err: any) {
+        console.error("Error creating auth user:", err);
+        throw new Error(err.message || "Failed to create authentication account");
+      }
+    }
+
+    const newStaff: Staff & { mustChangePassword?: boolean } = {
       ...memberData,
       id,
-      active: true
+      uid: uid || id,
+      active: true,
+      status: 'active',
+      mustChangePassword: true,
+      createdAt: new Date().toISOString(),
+      createdBy: currentUser ? currentUser.id : 'system'
     };
-    setStaff(prev => [...prev, newStaff]);
-    addLog('Invite Staff', `Invited employee ${memberData.name} as ${memberData.role}.`);
-    await syncToFirestore('users', id, newStaff);
+    
+    // Create exactly one Firestore document in the staff collection, not users
+    try {
+      await syncToFirestore('staff', id, newStaff);
+      setStaff(prev => [...prev, newStaff]);
+      addLog('Add Staff', `Added employee ${memberData.name || memberData.firstName} as ${memberData.role}.`);
+    } catch (err: any) {
+      console.error("Error creating staff doc:", err);
+      if (authUserObj && tempPassword && memberData.email) {
+        try {
+          const { rollbackSecondaryUser } = await import('../lib/firebase');
+          await rollbackSecondaryUser(memberData.email, tempPassword);
+        } catch (delErr) {
+          console.error("Failed to rollback auth user:", delErr);
+        }
+      }
+      throw new Error("Failed to create staff record. Document creation failed.");
+    }
   };
   const toggleStaffStatus = async (staffId: string) => {
     const existing = staff.find(s => s.id === staffId);
@@ -2651,6 +2727,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     addTable,
     updateTableStatus,
     addStation,
+    updateStation,
+    deleteStation,
     placeOrder,
     updateOrderStatus,
     assignDelivery,

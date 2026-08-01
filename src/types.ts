@@ -1,6 +1,6 @@
 export type SubscriptionPlan = 'free' | 'pro' | 'growth' | 'enterprise';
 
-export type UserRole = 'super_admin' | 'owner' | 'manager' | 'cashier' | 'waiter' | 'kitchen' | 'customer' | 'delivery';
+export type UserRole = 'super_admin' | 'owner' | 'manager' | 'cashier' | 'waiter' | 'kitchen' | 'bar' | 'coffee' | 'delivery' | 'reception' | 'inventory' | 'customer';
 
 export interface Tenant {
   businessType?: string;
@@ -191,13 +191,21 @@ export interface Order {
 
 export interface Staff {
   id: string;
-  name: string;
-  email: string;
-  role: UserRole | string;
+  uid?: string;
   tenantId: string;
   branchId: string; // Scoped branch
   stationId?: string; // Scoped station for KDS
+  firstName?: string;
+  lastName?: string;
+  name: string; // Keep for backward compatibility or computed
+  phone?: string;
+  email: string;
+  role: UserRole | string;
+  status?: string; // active, inactive
   active: boolean;
+  mustChangePassword?: boolean;
+  createdBy?: string;
+  createdAt?: string;
   permissions?: string[];
 }
 

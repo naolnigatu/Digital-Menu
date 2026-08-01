@@ -56,6 +56,7 @@ export default function CustomerView() {
 
   // States
   const [searchTerm, setSearchTerm] = useState('');
+
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [activeZone, setActiveZone] = useState<string>('all');
   const filteredActiveTables = useMemo(() => {
@@ -831,6 +832,30 @@ const currentItemPrice = useMemo(() => {
   const currentLiveOrder = activeCustomerOrder 
     ? (orders.find(o => o.id === activeCustomerOrder.id) || activeCustomerOrder) 
     : null;
+
+  const [prepTimeRemaining, setPrepTimeRemaining] = useState<number | null>(null);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (currentLiveOrder && currentLiveOrder.estimatedReadyTime && ['accepted', 'preparing'].includes(currentLiveOrder.status)) {
+      interval = setInterval(() => {
+        const remaining = new Date(currentLiveOrder.estimatedReadyTime!).getTime() - Date.now();
+        setPrepTimeRemaining(Math.max(0, Math.floor(remaining / 1000)));
+      }, 1000);
+    } else {
+      setPrepTimeRemaining(null);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    }
+  }, [currentLiveOrder]);
+
+  const formatRemainingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
 
   useEffect(() => {
     if (activeCustomerOrder) {
@@ -1983,6 +2008,14 @@ const currentItemPrice = useMemo(() => {
             </div>
 
             {/* Step Timeline */}
+            {prepTimeRemaining !== null && (
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center">
+                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">Estimated Prep Time</p>
+                <div className="text-3xl font-black text-indigo-700 tracking-tighter tabular-nums">
+                  {formatRemainingTime(prepTimeRemaining)}
+                </div>
+              </div>
+            )}
             <div className="space-y-4 pt-2">
               {currentLiveOrder.paymentVerificationStatus === 'pending' ? (
                 <div className="text-center p-4 space-y-3 bg-amber-50/50 rounded-2xl border border-amber-100 animate-pulse">
@@ -2153,11 +2186,11 @@ const currentItemPrice = useMemo(() => {
                   </div>
 
                   {/* Customer Delivered Check (Part 6) */}
-                  {['ready', 'served', 'preparing'].includes(currentLiveOrder.status) && (
+                  {currentLiveOrder.status === 'served' && (
                     <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl flex items-center justify-between text-xs animate-pulse">
                       <div className="space-y-0.5">
                         <span className="font-bold text-indigo-900 flex items-center gap-1">
-                          <Truck className="w-4 h-4 text-indigo-600" /> Confirm Delivery
+                          <Truck className="w-4 h-4 text-indigo-600" /> Confirm Received
                         </span>
                         <p className="text-[10px] text-indigo-700">Mark your food order as safely received!</p>
                       </div>

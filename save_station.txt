@@ -1,0 +1,31 @@
+  const handleSaveStation = () => {
+    if (!stationName.trim()) {
+      showToast('Station name is required.', 'error');
+      return;
+    }
+    setIsSavingStation(true);
+    try {
+      if (editingStationId) {
+        updateStation({
+          id: editingStationId,
+          name: stationName.trim(),
+          branchId: activeBranchId,
+        });
+        showToast('✓ Station updated.');
+      } else {
+        addStation({
+          name: stationName.trim(),
+          branchId: activeBranchId,
+        });
+        showToast('✓ Station created.');
+      }
+      setShowStationModal(false);
+      setEditingStationId(null);
+      setStationName('');
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to save station.', 'error');
+    } finally {
+      setIsSavingStation(false);
+    }
+  };

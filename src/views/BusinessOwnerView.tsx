@@ -205,6 +205,7 @@ export default function BusinessOwnerView() {
     updateMenuItem, 
     deleteMenuItem,
     addTable,
+    currentUser,
     addStaffMember, 
     toggleStaffStatus,
     updateTenantPlan,
@@ -235,6 +236,9 @@ export default function BusinessOwnerView() {
     requestSubscriptionUpgrade,
     superAdminPaymentInfo,
     updateTenantType,
+    addStation,
+    updateStation,
+    deleteStation,
   } = useApp();
 
   const [selectedUpgradePlan, setSelectedUpgradePlan] = useState<string | null>(null);
@@ -252,12 +256,12 @@ export default function BusinessOwnerView() {
 
 
   const { activeBusiness, businesses, setActiveBusinessId, createBusiness } = useDinexBusiness();
-  const { activeBranch: dinexActiveBranch, branches: dinexBranches, setActiveBranchId: setDinexBranchId, createBranch: createDinexBranch } = useDinexBranch();
+  const { activeBranch: dinexActiveBranch, branches: dinexBranches, setActiveBranchId: setDinexBranchId, createBranch: createDinexBranch, updateBranch: updateDinexBranch, deleteBranch: deleteDinexBranch, updateBranchStatus: updateDinexBranchStatus } = useDinexBranch();
   const { activeSettings, updateSettings } = useDinexSettings();
   const { can, customRoles, addCustomRole, updateCustomRole, deleteCustomRole } = useDinexPermission();
   const { isFeatureEnabled } = useDinexFeature();
 
-  const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'orders' | 'menu' | 'tables' | 'staff' | 'settings' | 'payments' | 'loyalty' | 'subscriptions' | 'reports' | 'reservations' | 'inventory' | 'ads' | 'marketplace'>(() => {
+  const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'orders' | 'menu' | 'tables' | 'staff' | 'settings' | 'payments' | 'loyalty' | 'subscriptions' | 'reports' | 'reservations' | 'inventory' | 'ads' | 'marketplace' | 'branches'>(() => {
     if (can('reports.view')) return 'dashboard';
     if (can('orders.manage')) return 'orders';
     if (can('menu.create')) return 'menu';
@@ -541,6 +545,11 @@ export default function BusinessOwnerView() {
   const [isSavingCat, setIsSavingCat] = useState(false);
   const [catStatusMessage, setCatStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  const [showStationModal, setShowStationModal] = useState(false);
+  const [editingStationId, setEditingStationId] = useState<string | null>(null);
+  const [stationName, setStationName] = useState('');
+  const [isSavingStation, setIsSavingStation] = useState(false);
+
   const [disabledCategoryIds, setDisabledCategoryIds] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('mf_disabled_categories') || '[]');
@@ -624,10 +633,15 @@ export default function BusinessOwnerView() {
   const [tableSection, setTableSection] = useState<'Indoor' | 'Outdoor' | 'Terrace'>('Indoor');
 
   // --- Staff Forms State ---
-  const [staffName, setStaffName] = useState('');
+  const [staffFirstName, setStaffFirstName] = useState('');
+  const [staffLastName, setStaffLastName] = useState('');
+  const [staffPhone, setStaffPhone] = useState('');
   const [staffEmail, setStaffEmail] = useState('');
+  const [staffPassword, setStaffPassword] = useState('');
   const [staffRole, setStaffRole] = useState<string>('waiter');
+  const [staffBranch, setStaffBranch] = useState<string>('');
   const [staffStation, setStaffStation] = useState('');
+  const [lastCreatedStaff, setLastCreatedStaff] = useState<any>(null);
 
   // Dinex Custom Role states
   const [staffViewTab, setStaffViewTab] = useState<'roster' | 'roles' | 'users'>('roster');
@@ -760,6 +774,14 @@ export default function BusinessOwnerView() {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [settingsStatusMessage, setSettingsStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  const [showBranchModal, setShowBranchModal] = useState(false);
+  const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
+  const [branchName, setBranchName] = useState('');
+  const [branchLocation, setBranchLocation] = useState('');
+  const [branchPhone, setBranchPhone] = useState('');
+  const [isSavingBranch, setIsSavingBranch] = useState(false);
+
+
   const [isSavingFeatures, setIsSavingFeatures] = useState(false);
   const [featuresStatusMessage, setFeaturesStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -770,6 +792,31 @@ export default function BusinessOwnerView() {
       logoUrl: tenant.logoUrl || ''
     });
   }, [tenant]);
+
+  const handleSaveBranch = async () => {
+    if (!branchName.trim() || !branchLocation.trim()) {
+      setToast({ type: 'error', text: 'Branch name and location are required.' });
+      return;
+    }
+    
+    setIsSavingBranch(true);
+    try {
+      if (editingBranchId) {
+        updateDinexBranch(editingBranchId, branchName, branchLocation, branchPhone);
+        setToast({ type: 'success', text: 'Branch updated successfully.' });
+      } else {
+        createDinexBranch(branchName, branchLocation, branchPhone);
+        setToast({ type: 'success', text: 'Branch created successfully.' });
+      }
+      setShowBranchModal(false);
+      setEditingBranchId(null);
+    } catch (e) {
+      console.warn('Error saving branch:', e);
+      setToast({ type: 'error', text: 'Failed to save branch.' });
+    } finally {
+      setIsSavingBranch(false);
+    }
+  };
 
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
@@ -862,6 +909,38 @@ export default function BusinessOwnerView() {
   }, [filteredBranchOrders]);
 
   // Handle Menu submissions
+  const handleSaveStation = () => {
+    if (!stationName.trim()) {
+      showToast('Station name is required.', 'error');
+      return;
+    }
+    setIsSavingStation(true);
+    try {
+      if (editingStationId) {
+        updateStation({
+          id: editingStationId,
+          name: stationName.trim(),
+          branchId: activeBranchId,
+        });
+        showToast('✓ Station updated.');
+      } else {
+        addStation({
+          name: stationName.trim(),
+          branchId: activeBranchId,
+        });
+        showToast('✓ Station created.');
+      }
+      setShowStationModal(false);
+      setEditingStationId(null);
+      setStationName('');
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to save station.', 'error');
+    } finally {
+      setIsSavingStation(false);
+    }
+  };
+
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSavingCat) return;
@@ -1014,22 +1093,56 @@ export default function BusinessOwnerView() {
     setTableName('');
   };
 
-  const handleAddStaff = (e: React.FormEvent) => {
+  const handleAddStaff = async (e: React.FormEvent) => {
     e.preventDefault();
-    const nameCheck = sanitizeName(staffName);
-    if (!nameCheck.valid) { setPermStatusMessage({ type: 'error', text: nameCheck.error || '' }); return; }
-    const emailCheck = validateEmail(staffEmail);
-    if (!emailCheck.valid) { setPermStatusMessage({ type: 'error', text: emailCheck.error || '' }); return; }
-    addStaffMember({
-      name: staffName,
-      email: staffEmail,
-      role: staffRole,
-      tenantId: activeTenantId,
-      branchId: activeBranchId,
-      stationId: staffRole === 'kitchen' ? staffStation : undefined
-    });
-    setStaffName('');
-    setStaffEmail('');
+    
+    if (!staffFirstName || !staffLastName) {
+        setPermStatusMessage({ type: 'error', text: 'First and Last name are required.' });
+        return;
+    }
+    
+    if (!staffPhone) {
+        setPermStatusMessage({ type: 'error', text: 'Phone number is required.' });
+        return;
+    }
+
+    if (staffEmail) {
+        const emailCheck = validateEmail(staffEmail);
+        if (!emailCheck.valid) { setPermStatusMessage({ type: 'error', text: emailCheck.error || '' }); return; }
+    }
+    
+    if (!staffPassword || staffPassword.length < 6) { setPermStatusMessage({ type: 'error', text: 'Password must be at least 6 characters' }); return; }
+
+    try {
+      await addStaffMember({
+        firstName: staffFirstName,
+        lastName: staffLastName,
+        name: `${staffFirstName} ${staffLastName}`,
+        phone: staffPhone,
+        email: staffEmail || `${staffPhone.replace(/\D/g, '')}@${activeTenantId}.app`, // Provide dummy email if empty but auth is needed? wait, auth requires email. Let's see if the request says email is optional for Firebase Auth? 
+        // Actually, if email is optional, we might need a placeholder or the user doesn't get auth. But the prompt says "Generate Password button" and "Email (optional)".
+        role: staffRole,
+        tenantId: activeTenantId,
+        branchId: staffBranch || activeBranchId,
+        stationId: staffRole === 'kitchen' ? staffStation : undefined
+      }, staffPassword);
+      setStaffFirstName('');
+      setStaffLastName('');
+      setStaffPhone('');
+      setStaffEmail('');
+      setStaffPassword('');
+      setPermStatusMessage({ type: 'success', text: 'Staff account created successfully.' });
+      setLastCreatedStaff({
+        name: `${staffFirstName} ${staffLastName}`,
+        role: staffRole,
+        branchName: branches.find(b => b.id === (staffBranch || activeBranchId))?.name || 'Unknown Branch',
+        phone: staffPhone,
+        email: staffEmail || 'None',
+        password: staffPassword
+      });
+    } catch (err: any) {
+      setPermStatusMessage({ type: 'error', text: err.message || 'Failed to create staff' });
+    }
   };
 
   return (
@@ -1306,6 +1419,20 @@ export default function BusinessOwnerView() {
           >
             <LayoutDashboard className="h-4 w-4" />
             <span>Marketplace</span>
+          </button>
+        )}
+
+        {can('business.edit') && (
+          <button
+            onClick={() => setActiveSubTab('branches')}
+            className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+              activeSubTab === 'branches' 
+                ? 'border-slate-900 text-slate-900' 
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <MapPin className="h-4 w-4" />
+            Branches
           </button>
         )}
 
@@ -2502,8 +2629,10 @@ export default function BusinessOwnerView() {
 
           <div className="grid gap-6 lg:grid-cols-3">
             
-            {/* Categories list */}
-            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
+            {/* Categories & Stations column */}
+            <div className="space-y-6 lg:col-span-1">
+              {/* Categories list */}
+              <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
               <h4 className="font-sans font-bold text-xs text-slate-400 uppercase tracking-wider">Active Categories</h4>
               <div className="space-y-2">
                 {tenantCategories.map((cat, catIdx) => {
@@ -2598,6 +2727,64 @@ export default function BusinessOwnerView() {
               </div>
             </div>
 
+            {/* Preparation Stations */}
+            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
+              <div className="flex justify-between items-center">
+                <h4 className="font-sans font-bold text-xs text-slate-400 uppercase tracking-wider">Preparation Stations</h4>
+                <button
+                  onClick={() => {
+                    setEditingStationId(null);
+                    setStationName('');
+                    setShowStationModal(true);
+                  }}
+                  className="p-1 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors flex items-center gap-1 text-[10px] font-bold"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
+                </button>
+              </div>
+              <div className="space-y-2">
+                {stations.filter(s => s.branchId === activeBranchId).map(station => (
+                  <div key={station.id} className="flex items-center justify-between rounded-lg p-2.5 border border-slate-200 bg-slate-50 transition-all hover:border-indigo-200">
+                    <span className="text-xs font-bold text-slate-800">{station.name}</span>
+                    <div className="flex gap-1 shrink-0">
+                      <button
+                        onClick={() => {
+                          setEditingStationId(station.id);
+                          setStationName(station.name);
+                          setShowStationModal(true);
+                        }}
+                        className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-indigo-600 transition-colors"
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setConfirmDialog({
+                            isOpen: true,
+                            title: 'Delete Station',
+                            message: `Are you sure you want to delete the station "${station.name}"?`,
+                            onConfirm: () => {
+                              deleteStation(station.id);
+                              setConfirmDialog(null);
+                              showToast('✓ Station deleted.');
+                            }
+                          });
+                        }}
+                        className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-rose-600 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {stations.filter(s => s.branchId === activeBranchId).length === 0 && (
+                  <p className="text-[10px] text-slate-400 text-center py-4">No preparation stations configured.</p>
+                )}
+              </div>
+            </div>
+
+            </div>
             {/* Menu Items Grid */}
             <div className="lg:col-span-2 space-y-3">
               <h4 className="font-sans font-bold text-xs text-slate-400 uppercase tracking-wider">Dishes & Pricing</h4>
@@ -3344,28 +3531,65 @@ export default function BusinessOwnerView() {
               
               {/* Invite Form */}
               <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm space-y-4 h-fit">
-                <h3 className="font-sans font-bold text-sm text-slate-800">Invite Operational Staff</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">Add team members to specific access groups. They can login instantly with their email credentials.</p>
+                <h3 className="font-sans font-bold text-sm text-slate-800">Add Operational Staff</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">Create team member accounts directly. They will be prompted to change their password on first login.</p>
                 
+                {lastCreatedStaff && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4 space-y-2">
+                    <h3 className="text-emerald-800 font-bold text-sm">Staff created successfully</h3>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-emerald-700/70 font-semibold">Name:</span> <span className="font-medium text-emerald-900">{lastCreatedStaff.name}</span></div>
+                      <div><span className="text-emerald-700/70 font-semibold">Role:</span> <span className="font-medium text-emerald-900">{lastCreatedStaff.role}</span></div>
+                      <div><span className="text-emerald-700/70 font-semibold">Branch:</span> <span className="font-medium text-emerald-900">{lastCreatedStaff.branchName}</span></div>
+                      <div><span className="text-emerald-700/70 font-semibold">Phone:</span> <span className="font-medium text-emerald-900">{lastCreatedStaff.phone}</span></div>
+                      <div><span className="text-emerald-700/70 font-semibold">Email:</span> <span className="font-medium text-emerald-900">{lastCreatedStaff.email}</span></div>
+                      <div className="col-span-2 mt-1 p-2 bg-emerald-100/50 rounded flex justify-between items-center">
+                        <span className="text-emerald-700/70 font-semibold">Temporary Password:</span> 
+                        <span className="font-bold font-mono text-emerald-900 bg-white px-2 py-1 rounded shadow-sm">{lastCreatedStaff.password}</span>
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => setLastCreatedStaff(null)} className="w-full text-[10px] font-bold uppercase text-emerald-700 hover:text-emerald-900 py-1">Dismiss</button>
+                  </div>
+                )}
                 <form onSubmit={handleAddStaff} className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">First Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={staffFirstName}
+                        onChange={(e) => setStaffFirstName(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-slate-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Last Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={staffLastName}
+                        onChange={(e) => setStaffLastName(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-slate-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Full Name</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Phone Number (Required)</label>
                     <input
-                      type="text"
+                      type="tel"
                       required
-                      
-                      value={staffName}
-                      onChange={(e) => setStaffName(e.target.value)}
+                      value={staffPhone}
+                      onChange={(e) => setStaffPhone(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-slate-400 focus:outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Operational Email Address</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Email Address (Optional)</label>
                     <input
                       type="email"
-                      required
-                      
                       value={staffEmail}
                       onChange={(e) => setStaffEmail(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-slate-400 focus:outline-none"
@@ -3380,19 +3604,31 @@ export default function BusinessOwnerView() {
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium bg-white focus:outline-none focus:border-slate-400"
                     >
                       <optgroup label="Standard Roles">
-                        <option value="waiter">Floor Waiter</option>
-                        <option value="cashier">Cashier Operator</option>
-                        <option value="kitchen">Kitchen Staff (KDS)</option>
-                        <option value="manager">Branch Operations Manager</option>
+                        {(currentUser?.role === 'owner' || currentUser?.role === 'super_admin') && (
+                          <option value="manager">Branch Manager</option>
+                        )}
+                        <option value="cashier">Cashier</option>
+                        <option value="waiter">Waiter</option>
+                        <option value="kitchen">Kitchen Staff</option>
+                        <option value="bar">Bar Staff</option>
+                        <option value="coffee">Coffee Staff</option>
                         <option value="delivery">Delivery Staff</option>
+                        <option value="reception">Reception / Host</option>
+                        <option value="inventory">Inventory Staff</option>
                       </optgroup>
-                      {customRoles.filter(cr => cr.businessId === activeTenantId).length > 0 && (
-                        <optgroup label="Custom Access Roles (Dinex Core)">
-                          {customRoles.filter(cr => cr.businessId === activeTenantId).map(cr => (
-                            <option key={cr.id} value={cr.id}>{cr.name}</option>
-                          ))}
-                        </optgroup>
-                      )}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Branch</label>
+                    <select
+                      value={staffBranch || activeBranchId}
+                      onChange={(e) => setStaffBranch(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium bg-white focus:outline-none focus:border-slate-400"
+                    >
+                      {branches.filter(b => b.tenantId === activeTenantId).map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
                     </select>
                   </div>
 
@@ -3405,18 +3641,39 @@ export default function BusinessOwnerView() {
                         className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium bg-white focus:outline-none"
                       >
                         <option value="">Choose preparation target...</option>
-                        {stations.filter(s => s.branchId === activeBranchId).map(s => (
+                        {stations.filter(s => s.branchId === (staffBranch || activeBranchId)).map(s => (
                           <option key={s.id} value={s.id}>{s.name}</option>
                         ))}
                       </select>
                     </div>
                   )}
+                  
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Temporary Password</label>
+                      <button 
+                        type="button" 
+                        onClick={() => setStaffPassword(Math.random().toString(36).slice(-8) + 'A1!')} 
+                        className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800"
+                      >
+                        Generate Password
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      value={staffPassword}
+                      onChange={(e) => setStaffPassword(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium focus:border-indigo-400 focus:outline-none"
+                      placeholder="Must be at least 6 characters"
+                    />
+                  </div>
 
                   <button
                     type="submit"
                     className="w-full rounded-lg bg-slate-950 text-white py-2 text-xs font-bold hover:bg-slate-800 transition-colors"
                   >
-                    Send Invitation Token
+                    Create Staff
                   </button>
                 </form>
               </div>
@@ -3438,12 +3695,12 @@ export default function BusinessOwnerView() {
                         <div key={member.id} className="p-3.5 flex items-center justify-between gap-3 text-xs">
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-950">{member.name}</span>
+                              <span className="font-bold text-slate-950">{member.name || `${member.firstName} ${member.lastName}`}</span>
                               <span className="rounded bg-indigo-50 border border-indigo-100/40 px-1.5 py-0.5 text-[9px] font-bold text-indigo-700 uppercase">
                                 {displayRoleName(member.role)}
                               </span>
                             </div>
-                            <p className="text-[10px] text-slate-400 mt-0.5">{member.email}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">{member.phone || member.email}</p>
                             {member.stationId && (
                               <p className="text-[9px] font-semibold text-amber-700 mt-1">Station: {stations.find(s => s.id === member.stationId)?.name}</p>
                             )}
@@ -3983,6 +4240,169 @@ export default function BusinessOwnerView() {
       )}
 
       {/* 5. BILLING & SAAS SETTINGS */}
+      {/* 4.5 BRANCHES (New) */}
+      {activeSubTab === 'branches' && can('business.edit') && (
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">Branch Management</h2>
+              <p className="text-sm text-slate-500">Manage locations and their status</p>
+            </div>
+            <button
+              onClick={() => {
+                setEditingBranchId(null);
+                setBranchName('');
+                setBranchLocation('');
+                setBranchPhone('');
+                setShowBranchModal(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold transition-all shadow-sm"
+            >
+              <Plus className="h-4 w-4" />
+              Add Branch
+            </button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {dinexBranches.map(branch => (
+              <div key={branch.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                      {branch.name}
+                      {dinexActiveBranch?.id === branch.id && (
+                        <span className="bg-emerald-100 text-emerald-700 text-[10px] uppercase font-bold px-2 py-0.5 rounded-full">Active</span>
+                      )}
+                    </h3>
+                    <p className="text-sm text-slate-500 flex items-center gap-1.5 mt-1">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {branch.location}
+                    </p>
+                    <p className="text-sm text-slate-500 flex items-center gap-1.5 mt-1">
+                      <Phone className="h-3.5 w-3.5" />
+                      {branch.phone || 'No phone'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingBranchId(branch.id);
+                        setBranchName(branch.name);
+                        setBranchLocation(branch.location);
+                        setBranchPhone(branch.phone || '');
+                        setShowBranchModal(true);
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </button>
+                    {dinexBranches.length > 1 && (
+                      <button
+                        onClick={() => {
+                          setConfirmDialog({
+                            isOpen: true,
+                            title: 'Delete Branch',
+                            message: `Are you sure you want to delete ${branch.name}? This cannot be undone.`,
+                            onConfirm: () => deleteDinexBranch(branch.id)
+                          });
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setDinexBranchId(branch.id)}
+                    disabled={dinexActiveBranch?.id === branch.id}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-colors ${
+                      dinexActiveBranch?.id === branch.id
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700 opacity-50 cursor-not-allowed'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    Switch to Branch
+                  </button>
+                  <button
+                    onClick={() => updateDinexBranchStatus(branch.id, branch.status === 'active' ? 'inactive' : 'active')}
+                    className={`px-3 py-2 text-xs font-bold rounded-lg border transition-colors ${
+                      branch.status === 'active'
+                        ? 'border-slate-200 bg-white text-slate-700 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
+                        : 'border-slate-200 bg-slate-100 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200'
+                    }`}
+                  >
+                    {branch.status === 'active' ? 'Deactivate' : 'Activate'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Branch Modal */}
+      {showBranchModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h3 className="font-bold text-slate-900">{editingBranchId ? 'Edit Branch' : 'Add New Branch'}</h3>
+              <button onClick={() => setShowBranchModal(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Branch Name</label>
+                <input
+                  type="text"
+                  value={branchName}
+                  onChange={(e) => setBranchName(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
+                  placeholder="e.g. Bole Branch"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Location</label>
+                <input
+                  type="text"
+                  value={branchLocation}
+                  onChange={(e) => setBranchLocation(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
+                  placeholder="e.g. Edna Mall, Bole"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Phone Number</label>
+                <input
+                  type="text"
+                  value={branchPhone}
+                  onChange={(e) => setBranchPhone(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
+                  placeholder="+251..."
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-2">
+              <button
+                onClick={() => setShowBranchModal(false)}
+                className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveBranch}
+                disabled={isSavingBranch}
+                className="px-6 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              >
+                {isSavingBranch ? 'Saving...' : 'Save Branch'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {activeSubTab === 'settings' && can('business.edit') && (
         <div className="max-w-2xl mx-auto space-y-6">
 
@@ -4736,6 +5156,36 @@ export default function BusinessOwnerView() {
                 className="flex-1 rounded-lg bg-rose-600 text-white px-3 py-1.5 text-xs font-bold hover:bg-rose-700 transition-colors"
               >
                 Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Station Modal */}
+      {showStationModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h3 className="font-bold text-slate-900">{editingStationId ? 'Edit Station' : 'Add Station'}</h3>
+              <button onClick={() => setShowStationModal(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-5">
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">Station Name</label>
+              <input
+                type="text"
+                value={stationName}
+                onChange={(e) => setStationName(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
+                placeholder="e.g. Kitchen, Bar, Grill..."
+              />
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-2">
+              <button onClick={() => setShowStationModal(false)} className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-800 transition-colors">Cancel</button>
+              <button onClick={handleSaveStation} disabled={isSavingStation} className="px-6 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                {isSavingStation ? 'Saving...' : 'Save Station'}
               </button>
             </div>
           </div>

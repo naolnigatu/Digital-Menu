@@ -1,0 +1,26 @@
+  const handleSaveBranch = async () => {
+    if (!branchName.trim() || !branchLocation.trim()) {
+      setToast({ type: 'error', text: 'Branch name and location are required.' });
+      return;
+    }
+    
+    setIsSavingBranch(true);
+    try {
+      if (editingBranchId) {
+        // update
+        updateDinexBranch(editingBranchId, branchName, branchLocation, branchPhone);
+        setToast({ type: 'success', text: 'Branch updated successfully.' });
+      } else {
+        // create
+        createDinexBranch(branchName, branchLocation, branchPhone);
+        setToast({ type: 'success', text: 'Branch created successfully.' });
+      }
+      setShowBranchModal(false);
+      setEditingBranchId(null);
+    } catch (e) {
+      console.warn('Error saving branch:', e);
+      setToast({ type: 'error', text: 'Failed to save branch.' });
+    } finally {
+      setIsSavingBranch(false);
+    }
+  };

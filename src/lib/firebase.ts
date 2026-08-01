@@ -85,3 +85,28 @@ export const logOut = async () => {
   }
 };
 
+
+
+export const rollbackSecondaryUser = async (email: string, pass: string) => {
+  if (!firebaseConfig.apiKey) return;
+  try {
+    const { deleteUser, signInWithEmailAndPassword } = await import('firebase/auth');
+    const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+    const secondaryAuth = getAuth(secondaryApp);
+    const result = await signInWithEmailAndPassword(secondaryAuth, email, pass);
+    if (result.user) {
+      await deleteUser(result.user);
+    }
+  } catch (err) {
+    console.error("Rollback failed:", err);
+  }
+};
+
+export const createSecondaryUser = async (email: string, pass: string) => {
+  if (!firebaseConfig.apiKey) throw new Error("Firebase not initialized");
+  const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+  const secondaryAuth = getAuth(secondaryApp);
+  const result = await createUserWithEmailAndPassword(secondaryAuth, email, pass);
+  await signOut(secondaryAuth);
+  return result.user;
+};
