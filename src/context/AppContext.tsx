@@ -422,9 +422,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             console.warn("Firestore global settings listener error:", err);
           });
           const targetOrdersTenantId = currentUser?.tenantId || activeTenantId;
-          const ordersQuery = (currentUser?.role === 'super_admin' || currentUser?.role === 'customer' || !currentUser)
+          const ordersQuery = (currentUser?.role === 'super_admin' || !currentUser)
             ? collection(db, 'orders')
-            : query(collection(db, 'orders'), where('tenantId', '==', targetOrdersTenantId));
+            : (currentUser?.role === 'customer' 
+                ? query(collection(db, 'orders'), where('customerEmail', '==', currentUser.email)) 
+                : query(collection(db, 'orders'), where('tenantId', '==', targetOrdersTenantId)));
           const unsubscribeOrders = onSnapshot(ordersQuery, snapshot => {
             const list: Order[] = [];
             snapshot.forEach(docSnap => {
@@ -664,27 +666,39 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
               }
             }
           }
+          const businessId = tenantId || loadedBusiness?.id || '';
           const userObj = {
             ...userDocData,
             id: userDocId,
             uid: uid || userDocId,
+            firstName: userDocData.firstName || '',
+            lastName: userDocData.lastName || '',
+            phone: userDocData.phone || '',
             email: cleanEmail || userDocData.email,
             role,
-            name: userDocData.name || (userDocData.firstName ? `${userDocData.firstName} ${userDocData.lastName || ''}`.trim() : cleanEmail.split('@')[0]),
-            tenantId: tenantId || loadedBusiness?.id || '',
+            tenantId: businessId,
             branchId: userDocData.branchId || '',
-            stationId: userDocData.stationId,
-            permissions: loadedPermissions
+            businessId: businessId,
+            permissions: loadedPermissions,
+            // Keep name for backward compatibility
+            name: userDocData.name || (userDocData.firstName ? `${userDocData.firstName} ${userDocData.lastName || ''}`.trim() : cleanEmail.split('@')[0])
           };
+          
           if (loadedBusiness) {
-            setTenants(prev => [...prev.filter(t => t.id !== loadedBusiness!.id), loadedBusiness!]);
-            setActiveTenantId(loadedBusiness.id);
-          } else if (tenantId) {
-            setActiveTenantId(tenantId);
+            setTenants(prev => {
+              const exists = prev.find(t => t.id === loadedBusiness!.id);
+              if (exists) return prev.map(t => t.id === loadedBusiness!.id ? loadedBusiness! : t);
+              return [...prev, loadedBusiness!];
+            });
           }
-          if (userDocData.branchId) {
-            setActiveBranchId(userDocData.branchId);
+          
+          if (userObj.tenantId) {
+            setActiveTenantId(userObj.tenantId);
           }
+          if (userObj.branchId) {
+            setActiveBranchId(userObj.branchId);
+          }
+          
           setCurrentUser(userObj);
           console.log("STAFF LOGIN DEBUG:", {
             role: userObj.role,
