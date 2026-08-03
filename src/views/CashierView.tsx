@@ -22,7 +22,7 @@ export default function CashierView() {
   const branchObj = useMemo(() => branches.find(b => b.id === activeBranchId) || branches[0], [branches, activeBranchId]);
 
   const activeUnpaidOrders = useMemo(() => orders.filter(
-    o => o.branchId === activeBranchId && 
+    o => (!activeBranchId || o.branchId === activeBranchId) && 
          o.paymentStatus !== 'paid' && 
          o.paymentStatus !== 'refunded' &&
          o.status !== 'cancelled' && 
@@ -31,7 +31,7 @@ export default function CashierView() {
   ), [orders, activeBranchId]);
 
   const pendingAdvancePayments = useMemo(() => orders.filter(
-    o => o.branchId === activeBranchId && o.paymentVerificationStatus === 'pending'
+    o => (!activeBranchId || o.branchId === activeBranchId) && o.paymentVerificationStatus === 'pending'
   ), [orders, activeBranchId]);
 
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -190,7 +190,7 @@ export default function CashierView() {
                   : 'border-transparent text-slate-450 hover:text-slate-600'
               }`}
             >
-              <span>Confirmed Paid Orders ({orders.filter(o => o.branchId === activeBranchId && o.paymentStatus === 'paid').length})</span>
+              <span>Confirmed Paid Orders ({orders.filter(o => (!activeBranchId || o.branchId === activeBranchId) && o.paymentStatus === 'paid').length})</span>
             </button>
           </div>
 
@@ -236,7 +236,7 @@ export default function CashierView() {
           ) : (
             /* Paid Orders List Panel */
             <div className="space-y-3.5">
-              {orders.filter(o => o.branchId === activeBranchId && o.paymentStatus === 'paid').length === 0 ? (
+              {orders.filter(o => (!activeBranchId || o.branchId === activeBranchId) && o.paymentStatus === 'paid').length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 py-16 text-center bg-white shadow-sm space-y-3">
                   <CheckCircle className="h-10 w-10 text-slate-300 mx-auto" />
                   <h4 className="font-sans font-bold text-sm text-slate-800">No Paid Orders Confirmed Yet</h4>

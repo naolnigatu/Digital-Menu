@@ -468,7 +468,7 @@ export default function BusinessOwnerView() {
   const tenantItems = React.useMemo(() => menuItems[activeTenantId] || [], [menuItems, activeTenantId]);
   const tenantBranchTables = React.useMemo(() => tables.filter(t => t.branchId === activeBranchId), [tables, activeBranchId]);
   const branchStaff = React.useMemo(() => staff.filter(s => s.branchId === activeBranchId), [staff, activeBranchId]);
-  const branchOrders = React.useMemo(() => orders.filter(o => o.branchId === activeBranchId), [orders, activeBranchId]);
+  const branchOrders = React.useMemo(() => orders.filter(o => !activeBranchId || o.branchId === activeBranchId), [orders, activeBranchId]);
 
   const renderPaywall = (featureName: string, description: string) => {
     const growthPlan = pricingPlans.find(p => p.id === 'growth');
@@ -2410,7 +2410,7 @@ export default function BusinessOwnerView() {
                 <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all space-y-1">
                   <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Pending Orders</span>
                   <div className="text-xl font-extrabold text-amber-600 flex items-center gap-1.5">
-                    <span>{branchOrders.filter(o => o.status === 'pending').length}</span>
+                    <span>{branchOrders.filter(o => o.status === 'pending' || o.status === 'pending_approval').length}</span>
                     <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
                   </div>
                   <span className="text-[9px] text-slate-400 block">Awaiting cashier accept</span>
