@@ -1347,8 +1347,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     // Loyalty integration
     if (targetOrder.customerEmail) {
       const email = targetOrder.customerEmail;
-      setCustomerProfiles(async prev => {
-        const current = prev[email] || {
+      
+        const current = customerProfiles[email] || {
           id: `cust-${Date.now()}`,
           email,
           name: targetOrder.customerName || email.split('@')[0],
@@ -1380,12 +1380,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           loyaltyPoints: updatedPoints,
           loyaltyHistory: [...current.loyaltyHistory, newHistoryEntry, ...redeemHistoryEntry]
         };
-        await syncToFirestore('users', updatedProfile.id, updatedProfile);
-        return {
+      setCustomerProfiles(prev => ({
           ...prev,
           [email]: updatedProfile
-        };
-      });
+        }));
+      syncToFirestore('users', updatedProfile.id, updatedProfile);
     }
 
     // Clean table status if dine_in
@@ -2402,108 +2401,98 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     await syncToFirestore('orders', orderId, updatedOrder);
   };
   const updateCustomerProfile = (email: string, profileData: Partial<CustomerProfile>) => {
-    setCustomerProfiles(async prev => {
-      const current = prev[email] || {
-        id: `cust-${Date.now()}`,
-        email,
-        name: profileData.name || email.split('@')[0],
-        phone: profileData.phone || '',
-        savedAddresses: [],
-        savedFavorites: [],
-        loyaltyPoints: 0,
-        loyaltyHistory: []
-      };
-      const updated = {
-        ...current,
-        ...profileData
-      };
-      await syncToFirestore('users', updated.id, updated);
-      return {
-        ...prev,
-        [email]: updated
-      };
-    });
+    const current = customerProfiles[email] || {
+      id: `cust-${Date.now()}`,
+      email,
+      name: profileData.name || email.split('@')[0],
+      phone: profileData.phone || '',
+      savedAddresses: [],
+      savedFavorites: [],
+      loyaltyPoints: 0,
+      loyaltyHistory: []
+    };
+    const updated = {
+      ...current,
+      ...profileData
+    };
+    setCustomerProfiles(prev => ({
+      ...prev,
+      [email]: updated
+    }));
+    syncToFirestore('users', updated.id, updated);
   };
   const addFavoriteItem = (email: string, menuItemId: string) => {
-    setCustomerProfiles(async prev => {
-      const current = prev[email] || {
-        id: `cust-${Date.now()}`,
-        email,
-        name: email.split('@')[0],
-        phone: '',
-        savedAddresses: [],
-        savedFavorites: [],
-        loyaltyPoints: 0,
-        loyaltyHistory: []
-      };
-      const updated = {
-        ...current,
-        savedFavorites: [...new Set([...current.savedFavorites, menuItemId])]
-      };
-      await syncToFirestore('users', updated.id, updated);
-      return {
-        ...prev,
-        [email]: updated
-      };
-    });
+    const current = customerProfiles[email] || {
+      id: `cust-${Date.now()}`,
+      email,
+      name: email.split('@')[0],
+      phone: '',
+      savedAddresses: [],
+      savedFavorites: [],
+      loyaltyPoints: 0,
+      loyaltyHistory: []
+    };
+    const updated = {
+      ...current,
+      savedFavorites: [...new Set([...current.savedFavorites, menuItemId])]
+    };
+    setCustomerProfiles(prev => ({
+      ...prev,
+      [email]: updated
+    }));
+    syncToFirestore('users', updated.id, updated);
   };
   const removeFavoriteItem = (email: string, menuItemId: string) => {
-    setCustomerProfiles(async prev => {
-      const current = prev[email];
-      if (!current) return prev;
-      const updated = {
-        ...current,
-        savedFavorites: current.savedFavorites.filter(id => id !== menuItemId)
-      };
-      await syncToFirestore('users', updated.id, updated);
-      return {
-        ...prev,
-        [email]: updated
-      };
-    });
+    const current = customerProfiles[email];
+    if (!current) return;
+    const updated = {
+      ...current,
+      savedFavorites: current.savedFavorites.filter(id => id !== menuItemId)
+    };
+    setCustomerProfiles(prev => ({
+      ...prev,
+      [email]: updated
+    }));
+    syncToFirestore('users', updated.id, updated);
   };
   const addSavedAddress = (email: string, name: string, address: string) => {
-    setCustomerProfiles(async prev => {
-      const current = prev[email] || {
-        id: `cust-${Date.now()}`,
-        email,
-        name: email.split('@')[0],
-        phone: '',
-        savedAddresses: [],
-        savedFavorites: [],
-        loyaltyPoints: 0,
-        loyaltyHistory: []
-      };
-      const newAddress = {
-        id: `addr-${Date.now()}`,
-        name,
-        address
-      };
-      const updated = {
-        ...current,
-        savedAddresses: [...current.savedAddresses, newAddress]
-      };
-      await syncToFirestore('users', updated.id, updated);
-      return {
-        ...prev,
-        [email]: updated
-      };
-    });
+    const current = customerProfiles[email] || {
+      id: `cust-${Date.now()}`,
+      email,
+      name: email.split('@')[0],
+      phone: '',
+      savedAddresses: [],
+      savedFavorites: [],
+      loyaltyPoints: 0,
+      loyaltyHistory: []
+    };
+    const newAddress = {
+      id: `addr-${Date.now()}`,
+      name,
+      address
+    };
+    const updated = {
+      ...current,
+      savedAddresses: [...current.savedAddresses, newAddress]
+    };
+    setCustomerProfiles(prev => ({
+      ...prev,
+      [email]: updated
+    }));
+    syncToFirestore('users', updated.id, updated);
   };
   const removeSavedAddress = (email: string, addressId: string) => {
-    setCustomerProfiles(async prev => {
-      const current = prev[email];
-      if (!current) return prev;
-      const updated = {
-        ...current,
-        savedAddresses: current.savedAddresses.filter(a => a.id !== addressId)
-      };
-      await syncToFirestore('users', updated.id, updated);
-      return {
-        ...prev,
-        [email]: updated
-      };
-    });
+    const current = customerProfiles[email];
+    if (!current) return;
+    const updated = {
+      ...current,
+      savedAddresses: current.savedAddresses.filter(a => a.id !== addressId)
+    };
+    setCustomerProfiles(prev => ({
+      ...prev,
+      [email]: updated
+    }));
+    syncToFirestore('users', updated.id, updated);
   };
   const updateTipStatus = async (orderId: string, status: 'pending' | 'delivered' | 'accepted') => {
     const existing = orders.find(o => o.id === orderId);

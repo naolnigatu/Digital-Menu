@@ -708,9 +708,9 @@ const currentItemPrice = useMemo(() => {
       status: initStatus as any,
       pickupTime: ['pickup', 'takeaway'].includes(orderType) ? pickupTime : undefined,
       notes: (orderType === 'delivery' ? `Delivery Address: ${deliveryAddress}` : orderType === 'drive_through' ? `Drive-thru Plate: ${licensePlate}` : orderType === 'meal_subscription' ? `Subscription Term: ${subscriptionDurationDays} Days` : ''),
-      paymentScreenshotUrl: isPrepaidType ? (paymentScreenshot || undefined) : undefined,
-      paymentVerificationStatus: selectedPaymentMethodId === 'stripe' ? 'approved' : isPrepaidType ? 'pending' : undefined,
-      advancePaymentRef: isPrepaidType ? (paymentRef || undefined) : undefined,
+      paymentScreenshotUrl: chosenConfig?.requiresProof ? (paymentScreenshot || undefined) : undefined,
+      paymentVerificationStatus: selectedPaymentMethodId === 'stripe' ? 'approved' : (chosenConfig?.requiresProof ? 'pending' : undefined),
+      advancePaymentRef: chosenConfig?.requiresProof ? (paymentRef || undefined) : undefined,
       paymentMethod: selectedPaymentMethodId as any,
       tip: orderType === 'meal_subscription' ? 0 : selectedTipAmount,
       
@@ -768,7 +768,7 @@ const currentItemPrice = useMemo(() => {
         totalCreditsRemaining: totalCredits,
         startDate: new Date().toISOString(),
         endDate: new Date(Date.now() + (plan ? plan.durationDays : 30) * 24 * 60 * 60 * 1000).toISOString(),
-        status: (selectedPaymentMethodId === 'stripe' || !isPrepaidType) ? 'active' : 'pending_approval',
+        status: (selectedPaymentMethodId === 'stripe' || !chosenConfig?.requiresProof) ? 'active' : 'pending_approval',
         redemptionsToday: 0
       } as any);
     }
