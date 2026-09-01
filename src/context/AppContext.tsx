@@ -612,70 +612,88 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
         // 1. Check 'staff' collection FIRST (Staff take priority over generic customer accounts)
         if (uid) {
-          const sSnap = await getDoc(doc(db, 'staff', uid));
-          if (sSnap.exists()) {
-            userDocData = sSnap.data();
-            userDocId = sSnap.id;
+          try {
+            const sSnap = await getDoc(doc(db, 'staff', uid));
+            if (sSnap.exists()) {
+              userDocData = sSnap.data();
+              userDocId = sSnap.id;
+            }
+          } catch (e) {
+            console.warn("Staff lookup by UID failed:", e);
           }
         }
         if (!userDocData && cleanEmail) {
-          const sQuery = query(collection(db, 'staff'), where('email', '==', cleanEmail));
-          const sQuerySnap = await getDocs(sQuery);
-          if (!sQuerySnap.empty) {
-            userDocData = sQuerySnap.docs[0].data();
-            userDocId = sQuerySnap.docs[0].id;
+          try {
+            const sQuery = query(collection(db, 'staff'), where('email', '==', cleanEmail));
+            const sQuerySnap = await getDocs(sQuery);
+            if (!sQuerySnap.empty) {
+              userDocData = sQuerySnap.docs[0].data();
+              userDocId = sQuerySnap.docs[0].id;
+            }
+          } catch (e) {
+            console.warn("Staff query by email failed:", e);
           }
         }
 
         // 2. If not staff, check 'users' collection
         if (!userDocData && uid) {
-          const uSnap = await getDoc(doc(db, 'users', uid));
-          if (uSnap.exists()) {
-            userDocData = uSnap.data();
-            userDocId = uSnap.id;
+          try {
+            const uSnap = await getDoc(doc(db, 'users', uid));
+            if (uSnap.exists()) {
+              userDocData = uSnap.data();
+              userDocId = uSnap.id;
+            }
+          } catch (e) {
+            console.warn("User lookup by UID failed:", e);
           }
         }
         if (!userDocData && cleanEmail) {
-          const uQuery = query(collection(db, 'users'), where('email', '==', cleanEmail));
-          const uQuerySnap = await getDocs(uQuery);
-          if (!uQuerySnap.empty) {
-            userDocData = uQuerySnap.docs[0].data();
-            userDocId = uQuerySnap.docs[0].id;
+          try {
+            const uQuery = query(collection(db, 'users'), where('email', '==', cleanEmail));
+            const uQuerySnap = await getDocs(uQuery);
+            if (!uQuerySnap.empty) {
+              userDocData = uQuerySnap.docs[0].data();
+              userDocId = uQuerySnap.docs[0].id;
+            }
+          } catch (e) {
+            console.warn("User query by email failed:", e);
           }
         }
         if (userDocData) {
           const role = (userDocData.role || 'customer') as UserRole;
           const tenantId = userDocData.tenantId || '';
           let loadedBusiness: Tenant | null = null;
-          let loadedPermissions: string[] = [];
+          let loadedPermissions: string[] = userDocData.permissions || [];
           if (role !== 'customer' && tenantId) {
-            // Load Business from Firestore
-            const bSnap = await getDoc(doc(db, 'businesses', tenantId));
-            if (bSnap.exists()) {
-              loadedBusiness = {
-                id: bSnap.id,
-                ...bSnap.data()
-              } as Tenant;
-            } else {
-              const tSnap = await getDoc(doc(db, 'tenants', tenantId));
-              if (tSnap.exists()) {
+            // Load Business from Firestore defensively
+            try {
+              const bSnap = await getDoc(doc(db, 'businesses', tenantId));
+              if (bSnap.exists()) {
                 loadedBusiness = {
-                  id: tSnap.id,
-                  ...tSnap.data()
+                  id: bSnap.id,
+                  ...bSnap.data()
                 } as Tenant;
+              } else {
+                const tSnap = await getDoc(doc(db, 'tenants', tenantId));
+                if (tSnap.exists()) {
+                  loadedBusiness = {
+                    id: tSnap.id,
+                    ...tSnap.data()
+                  } as Tenant;
+                }
               }
+            } catch (err) {
+              console.warn("Business doc load failed during login:", err);
             }
 
-            // Load Permissions from Firestore
-            const permSnap = await getDoc(doc(db, 'permissions', `perm-${userDocId}`));
-            if (permSnap.exists()) {
-              loadedPermissions = permSnap.data().permissions || [];
-            } else {
-              const pQuery = query(collection(db, 'permissions'), where('userId', '==', userDocId));
-              const pSnap = await getDocs(pQuery);
-              if (!pSnap.empty) {
-                loadedPermissions = pSnap.docs[0].data().permissions || [];
+            // Load Permissions from Firestore defensively
+            try {
+              const permSnap = await getDoc(doc(db, 'permissions', `perm-${userDocId}`));
+              if (permSnap.exists() && permSnap.data().permissions?.length) {
+                loadedPermissions = permSnap.data().permissions;
               }
+            } catch (err) {
+              console.warn("Permissions doc load failed during login:", err);
             }
           }
           const businessId = tenantId || loadedBusiness?.id || '';
@@ -692,7 +710,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             branchId: userDocData.branchId || '',
             businessId: businessId,
             permissions: loadedPermissions,
-            // Keep name for backward compatibility
             name: userDocData.name || (userDocData.firstName ? `${userDocData.firstName} ${userDocData.lastName || ''}`.trim() : cleanEmail.split('@')[0])
           };
           
@@ -711,13 +728,30 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             setActiveBranchId(userObj.branchId);
           }
           
+          // Ensure local staff list includes this staff member
+          if (role !== 'customer' && role !== 'owner' && role !== 'super_admin') {
+            setStaff(prev => {
+              if (prev.some(s => s.id === userDocId || (uid && s.uid === uid) || (cleanEmail && s.email.toLowerCase() === cleanEmail))) {
+                return prev.map(s => (s.id === userDocId || (uid && s.uid === uid) || (cleanEmail && s.email.toLowerCase() === cleanEmail)) ? { ...s, ...userObj, active: true } : s);
+              }
+              return [...prev, {
+                id: userDocId,
+                uid: uid || userDocId,
+                tenantId: userObj.tenantId,
+                branchId: userObj.branchId,
+                name: userObj.name,
+                firstName: userDocData.firstName || '',
+                lastName: userDocData.lastName || '',
+                phone: userDocData.phone || '',
+                email: userObj.email,
+                role: userObj.role,
+                active: true,
+                permissions: userObj.permissions
+              }];
+            });
+          }
+
           setCurrentUser(userObj);
-          console.log("STAFF LOGIN DEBUG:", {
-            role: userObj.role,
-            tenantId: userObj.tenantId,
-            branchId: userObj.branchId,
-            uid: userObj.uid
-          });
           addLog('Login', `User ${userObj.name} (${userObj.role}) loaded from Firestore.`);
           return {
             success: true,
@@ -1591,6 +1625,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // Staff
   const addStaffMember = async (memberData: Omit<Staff, 'id' | 'active'>, tempPassword?: string) => {
     let id = `s-${Date.now()}`;
+    const cleanEmail = (memberData.email || '').trim().toLowerCase();
     
     // Check permissions
     if (currentUser) {
@@ -1607,10 +1642,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
     let uid = undefined;
     let authUserObj: any = null;
-    if (tempPassword && memberData.email) {
+    if (tempPassword && cleanEmail) {
       try {
         const { createSecondaryUser } = await import('../lib/firebase');
-        authUserObj = await createSecondaryUser(memberData.email, tempPassword);
+        authUserObj = await createSecondaryUser(cleanEmail, tempPassword);
         if (authUserObj) {
           id = authUserObj.uid;
           uid = authUserObj.uid;
@@ -1621,21 +1656,46 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       }
     }
 
+    const defaultPerms = memberData.permissions || (
+      memberData.role === 'manager' ? ['dashboard.view', 'reports.view', 'menu.manage', 'orders.manage', 'tables.manage', 'staff.view', 'inventory.manage', 'kds.view', 'pos.manage', 'delivery.manage'] :
+      memberData.role === 'cashier' ? ['pos.manage', 'orders.manage', 'tables.manage', 'payments.manage'] :
+      memberData.role === 'waiter' ? ['tables.manage', 'orders.manage', 'menu.view', 'pos.orders'] :
+      ['kitchen', 'bar', 'coffee'].includes(memberData.role) ? ['kds.view', 'orders.view', 'orders.status'] :
+      memberData.role === 'delivery' ? ['delivery.manage', 'orders.view'] :
+      memberData.role === 'reception' ? ['tables.manage', 'reservations.manage', 'orders.view'] :
+      memberData.role === 'inventory' ? ['inventory.manage', 'menu.view'] :
+      ['menu.view', 'orders.create']
+    );
+
     const newStaff: Staff & { mustChangePassword?: boolean } = {
       ...memberData,
+      email: cleanEmail,
       id,
       uid: uid || id,
-      tenantId: (currentUser?.role === 'super_admin' || currentUser?.role === 'owner') ? activeTenantId : currentUser?.tenantId,
-      branchId: (currentUser?.role === 'manager' || currentUser?.role === 'cashier') ? currentUser.branchId : memberData.branchId,
+      tenantId: (currentUser?.role === 'super_admin' || currentUser?.role === 'owner') ? activeTenantId : (currentUser?.tenantId || activeTenantId),
+      branchId: (currentUser?.role === 'manager' || currentUser?.role === 'cashier') ? (currentUser.branchId || memberData.branchId) : (memberData.branchId || activeBranchId),
+      permissions: defaultPerms,
       active: true,
       status: 'active',
       mustChangePassword: true,
       createdAt: new Date().toISOString(),
       createdBy: currentUser ? currentUser.id : 'system'
     };
-    // Create exactly one Firestore document in the staff collection, not users
+
     try {
+      // 1. Sync to staff collection
       await syncToFirestore('staff', id, newStaff);
+      // 2. Also sync to users collection for complete compatibility
+      await syncToFirestore('users', id, newStaff);
+      // 3. Sync permissions doc
+      await syncToFirestore('permissions', `perm-${id}`, {
+        id: `perm-${id}`,
+        userId: id,
+        tenantId: newStaff.tenantId,
+        permissions: defaultPerms,
+        updatedAt: new Date().toISOString()
+      });
+
       setStaff(prev => {
         if (prev.some(s => s.id === id)) {
           return prev.map(s => s.id === id ? newStaff : s);
@@ -1645,15 +1705,15 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       addLog('Add Staff', `Added employee ${memberData.name || memberData.firstName} as ${memberData.role}.`);
     } catch (err: any) {
       console.error("Error creating staff doc:", err);
-      if (authUserObj && tempPassword && memberData.email) {
+      if (authUserObj && tempPassword && cleanEmail) {
         try {
           const { rollbackSecondaryUser } = await import('../lib/firebase');
-          await rollbackSecondaryUser(memberData.email, tempPassword);
+          await rollbackSecondaryUser(cleanEmail, tempPassword);
         } catch (delErr) {
           console.error("Failed to rollback auth user:", delErr);
         }
       }
-      throw new Error("Failed to create staff record. Document creation failed.");
+      throw new Error("Failed to create staff record. Document creation failed: " + (err.message || err));
     }
   };
   const toggleStaffStatus = async (staffId: string) => {

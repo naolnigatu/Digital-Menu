@@ -48,28 +48,33 @@ service cloud.firestore {
         isSuperAdmin() || 
         request.auth.uid == userId || 
         (resource != null && (resource.data.get('email', '') == request.auth.token.email || resource.data.get('uid', '') == request.auth.uid)) || 
-        (request.resource != null && (request.resource.data.get('email', '') == request.auth.token.email || request.resource.data.get('uid', '') == request.auth.uid))
+        (request.resource != null && (request.resource.data.get('email', '') == request.auth.token.email || request.resource.data.get('uid', '') == request.auth.uid)) ||
+        (request.resource != null && hasTenantAccess(request.resource.data.get('tenantId', ''))) ||
+        (resource != null && hasTenantAccess(resource.data.get('tenantId', '')))
       );
     }
 
     match /staff/{staffId} {
       // Staff can read their own profile, or admins/owners/staff can read staff in their tenant
       allow read: if request.auth != null && (
-        isSuperAdmin() || request.auth.uid == staffId || hasTenantAccess(resource.data.tenantId)
+        isSuperAdmin() || 
+        request.auth.uid == staffId || 
+        (resource != null && (resource.data.get('uid', '') == request.auth.uid || resource.data.get('email', '') == request.auth.token.email || hasTenantAccess(resource.data.get('tenantId', ''))))
       );
       // Allow self-registration during owner/staff onboarding, or creation by manager/owner/super_admin
       allow create: if request.auth != null && (
         isSuperAdmin() || 
         request.auth.uid == staffId || 
         request.auth.uid == request.resource.data.get('uid', '') || 
-        hasTenantAccess(request.resource.data.tenantId)
+        hasTenantAccess(request.resource.data.get('tenantId', ''))
       );
       allow update: if request.auth != null && (
         isSuperAdmin() || 
-        request.auth.uid == staffId ||
-        (hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId))
+        request.auth.uid == staffId || 
+        (resource != null && resource.data.get('uid', '') == request.auth.uid) ||
+        (hasTenantAccess(resource.data.get('tenantId', '')) && hasTenantAccess(request.resource.data.get('tenantId', '')))
       );
-      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.tenantId));
+      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.get('tenantId', '')));
     }
 
     match /tenants/{tenantId} {
@@ -118,46 +123,52 @@ service cloud.firestore {
     }
 
     match /memberships/{docId} {
-      allow read: if request.auth != null && (request.auth.uid == resource.data.get('userId', '') || hasTenantAccess(resource.data.tenantId));
+      allow read: if request.auth != null && (request.auth.uid == resource.data.get('userId', '') || hasTenantAccess(resource.data.get('tenantId', '')));
       allow create: if request.auth != null && (
         isSuperAdmin() ||
         request.auth.uid == request.resource.data.get('userId', '') || 
-        hasTenantAccess(request.resource.data.tenantId)
+        hasTenantAccess(request.resource.data.get('tenantId', ''))
       );
       allow update: if request.auth != null && (
         isSuperAdmin() ||
         request.auth.uid == resource.data.get('userId', '') ||
-        (hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId))
+        (hasTenantAccess(resource.data.get('tenantId', '')) && hasTenantAccess(request.resource.data.get('tenantId', '')))
       );
-      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.tenantId));
+      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.get('tenantId', '')));
     }
 
     match /roles/{docId} {
-      allow read: if request.auth != null && (request.auth.uid == resource.data.get('userId', '') || hasTenantAccess(resource.data.tenantId));
+      allow read: if request.auth != null && (request.auth.uid == resource.data.get('userId', '') || hasTenantAccess(resource.data.get('tenantId', '')));
       allow create: if request.auth != null && (
         isSuperAdmin() ||
         request.auth.uid == request.resource.data.get('userId', '') || 
-        hasTenantAccess(request.resource.data.tenantId)
+        hasTenantAccess(request.resource.data.get('tenantId', ''))
       );
       allow update: if request.auth != null && (
         isSuperAdmin() ||
-        (hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId))
+        (hasTenantAccess(resource.data.get('tenantId', '')) && hasTenantAccess(request.resource.data.get('tenantId', '')))
       );
-      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.tenantId));
+      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.get('tenantId', '')));
     }
 
     match /permissions/{docId} {
-      allow read: if request.auth != null && (request.auth.uid == resource.data.get('userId', '') || hasTenantAccess(resource.data.tenantId));
+      allow read: if request.auth != null && (
+        isSuperAdmin() || 
+        request.auth.uid == resource.data.get('userId', '') || 
+        docId == ('perm-' + request.auth.uid) ||
+        hasTenantAccess(resource.data.get('tenantId', ''))
+      );
       allow create: if request.auth != null && (
         isSuperAdmin() ||
         request.auth.uid == request.resource.data.get('userId', '') || 
-        hasTenantAccess(request.resource.data.tenantId)
+        docId == ('perm-' + request.auth.uid) ||
+        hasTenantAccess(request.resource.data.get('tenantId', ''))
       );
       allow update: if request.auth != null && (
         isSuperAdmin() ||
-        (hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId))
+        (hasTenantAccess(resource.data.get('tenantId', '')) && hasTenantAccess(request.resource.data.get('tenantId', '')))
       );
-      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.tenantId));
+      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.get('tenantId', '')));
     }
 
     match /categories/{docId} {

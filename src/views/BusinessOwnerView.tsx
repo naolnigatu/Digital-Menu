@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Utensils, QrCode, Users, Settings, Plus, Trash2, Edit, Check, 
   BarChart3, Users2, Shield, Languages, Award, PlusCircle, CreditCard, ChevronRight, ChevronLeft, FileSpreadsheet,
   Upload, Image, X, Sparkles, MapPin, Phone, Mail, HelpCircle, AlertTriangle, XCircle, ShieldAlert,
-  ChevronUp, ChevronDown, EyeOff, Eye, Search, Bike
+  ChevronUp, ChevronDown, EyeOff, Eye, Search, Bike, CheckCircle2
 } from 'lucide-react';
 import { 
   useDinexBusiness, 
@@ -1113,14 +1113,16 @@ export default function BusinessOwnerView() {
     
     if (!staffPassword || staffPassword.length < 6) { setPermStatusMessage({ type: 'error', text: 'Password must be at least 6 characters' }); return; }
 
+    const cleanPhoneDigits = staffPhone.replace(/\D/g, '') || 'staff';
+    const finalEmail = (staffEmail.trim() || `${cleanPhoneDigits}@${tenant.slug || 'dinex'}.app`).toLowerCase();
+
     try {
       await addStaffMember({
-        firstName: staffFirstName,
-        lastName: staffLastName,
-        name: `${staffFirstName} ${staffLastName}`,
-        phone: staffPhone,
-        email: staffEmail || `${staffPhone.replace(/\D/g, '')}@${activeTenantId}.app`, // Provide dummy email if empty but auth is needed? wait, auth requires email. Let's see if the request says email is optional for Firebase Auth? 
-        // Actually, if email is optional, we might need a placeholder or the user doesn't get auth. But the prompt says "Generate Password button" and "Email (optional)".
+        firstName: staffFirstName.trim(),
+        lastName: staffLastName.trim(),
+        name: `${staffFirstName.trim()} ${staffLastName.trim()}`,
+        phone: staffPhone.trim(),
+        email: finalEmail,
         role: staffRole,
         tenantId: activeTenantId,
         branchId: staffBranch || activeBranchId,
@@ -1133,11 +1135,11 @@ export default function BusinessOwnerView() {
       setStaffPassword('');
       setPermStatusMessage({ type: 'success', text: 'Staff account created successfully.' });
       setLastCreatedStaff({
-        name: `${staffFirstName} ${staffLastName}`,
+        name: `${staffFirstName.trim()} ${staffLastName.trim()}`,
         role: staffRole,
         branchName: branches.find(b => b.id === (staffBranch || activeBranchId))?.name || 'Unknown Branch',
-        phone: staffPhone,
-        email: staffEmail || 'None',
+        phone: staffPhone.trim(),
+        email: finalEmail,
         password: staffPassword
       });
     } catch (err: any) {
@@ -3535,20 +3537,41 @@ export default function BusinessOwnerView() {
                 <p className="text-xs text-slate-400 leading-relaxed">Create team member accounts directly. They will be prompted to change their password on first login.</p>
                 
                 {lastCreatedStaff && (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4 space-y-2">
-                    <h3 className="text-emerald-800 font-bold text-sm">Staff created successfully</h3>
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-xs">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        <span>Staff Account Provisioned</span>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          const text = `Dinex Login Credentials:\nEmail: ${lastCreatedStaff.email}\nPassword: ${lastCreatedStaff.password}\nRole: ${lastCreatedStaff.role}\nBranch: ${lastCreatedStaff.branchName}`;
+                          navigator.clipboard?.writeText(text);
+                          alert('Credentials copied to clipboard!');
+                        }}
+                        className="text-[10px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-100/80 px-2 py-1 rounded transition-colors"
+                      >
+                        Copy Login Details
+                      </button>
+                    </div>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div><span className="text-emerald-700/70 font-semibold">Name:</span> <span className="font-medium text-emerald-900">{lastCreatedStaff.name}</span></div>
-                      <div><span className="text-emerald-700/70 font-semibold">Role:</span> <span className="font-medium text-emerald-900">{lastCreatedStaff.role}</span></div>
+                      <div><span className="text-emerald-700/70 font-semibold">Role:</span> <span className="font-medium text-emerald-900 capitalize">{lastCreatedStaff.role}</span></div>
                       <div><span className="text-emerald-700/70 font-semibold">Branch:</span> <span className="font-medium text-emerald-900">{lastCreatedStaff.branchName}</span></div>
                       <div><span className="text-emerald-700/70 font-semibold">Phone:</span> <span className="font-medium text-emerald-900">{lastCreatedStaff.phone}</span></div>
-                      <div><span className="text-emerald-700/70 font-semibold">Email:</span> <span className="font-medium text-emerald-900">{lastCreatedStaff.email}</span></div>
-                      <div className="col-span-2 mt-1 p-2 bg-emerald-100/50 rounded flex justify-between items-center">
-                        <span className="text-emerald-700/70 font-semibold">Temporary Password:</span> 
-                        <span className="font-bold font-mono text-emerald-900 bg-white px-2 py-1 rounded shadow-sm">{lastCreatedStaff.password}</span>
+                      <div className="col-span-2 mt-1 p-2 bg-emerald-100/50 rounded-lg space-y-1.5">
+                        <div className="flex justify-between items-center text-[11px]">
+                          <span className="text-emerald-700/70 font-semibold">Login Email:</span> 
+                          <span className="font-bold font-mono text-emerald-900 bg-white px-2 py-0.5 rounded shadow-sm border border-emerald-200/50">{lastCreatedStaff.email}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-[11px]">
+                          <span className="text-emerald-700/70 font-semibold">Temporary Password:</span> 
+                          <span className="font-bold font-mono text-emerald-900 bg-white px-2 py-0.5 rounded shadow-sm border border-emerald-200/50">{lastCreatedStaff.password}</span>
+                        </div>
                       </div>
                     </div>
-                    <button type="button" onClick={() => setLastCreatedStaff(null)} className="w-full text-[10px] font-bold uppercase text-emerald-700 hover:text-emerald-900 py-1">Dismiss</button>
+                    <button type="button" onClick={() => setLastCreatedStaff(null)} className="w-full text-[10px] font-bold uppercase text-emerald-700 hover:text-emerald-900 py-1 text-center">Dismiss</button>
                   </div>
                 )}
                 <form onSubmit={handleAddStaff} className="space-y-3">

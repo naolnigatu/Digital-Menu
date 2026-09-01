@@ -91,9 +91,9 @@ export const rollbackSecondaryUser = async (email: string, pass: string) => {
   if (!firebaseConfig.apiKey) return;
   try {
     const { deleteUser, signInWithEmailAndPassword } = await import('firebase/auth');
-    const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+    const secondaryApp = getApps().find(app => app.name === "SecondaryApp") || initializeApp(firebaseConfig, "SecondaryApp");
     const secondaryAuth = getAuth(secondaryApp);
-    const result = await signInWithEmailAndPassword(secondaryAuth, email, pass);
+    const result = await signInWithEmailAndPassword(secondaryAuth, email.trim().toLowerCase(), pass);
     if (result.user) {
       await deleteUser(result.user);
     }
@@ -104,9 +104,9 @@ export const rollbackSecondaryUser = async (email: string, pass: string) => {
 
 export const createSecondaryUser = async (email: string, pass: string) => {
   if (!firebaseConfig.apiKey) throw new Error("Firebase not initialized");
-  const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+  const secondaryApp = getApps().find(app => app.name === "SecondaryApp") || initializeApp(firebaseConfig, "SecondaryApp");
   const secondaryAuth = getAuth(secondaryApp);
-  const result = await createUserWithEmailAndPassword(secondaryAuth, email, pass);
+  const result = await createUserWithEmailAndPassword(secondaryAuth, email.trim().toLowerCase(), pass);
   await signOut(secondaryAuth);
   return result.user;
 };
