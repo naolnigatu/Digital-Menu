@@ -1,6 +1,13 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, Auth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { initializeFirestore, getFirestore, Firestore } from 'firebase/firestore';
+import { 
+  initializeFirestore, 
+  getFirestore, 
+  Firestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  memoryLocalCache
+} from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -17,9 +24,20 @@ export const initializeFirebase = () => {
     if (!getApps().length) {
       const app = initializeApp(firebaseConfig);
       auth = getAuth(app);
-      db = initializeFirestore(app, {
-        experimentalForceLongPolling: true
-      });
+      try {
+        db = initializeFirestore(app, {
+          experimentalAutoDetectLongPolling: true,
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager()
+          })
+        });
+      } catch (cacheErr) {
+        console.warn("Falling back to memory cache for Firestore:", cacheErr);
+        db = initializeFirestore(app, {
+          experimentalAutoDetectLongPolling: true,
+          localCache: memoryLocalCache()
+        });
+      }
       storage = getStorage(app);
       googleProvider = new GoogleAuthProvider();
     } else {
