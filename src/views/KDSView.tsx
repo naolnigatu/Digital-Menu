@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { OrderItem, Order } from '../types';
+import { OrderItem, Order, PreparationStation } from '../types';
 import { 
-  ChefHat, Clock, Check, Play, BellRing, Settings, RefreshCw, AlertTriangle, Plus
+  ChefHat, Clock, Check, Play, BellRing, Settings, RefreshCw, AlertTriangle, Plus, Edit, Trash2, X, Sparkles, Building2, Utensils
 } from 'lucide-react';
 
 export default function KDSView() {
@@ -18,11 +18,34 @@ export default function KDSView() {
     updateOrderItemStatus,
     approveKitchenNote,
     reportOrderItemIssue,
-    placeOrder
+    placeOrder,
+    addStation,
+    updateStation,
+    deleteStation
   } = useApp();
 
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'received' | 'cooking' | 'ready' | 'delivered'>('all');
+
+  // Station Management Modal States
+  const [showStationModal, setShowStationModal] = useState(false);
+  const [editingStationId, setEditingStationId] = useState<string | null>(null);
+  const [stationName, setStationName] = useState('');
+  const [stationBranchId, setStationBranchId] = useState<string>('');
+  const [isSavingStation, setIsSavingStation] = useState(false);
+  const [stationError, setStationError] = useState<string | null>(null);
+  const [confirmDeleteStation, setConfirmDeleteStation] = useState<{ id: string; name: string } | null>(null);
+
+  const STATION_PRESETS = [
+    'Main Kitchen',
+    'Grill & BBQ',
+    'Bar & Beverages',
+    'Traditional Coffee',
+    'Bakery & Pastry',
+    'Salad & Cold Prep',
+    'Pizza & Oven',
+    'Fast Food & Fryer'
+  ];
 
   const branchStations = useMemo(() => {
     if (!selectedBranchId || selectedBranchId === 'all') return stations;
@@ -121,6 +144,75 @@ export default function KDSView() {
     
     if (nextStatus === 'ready') {
       playKitchenBell();
+    }
+  };
+
+  const handleOpenAddStation = () => {
+    setEditingStationId(null);
+    setStationName('');
+    setStationBranchId(activeBranchId || (branches[0]?.id || ''));
+    setStationError(null);
+    setShowStationModal(true);
+  };
+
+  const handleOpenEditStation = (station: PreparationStation) => {
+    setEditingStationId(station.id);
+    setStationName(station.name);
+    setStationBranchId(station.branchId || activeBranchId || '');
+    setStationError(null);
+    setShowStationModal(true);
+  };
+
+  const handleSaveStation = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!stationName.trim()) {
+      setStationError('Station name is required');
+      return;
+    }
+
+    setIsSavingStation(true);
+    setStationError(null);
+
+    try {
+      if (editingStationId) {
+        await updateStation({
+          id: editingStationId,
+          name: stationName.trim(),
+          branchId: stationBranchId || activeBranchId || 'b-01',
+          tenantId: activeTenantId
+        });
+        showToast('✓ Station updated successfully');
+      } else {
+        await addStation({
+          name: stationName.trim(),
+          branchId: stationBranchId || activeBranchId || 'b-01',
+          tenantId: activeTenantId
+        });
+        showToast('✓ Station created successfully');
+      }
+      setEditingStationId(null);
+      setStationName('');
+      setShowStationModal(false);
+    } catch (err: any) {
+      console.error(err);
+      setStationError(err?.message || 'Failed to save station');
+    } finally {
+      setIsSavingStation(false);
+    }
+  };
+
+  const handleDeleteStationConfirm = async () => {
+    if (!confirmDeleteStation) return;
+    try {
+      await deleteStation(confirmDeleteStation.id);
+      showToast(`✓ Station "${confirmDeleteStation.name}" deleted`);
+      if (activeStationId === confirmDeleteStation.id) {
+        setActiveStationId('all');
+      }
+      setConfirmDeleteStation(null);
+    } catch (err: any) {
+      console.error(err);
+      showToast('Failed to delete station', 'error');
     }
   };
 
@@ -242,6 +334,15 @@ export default function KDSView() {
         {/* Station Select Toggle */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
+            onClick={() => handleOpenAddStation()}
+            className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+            title="Add a new kitchen preparation station (Grill, Bar, Pastry, etc.)"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>+ Kitchen Station</span>
+          </button>
+
+          <button
             onClick={() => handleCreateTestOrder()}
             className="rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
             title="Create a test order to verify tickets in real time"
@@ -312,16 +413,29 @@ export default function KDSView() {
                   key={s.id}
                   type="button"
                   onClick={() => setActiveStationId(s.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
                     activeStationId === s.id
                       ? 'bg-slate-900 text-white shadow-sm'
                       : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  {s.name} ({count})
+                  <span>{s.name}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${activeStationId === s.id ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'}`}>
+                    {count}
+                  </span>
                 </button>
               );
             })}
+            
+            <button
+              type="button"
+              onClick={() => handleOpenAddStation()}
+              className="px-2 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all cursor-pointer flex items-center gap-1"
+              title="Add a new kitchen preparation station"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Station</span>
+            </button>
           </div>
         )}
 
@@ -689,6 +803,268 @@ export default function KDSView() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Station Management Modal */}
+      {showStationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-800">
+                  <ChefHat className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-900">
+                    {editingStationId ? 'Edit Kitchen Station' : 'Kitchen Preparation Stations'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">Configure routing targets for dishes and kitchen staff</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowStationModal(false);
+                  setEditingStationId(null);
+                  setStationName('');
+                  setStationError(null);
+                }} 
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-6">
+              
+              {/* Add / Edit Form */}
+              <form onSubmit={handleSaveStation} className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-slate-800">
+                    {editingStationId ? 'Update Station Details' : 'Add New Station'}
+                  </span>
+                  {editingStationId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingStationId(null);
+                        setStationName('');
+                        setStationError(null);
+                      }}
+                      className="text-[10px] text-slate-500 hover:text-slate-800 font-bold"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Station Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={stationName}
+                    onChange={(e) => {
+                      setStationName(e.target.value);
+                      if (stationError) setStationError(null);
+                    }}
+                    placeholder="e.g. Main Kitchen, Grill & BBQ, Bar, Pastry..."
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-xs font-semibold bg-white"
+                  />
+                  {stationError && (
+                    <p className="text-[10px] text-rose-600 font-bold mt-1">{stationError}</p>
+                  )}
+                </div>
+
+                {/* Quick Presets */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Quick Presets</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {STATION_PRESETS.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setStationName(preset)}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg font-bold border transition-colors cursor-pointer ${
+                          stationName === preset
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Branch Assignment */}
+                {branches.length > 1 && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Assign to Branch</label>
+                    <select
+                      value={stationBranchId || activeBranchId || ''}
+                      onChange={(e) => setStationBranchId(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-xs font-semibold bg-white cursor-pointer"
+                    >
+                      {branches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="pt-1 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isSavingStation || !stationName.trim()}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  >
+                    {isSavingStation ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                    <span>{editingStationId ? 'Save Changes' : '+ Add Station'}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Existing Stations List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
+                    Configured Stations ({stations.length})
+                  </h4>
+                </div>
+
+                {stations.length === 0 ? (
+                  <div className="text-center py-8 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    <ChefHat className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-slate-600">No kitchen stations configured yet</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Add your first station using the form above</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {stations.map(st => {
+                      const branchName = branches.find(b => b.id === st.branchId)?.name || 'All Branches';
+                      const assignedItemsCount = menuItems.filter(m => m.preparationStationId === st.id).length;
+                      const activeTicketsCount = orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'refunded')
+                        .flatMap(o => o.items || [])
+                        .filter(it => it.assignedStationId === st.id).length;
+
+                      return (
+                        <div 
+                          key={st.id} 
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 transition-all shadow-xs"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-extrabold text-slate-800">{st.name}</span>
+                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-100 font-bold text-slate-600">
+                                {branchName}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 text-[10px] text-slate-500 font-medium">
+                              <span>{assignedItemsCount} dishes routed</span>
+                              <span>•</span>
+                              <span className={activeTicketsCount > 0 ? 'text-amber-600 font-bold' : ''}>
+                                {activeTicketsCount} active ticket{activeTicketsCount === 1 ? '' : 's'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveStationId(st.id);
+                                setShowStationModal(false);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold transition-colors cursor-pointer"
+                              title="Filter KDS display to this station"
+                            >
+                              Filter Queue
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditStation(st)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                              title="Edit station"
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteStation({ id: st.id, name: st.name })}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Delete station"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowStationModal(false);
+                  setEditingStationId(null);
+                  setStationName('');
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Delete Station Confirmation Dialog */}
+      {confirmDeleteStation && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-sm p-5 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-100 text-rose-600 shrink-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-sm text-slate-900">Delete Kitchen Station</h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Are you sure you want to delete <strong>"{confirmDeleteStation.name}"</strong>?
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteStation(null)}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteStationConfirm}
+                className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-sm"
+              >
+                Delete Station
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

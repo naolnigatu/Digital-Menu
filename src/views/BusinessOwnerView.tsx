@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Utensils, QrCode, Users, Settings, Plus, Trash2, Edit, Check, 
   BarChart3, Users2, Shield, Languages, Award, PlusCircle, CreditCard, ChevronRight, ChevronLeft, FileSpreadsheet,
   Upload, Image, X, Sparkles, MapPin, Phone, Mail, HelpCircle, AlertTriangle, XCircle, ShieldAlert,
-  ChevronUp, ChevronDown, EyeOff, Eye, Search, Bike, CheckCircle2, ChefHat
+  ChevronUp, ChevronDown, EyeOff, Eye, Search, Bike, CheckCircle2, ChefHat, RefreshCw
 } from 'lucide-react';
 import { 
   useDinexBusiness, 
@@ -549,6 +549,7 @@ export default function BusinessOwnerView() {
   const [showStationModal, setShowStationModal] = useState(false);
   const [editingStationId, setEditingStationId] = useState<string | null>(null);
   const [stationName, setStationName] = useState('');
+  const [stationBranchId, setStationBranchId] = useState<string>('');
   const [isSavingStation, setIsSavingStation] = useState(false);
 
   const [disabledCategoryIds, setDisabledCategoryIds] = useState<string[]>(() => {
@@ -910,7 +911,7 @@ export default function BusinessOwnerView() {
   }, [filteredBranchOrders]);
 
   // Handle Menu submissions
-  const handleSaveStation = () => {
+  const handleSaveStation = async () => {
     if (!stationName.trim()) {
       showToast('Station name is required.', 'error');
       return;
@@ -918,22 +919,25 @@ export default function BusinessOwnerView() {
     setIsSavingStation(true);
     try {
       if (editingStationId) {
-        updateStation({
+        await updateStation({
           id: editingStationId,
           name: stationName.trim(),
-          branchId: activeBranchId,
+          branchId: stationBranchId || activeBranchId,
+          tenantId: activeTenantId,
         });
         showToast('✓ Station updated.');
       } else {
-        addStation({
+        await addStation({
           name: stationName.trim(),
-          branchId: activeBranchId,
+          branchId: stationBranchId || activeBranchId,
+          tenantId: activeTenantId,
         });
         showToast('✓ Station created.');
       }
       setShowStationModal(false);
       setEditingStationId(null);
       setStationName('');
+      setStationBranchId('');
     } catch (e) {
       console.error(e);
       showToast('Failed to save station.', 'error');
@@ -2760,50 +2764,62 @@ export default function BusinessOwnerView() {
                   onClick={() => {
                     setEditingStationId(null);
                     setStationName('');
+                    setStationBranchId(activeBranchId);
                     setShowStationModal(true);
                   }}
-                  className="p-1 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors flex items-center gap-1 text-[10px] font-bold"
+                  className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors flex items-center gap-1 text-[10px] font-bold cursor-pointer"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  Add
+                  <span>+ Station</span>
                 </button>
               </div>
               <div className="space-y-2">
-                {stations.filter(s => s.branchId === activeBranchId).map(station => (
-                  <div key={station.id} className="flex items-center justify-between rounded-lg p-2.5 border border-slate-200 bg-slate-50 transition-all hover:border-indigo-200">
-                    <span className="text-xs font-bold text-slate-800">{station.name}</span>
-                    <div className="flex gap-1 shrink-0">
-                      <button
-                        onClick={() => {
-                          setEditingStationId(station.id);
-                          setStationName(station.name);
-                          setShowStationModal(true);
-                        }}
-                        className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-indigo-600 transition-colors"
-                      >
-                        <Edit className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setConfirmDialog({
-                            isOpen: true,
-                            title: 'Delete Station',
-                            message: `Are you sure you want to delete the station "${station.name}"?`,
-                            onConfirm: () => {
-                              deleteStation(station.id);
-                              setConfirmDialog(null);
-                              showToast('✓ Station deleted.');
-                            }
-                          });
-                        }}
-                        className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-rose-600 transition-colors"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                {stations.filter(s => !s.branchId || s.branchId === activeBranchId || (s.tenantId && s.tenantId === activeTenantId)).map(station => {
+                  const branchName = branches.find(b => b.id === station.branchId)?.name;
+                  return (
+                    <div key={station.id} className="flex items-center justify-between rounded-lg p-2.5 border border-slate-200 bg-slate-50 transition-all hover:border-indigo-200">
+                      <div className="space-y-0.5">
+                        <span className="text-xs font-bold text-slate-800">{station.name}</span>
+                        {branches.length > 1 && branchName && (
+                          <span className="block text-[9px] text-slate-400 font-medium">{branchName}</span>
+                        )}
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          onClick={() => {
+                            setEditingStationId(station.id);
+                            setStationName(station.name);
+                            setStationBranchId(station.branchId || activeBranchId);
+                            setShowStationModal(true);
+                          }}
+                          className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-indigo-600 transition-colors cursor-pointer"
+                          title="Edit Station"
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setConfirmDialog({
+                              isOpen: true,
+                              title: 'Delete Station',
+                              message: `Are you sure you want to delete the station "${station.name}"?`,
+                              onConfirm: () => {
+                                deleteStation(station.id);
+                                setConfirmDialog(null);
+                                showToast('✓ Station deleted.');
+                              }
+                            });
+                          }}
+                          className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-rose-600 transition-colors cursor-pointer"
+                          title="Delete Station"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {stations.filter(s => s.branchId === activeBranchId).length === 0 && (
+                  );
+                })}
+                {stations.filter(s => !s.branchId || s.branchId === activeBranchId || (s.tenantId && s.tenantId === activeTenantId)).length === 0 && (
                   <p className="text-[10px] text-slate-400 text-center py-4">No preparation stations configured.</p>
                 )}
               </div>
@@ -3240,7 +3256,7 @@ export default function BusinessOwnerView() {
                         onChange={(e) => setItemStation(e.target.value)}
                         className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium"
                       >
-                        {stations.filter(s => s.branchId === activeBranchId).map(s => (
+                        {stations.filter(s => !s.branchId || s.branchId === activeBranchId || (s.tenantId && s.tenantId === activeTenantId)).map(s => (
                           <option key={s.id} value={s.id}>{s.name}</option>
                         ))}
                       </select>
@@ -3687,7 +3703,7 @@ export default function BusinessOwnerView() {
                         className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium bg-white focus:outline-none"
                       >
                         <option value="">Choose preparation target...</option>
-                        {stations.filter(s => s.branchId === (staffBranch || activeBranchId)).map(s => (
+                        {stations.filter(s => !s.branchId || s.branchId === (staffBranch || activeBranchId) || (s.tenantId && s.tenantId === activeTenantId)).map(s => (
                           <option key={s.id} value={s.id}>{s.name}</option>
                         ))}
                       </select>
@@ -5210,28 +5226,99 @@ export default function BusinessOwnerView() {
 
       {/* Station Modal */}
       {showStationModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <h3 className="font-bold text-slate-900">{editingStationId ? 'Edit Station' : 'Add Station'}</h3>
-              <button onClick={() => setShowStationModal(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700">
+                  <ChefHat className="h-4 w-4" />
+                </div>
+                <h3 className="font-bold text-slate-900">{editingStationId ? 'Edit Kitchen Station' : 'Add Kitchen Station'}</h3>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowStationModal(false);
+                  setEditingStationId(null);
+                  setStationName('');
+                  setStationBranchId('');
+                }} 
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="p-5">
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">Station Name</label>
-              <input
-                type="text"
-                value={stationName}
-                onChange={(e) => setStationName(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
-                placeholder="e.g. Kitchen, Bar, Grill..."
-              />
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Station Name</label>
+                <input
+                  type="text"
+                  value={stationName}
+                  onChange={(e) => setStationName(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-semibold"
+                  placeholder="e.g. Main Kitchen, Bar, Grill..."
+                />
+              </div>
+
+              {/* Quick Presets */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Quick Presets</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {['Main Kitchen', 'Grill & BBQ', 'Bar & Beverages', 'Traditional Coffee', 'Bakery & Pastry', 'Salad & Cold Prep', 'Pizza & Oven', 'Fast Food & Fryer'].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setStationName(preset)}
+                      className={`text-[10px] px-2.5 py-1 rounded-lg font-bold border transition-colors cursor-pointer ${
+                        stationName === preset
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Branch Selector */}
+              {branches.length > 1 && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Assigned Branch</label>
+                  <select
+                    value={stationBranchId || activeBranchId}
+                    onChange={(e) => setStationBranchId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs font-semibold bg-white cursor-pointer"
+                  >
+                    {branches.filter(b => b.tenantId === activeTenantId).map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-2">
-              <button onClick={() => setShowStationModal(false)} className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-800 transition-colors">Cancel</button>
-              <button onClick={handleSaveStation} disabled={isSavingStation} className="px-6 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50">
-                {isSavingStation ? 'Saving...' : 'Save Station'}
+              <button 
+                onClick={() => {
+                  setShowStationModal(false);
+                  setEditingStationId(null);
+                  setStationName('');
+                  setStationBranchId('');
+                }} 
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveStation} 
+                disabled={isSavingStation || !stationName.trim()} 
+                className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                {isSavingStation ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" />
+                )}
+                <span>{editingStationId ? 'Save Changes' : '+ Add Station'}</span>
               </button>
             </div>
           </div>
