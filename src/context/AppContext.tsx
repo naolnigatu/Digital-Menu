@@ -434,10 +434,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             ordersQuery = collection(db, 'orders');
           } else if (currentUser?.role === 'customer' && currentUser?.email) {
             ordersQuery = query(collection(db, 'orders'), where('customerEmail', '==', currentUser.email));
-          } else if (currentUser && targetOrdersTenantId) {
+          } else if (targetOrdersTenantId) {
             ordersQuery = query(collection(db, 'orders'), where('tenantId', '==', targetOrdersTenantId));
           } else {
-            ordersQuery = emptyQueryOrders;
+            ordersQuery = collection(db, 'orders');
           }
           const unsubscribeOrders = onSnapshot(ordersQuery, snapshot => {
             const list: Order[] = [];

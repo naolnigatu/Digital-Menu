@@ -126,8 +126,8 @@ export default function WaiterView() {
           
           <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
             {branchTables.map((table) => {
-              const hasOrder = orders.some(o => o.tableId === table.id && o.status !== 'completed' && o.status !== 'cancelled' && o.paymentVerificationStatus !== 'pending' && o.paymentVerificationStatus !== 'rejected');
-              const activeTblOrder = orders.find(o => o.tableId === table.id && o.status !== 'completed' && o.status !== 'cancelled' && o.paymentVerificationStatus !== 'pending' && o.paymentVerificationStatus !== 'rejected');
+              const hasOrder = orders.some(o => o.tableId === table.id && o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'refunded' && o.paymentVerificationStatus !== 'rejected');
+              const activeTblOrder = orders.find(o => o.tableId === table.id && o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'refunded' && o.paymentVerificationStatus !== 'rejected');
 
               return (
                 <button

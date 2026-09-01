@@ -19,22 +19,41 @@ export default function KDSView() {
     reportOrderItemIssue
   } = useApp();
 
-  const branchStations = useMemo(() => stations.filter(s => s.branchId === activeBranchId), [stations, activeBranchId]);
+  const branchStations = useMemo(() => {
+    if (!activeBranchId) return stations;
+    const filtered = stations.filter(s => !s.branchId || s.branchId === activeBranchId);
+    return filtered.length > 0 ? filtered : stations;
+  }, [stations, activeBranchId]);
   
-  // Default to user's assigned station or fallback to the first station in the branch
+  // Default to user's assigned station or 'all' for master view
   const [activeStationId, setActiveStationId] = useState<string>(() => {
-    return currentUser?.stationId || branchStations[0]?.id || '';
+    return currentUser?.stationId || 'all';
   });
+
+  // Keep activeStationId synced with user's station if updated
+  useEffect(() => {
+    if (currentUser?.stationId) {
+      setActiveStationId(currentUser.stationId);
+    }
+  }, [currentUser?.stationId]);
 
   // Force trigger state reload for timers
   const [, setTick] = useState(0);
   const [showAvailabilityPanel, setShowAvailabilityPanel] = useState(false);
   const [menuSearchQuery, setMenuSearchQuery] = useState('');
 
-  const activeStationName = useMemo(() => branchStations.find(s => s.id === activeStationId)?.name || 'Select KDS Station', [branchStations, activeStationId]);
+  const activeStationName = useMemo(() => {
+    if (activeStationId === 'all') return 'All Kitchen Stations';
+    const found = branchStations.find(s => s.id === activeStationId);
+    return found?.name || 'All Kitchen Stations';
+  }, [branchStations, activeStationId]);
 
   const activeTenantMenuItems = useMemo(() => menuItems[activeTenantId] || [], [menuItems, activeTenantId]);
-  const stationMenuItems = useMemo(() => activeTenantMenuItems.filter(item => item.preparationStationId === activeStationId), [activeTenantMenuItems, activeStationId]);
+  const stationMenuItems = useMemo(() => {
+    if (activeStationId === 'all') return activeTenantMenuItems;
+    return activeTenantMenuItems.filter(item => !item.preparationStationId || item.preparationStationId === activeStationId);
+  }, [activeTenantMenuItems, activeStationId]);
+
   const filteredMenu = useMemo(() => {
     const term = (menuSearchQuery || '').toLowerCase();
     return stationMenuItems.filter(item => (item.name || '').toLowerCase().includes(term));
@@ -94,17 +113,38 @@ export default function KDSView() {
   };
 
   // Extract all active orders containing items for the selected station
-  const stationOrdersList: { orderId: string; orderNum: string; tableNumber: string; orderType: string; createdAt: string; notes?: string; item: OrderItem }[] = [];
+  const stationOrdersList: { 
+    orderId: string; 
+    orderNum: string; 
+    tableNumber: string; 
+    orderType: string; 
+    createdAt: string; 
+    notes?: string; 
+    item: OrderItem;
+    paymentStatus?: string;
+    paymentVerificationStatus?: string;
+  }[] = [];
 
   orders.forEach(o => {
-    if (o.status === 'completed' || o.status === 'cancelled') return;
-    if (o.paymentVerificationStatus === 'pending' || o.paymentVerificationStatus === 'rejected') return;
-    if (o.branchId !== activeBranchId) return;
+    if (o.status === 'completed' || o.status === 'cancelled' || o.status === 'refunded') return;
+    if (o.paymentVerificationStatus === 'rejected') return;
+    if (activeBranchId && o.branchId && o.branchId !== activeBranchId) return;
+
+    // Table lookup / Type label
+    const tblNumber = o.tableId ? `Table ${o.tableId.split('-')[1] || o.tableId}` : (
+      o.type === 'dine_in' ? 'Dine In' : 
+      o.type === 'takeaway' ? 'Takeaway' : 
+      o.type === 'delivery' ? 'Delivery' : 
+      o.type === 'drive_through' ? 'Drive-Thru' : 
+      o.type === 'meal_subscription' ? 'Meal Plan' : 'Order'
+    );
 
     o.items.forEach(it => {
-      if (it.assignedStationId === activeStationId) {
-        // Table lookup
-        const tblNumber = o.tableId ? `Table ${o.tableId.split('-')[1] || o.tableId}` : 'Pre-order';
+      const isMatch = activeStationId === 'all' 
+        || it.assignedStationId === activeStationId
+        || (!it.assignedStationId && (branchStations.length <= 1 || activeStationId === branchStations[0]?.id));
+
+      if (isMatch) {
         stationOrdersList.push({
           orderId: o.id,
           orderNum: o.orderNum,
@@ -112,7 +152,9 @@ export default function KDSView() {
           orderType: o.type,
           createdAt: o.createdAt,
           notes: o.notes,
-          item: it
+          item: it,
+          paymentStatus: o.paymentStatus,
+          paymentVerificationStatus: o.paymentVerificationStatus
         });
       }
     });
@@ -135,8 +177,6 @@ export default function KDSView() {
     if (elapsedMins > 10) return 'text-amber-600 font-bold';
     return 'text-slate-400 font-medium';
   };
-
-
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
@@ -169,14 +209,51 @@ export default function KDSView() {
           <select 
             value={activeStationId}
             onChange={(e) => setActiveStationId(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-900"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-900 cursor-pointer shadow-sm"
           >
+            <option value="all">🍽️ All Stations (Master View)</option>
             {branchStations.map(s => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
         </div>
       </div>
+
+      {/* Quick Station Filter Pills */}
+      {branchStations.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => setActiveStationId('all')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+              activeStationId === 'all'
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            All Stations ({orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'refunded').reduce((acc, o) => acc + o.items.length, 0)})
+          </button>
+          {branchStations.map(s => {
+            const count = orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'refunded')
+              .flatMap(o => o.items)
+              .filter(it => it.assignedStationId === s.id).length;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setActiveStationId(s.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  activeStationId === s.id
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {s.name} ({count})
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Availability Control Panel */}
       {showAvailabilityPanel && (
@@ -375,7 +452,19 @@ export default function KDSView() {
                   {/* Ticket Header */}
                   <div className="flex justify-between items-start border-b border-slate-50 pb-2">
                     <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{ticket.tableNumber}</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{ticket.tableNumber}</span>
+                        {activeStationId === 'all' && (
+                          <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded px-1.5 py-0.25">
+                            {stations.find(s => s.id === ticket.item.assignedStationId)?.name || 'General Kitchen'}
+                          </span>
+                        )}
+                        {ticket.paymentVerificationStatus === 'pending' && (
+                          <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.25">
+                            Pay Pending
+                          </span>
+                        )}
+                      </div>
                       <h4 className="font-sans font-extrabold text-base text-slate-900 leading-none mt-1">{ticket.orderNum}</h4>
                     </div>
                     
