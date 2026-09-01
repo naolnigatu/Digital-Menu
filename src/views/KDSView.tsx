@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { OrderItem, Order, PreparationStation } from '../types';
 import { 
-  ChefHat, Clock, Check, Play, BellRing, Settings, RefreshCw, AlertTriangle, Plus, Edit, Trash2, X, Sparkles, Building2, Utensils
+  ChefHat, Clock, Check, Play, BellRing, Settings, RefreshCw, AlertTriangle, Plus, Edit, Trash2, X, Sparkles, Building2, Utensils, Users, UserCheck
 } from 'lucide-react';
 
 export default function KDSView() {
@@ -10,6 +10,7 @@ export default function KDSView() {
     orders, 
     stations, 
     branches,
+    staff,
     activeBranchId, 
     activeTenantId,
     menuItems,
@@ -21,7 +22,8 @@ export default function KDSView() {
     placeOrder,
     addStation,
     updateStation,
-    deleteStation
+    deleteStation,
+    assignStaffToStation
   } = useApp();
 
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
@@ -954,62 +956,154 @@ export default function KDSView() {
                       const activeTicketsCount = orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'refunded')
                         .flatMap(o => o.items || [])
                         .filter(it => it.assignedStationId === st.id).length;
+                      const stationStaffMembers = (staff || []).filter(s => s.stationId === st.id);
 
                       return (
                         <div 
                           key={st.id} 
-                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 transition-all shadow-xs"
+                          className="flex flex-col gap-2.5 p-3 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 transition-all shadow-xs"
                         >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-extrabold text-slate-800">{st.name}</span>
-                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-100 font-bold text-slate-600">
-                                {branchName}
-                              </span>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-extrabold text-slate-800">{st.name}</span>
+                                <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-100 font-bold text-slate-600">
+                                  {branchName}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3 text-[10px] text-slate-500 font-medium">
+                                <span>{assignedItemsCount} dishes routed</span>
+                                <span>•</span>
+                                <span className={activeTicketsCount > 0 ? 'text-amber-600 font-bold' : ''}>
+                                  {activeTicketsCount} active ticket{activeTicketsCount === 1 ? '' : 's'}
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3 text-[10px] text-slate-500 font-medium">
-                              <span>{assignedItemsCount} dishes routed</span>
-                              <span>•</span>
-                              <span className={activeTicketsCount > 0 ? 'text-amber-600 font-bold' : ''}>
-                                {activeTicketsCount} active ticket{activeTicketsCount === 1 ? '' : 's'}
-                              </span>
+
+                            <div className="flex items-center gap-1.5 self-end sm:self-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveStationId(st.id);
+                                  setShowStationModal(false);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold transition-colors cursor-pointer"
+                                title="Filter KDS display to this station"
+                              >
+                                Filter Queue
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditStation(st)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                                title="Edit station"
+                              >
+                                <Edit className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteStation({ id: st.id, name: st.name })}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                title="Delete station"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1.5 self-end sm:self-center">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setActiveStationId(st.id);
-                                setShowStationModal(false);
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold transition-colors cursor-pointer"
-                              title="Filter KDS display to this station"
-                            >
-                              Filter Queue
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditStation(st)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                              title="Edit station"
-                            >
-                              <Edit className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeleteStation({ id: st.id, name: st.name })}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                              title="Delete station"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                          {/* Assigned Staff Pills */}
+                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-[10px]">
+                            <div className="flex items-center gap-1.5 text-slate-500 font-medium">
+                              <Users className="h-3.5 w-3.5 text-slate-400" />
+                              <span>Assigned Chefs / Staff ({stationStaffMembers.length}):</span>
+                            </div>
+                            <div className="flex items-center gap-1 flex-wrap justify-end">
+                              {stationStaffMembers.length === 0 ? (
+                                <span className="text-[9px] text-slate-400 italic">None assigned</span>
+                              ) : (
+                                stationStaffMembers.map(m => (
+                                  <span 
+                                    key={m.id} 
+                                    className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 font-bold border border-emerald-200 text-[9px] flex items-center gap-1"
+                                  >
+                                    <UserCheck className="h-2.5 w-2.5" />
+                                    <span>{m.name || `${m.firstName || ''} ${m.lastName || ''}`.trim() || 'Staff'}</span>
+                                  </span>
+                                ))
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 )}
+              </div>
+
+              {/* Kitchen Staff Assignment Section */}
+              <div className="space-y-3 pt-4 border-t border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-emerald-600" />
+                    <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
+                      Assign Kitchen Staff to Stations
+                    </h4>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-medium">Quick reassignment</span>
+                </div>
+
+                <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  {staff.filter(s => ['kitchen', 'bar', 'coffee', 'waiter', 'manager'].includes(s.role) || s.stationId).length === 0 ? (
+                    <p className="text-[11px] text-slate-400 text-center py-2">No staff members found to assign.</p>
+                  ) : (
+                    staff
+                      .filter(s => ['kitchen', 'bar', 'coffee', 'waiter', 'manager'].includes(s.role) || s.stationId)
+                      .map(member => {
+                        const memberStation = stations.find(st => st.id === member.stationId);
+                        const memberBranch = branches.find(b => b.id === member.branchId)?.name || 'All Branches';
+                        
+                        return (
+                          <div key={member.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded-lg bg-white border border-slate-200 text-xs">
+                            <div className="flex items-center gap-2">
+                              <div className="h-7 w-7 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-[10px] shrink-0 uppercase">
+                                {(member.name || 'S').slice(0, 2)}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-800">{member.name || `${member.firstName || ''} ${member.lastName || ''}`.trim()}</span>
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-100 font-semibold text-slate-500 uppercase">
+                                    {member.role}
+                                  </span>
+                                </div>
+                                <p className="text-[9px] text-slate-400">{memberBranch}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 self-end sm:self-center">
+                              <select
+                                value={member.stationId || ''}
+                                onChange={async (e) => {
+                                  const targetStationId = e.target.value;
+                                  try {
+                                    await assignStaffToStation(member.id, targetStationId);
+                                    showToast(targetStationId ? `✓ Assigned ${member.name} to station` : `✓ Unassigned ${member.name}`);
+                                  } catch (err: any) {
+                                    showToast(`Failed to assign staff: ${err.message || err}`, 'error');
+                                  }
+                                }}
+                                className="text-[11px] font-bold py-1 px-2.5 border border-slate-200 rounded-lg bg-slate-50 hover:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer"
+                              >
+                                <option value="">No Station (Receives All)</option>
+                                {stations.map(st => (
+                                  <option key={st.id} value={st.id}>{st.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
               </div>
 
             </div>

@@ -208,6 +208,8 @@ export default function BusinessOwnerView() {
     addTable,
     currentUser,
     addStaffMember, 
+    updateStaffMember,
+    assignStaffToStation,
     toggleStaffStatus,
     updateTenantPlan,
     requestTenantUpgrade,
@@ -3753,42 +3755,83 @@ export default function BusinessOwnerView() {
                         return roleVal.replace('_', ' ');
                       };
 
+                      const currentStation = stations.find(s => s.id === member.stationId);
+                      const isKitchenStaff = ['kitchen', 'bar', 'coffee'].includes(member.role);
+                      const availableStations = stations.filter(s => !s.branchId || s.branchId === (member.branchId || activeBranchId) || (s.tenantId && s.tenantId === activeTenantId));
+
                       return (
-                        <div key={member.id} className="p-3.5 flex items-center justify-between gap-3 text-xs">
-                          <div>
-                            <div className="flex items-center gap-2">
+                        <div key={member.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-slate-950">{member.name || `${member.firstName} ${member.lastName}`}</span>
                               <span className="rounded bg-indigo-50 border border-indigo-100/40 px-1.5 py-0.5 text-[9px] font-bold text-indigo-700 uppercase">
                                 {displayRoleName(member.role)}
                               </span>
+                              {currentStation ? (
+                                <span className="inline-flex items-center gap-1 rounded bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">
+                                  <ChefHat className="h-2.5 w-2.5" />
+                                  <span>{currentStation.name}</span>
+                                </span>
+                              ) : (
+                                isKitchenStaff && (
+                                  <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-500">
+                                    No Station (All Tickets)
+                                  </span>
+                                )
+                              )}
                             </div>
-                            <p className="text-[10px] text-slate-400 mt-0.5">{member.phone || member.email}</p>
-                            {member.stationId && (
-                              <p className="text-[9px] font-semibold text-amber-700 mt-1">Station: {stations.find(s => s.id === member.stationId)?.name}</p>
-                            )}
+                            <p className="text-[10px] text-slate-400">{member.phone || member.email}</p>
                           </div>
 
-                          <button
-                            onClick={() => {
-                              const nextStateStr = member.active ? 'suspend/deactivate' : 'reactivate';
-                              setConfirmDialog({
-                                isOpen: true,
-                                title: `${member.active ? 'Suspend' : 'Reactivate'} Staff Member`,
-                                message: `Are you sure you want to ${nextStateStr} "${member.name}"? This will modify their login credentials immediately.`,
-                                onConfirm: () => {
-                                  toggleStaffStatus(member.id);
-                                  setConfirmDialog(null);
-                                }
-                              });
-                            }}
-                            className={`rounded px-2.5 py-1 text-[10px] font-bold border transition-colors cursor-pointer ${
-                              member.active 
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100' 
-                                : 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200'
-                            }`}
-                          >
-                            {member.active ? 'Active' : 'Suspended'}
-                          </button>
+                          <div className="flex items-center gap-2 flex-wrap self-end sm:self-center">
+                            {/* Station Assignment Dropdown */}
+                            {can('staff.manage') && (
+                              <div className="flex items-center gap-1">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase hidden md:inline">Station:</label>
+                                <select
+                                  value={member.stationId || ''}
+                                  onChange={async (e) => {
+                                    const nextStationId = e.target.value;
+                                    try {
+                                      await assignStaffToStation(member.id, nextStationId);
+                                      showToast(nextStationId ? `✓ Assigned to station.` : `✓ Station unassigned.`);
+                                    } catch (err: any) {
+                                      showToast(`Failed to update station: ${err.message || err}`, 'error');
+                                    }
+                                  }}
+                                  className="text-[10px] font-semibold py-1 px-2 border border-slate-200 rounded-lg bg-slate-50 hover:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                                  title="Assign preparation station"
+                                >
+                                  <option value="">No Station / All</option>
+                                  {availableStations.map(st => (
+                                    <option key={st.id} value={st.id}>{st.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+
+                            <button
+                              onClick={() => {
+                                const nextStateStr = member.active ? 'suspend/deactivate' : 'reactivate';
+                                setConfirmDialog({
+                                  isOpen: true,
+                                  title: `${member.active ? 'Suspend' : 'Reactivate'} Staff Member`,
+                                  message: `Are you sure you want to ${nextStateStr} "${member.name}"? This will modify their login credentials immediately.`,
+                                  onConfirm: () => {
+                                    toggleStaffStatus(member.id);
+                                    setConfirmDialog(null);
+                                  }
+                                });
+                              }}
+                              className={`rounded px-2.5 py-1 text-[10px] font-bold border transition-colors cursor-pointer ${
+                                member.active 
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100' 
+                                  : 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200'
+                              }`}
+                            >
+                              {member.active ? 'Active' : 'Suspended'}
+                            </button>
+                          </div>
                         </div>
                       );
                     })}

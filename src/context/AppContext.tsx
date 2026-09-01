@@ -1729,6 +1729,34 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       throw new Error("Failed to create staff record. Document creation failed: " + (err.message || err));
     }
   };
+  const updateStaffMember = async (staffId: string, updates: Partial<Staff>) => {
+    const existing = staff.find(s => s.id === staffId);
+    if (!existing) return;
+    const updated: Staff = {
+      ...existing,
+      ...updates
+    };
+    setStaff(prev => prev.map(s => s.id === staffId ? updated : s));
+    addLog('Update Staff', `Updated staff details for employee: ${existing.name || existing.firstName || staffId}.`);
+    await syncToFirestore('staff', staffId, updated);
+    await syncToFirestore('users', staffId, updated);
+  };
+
+  const assignStaffToStation = async (staffId: string, stationId: string) => {
+    const existing = staff.find(s => s.id === staffId);
+    if (!existing) return;
+    const stationObj = stations.find(st => st.id === stationId);
+    const stationName = stationObj ? stationObj.name : (stationId ? 'Station' : 'None');
+    const updated: Staff = {
+      ...existing,
+      stationId: stationId || undefined
+    };
+    setStaff(prev => prev.map(s => s.id === staffId ? updated : s));
+    addLog('Assign Station', `Assigned staff ${existing.name || existing.firstName || staffId} to station: ${stationName}.`);
+    await syncToFirestore('staff', staffId, updated);
+    await syncToFirestore('users', staffId, updated);
+  };
+
   const toggleStaffStatus = async (staffId: string) => {
     const existing = staff.find(s => s.id === staffId);
     if (!existing) return;
@@ -2878,6 +2906,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     addTip,
     deliverTip,
     addStaffMember,
+    updateStaffMember,
+    assignStaffToStation,
     toggleStaffStatus,
     updateStaffPermissions,
     toggleTenantStatus,
