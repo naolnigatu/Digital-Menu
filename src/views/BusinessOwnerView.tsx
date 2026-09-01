@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Utensils, QrCode, Users, Settings, Plus, Trash2, Edit, Check, 
   BarChart3, Users2, Shield, Languages, Award, PlusCircle, CreditCard, ChevronRight, ChevronLeft, FileSpreadsheet,
   Upload, Image, X, Sparkles, MapPin, Phone, Mail, HelpCircle, AlertTriangle, XCircle, ShieldAlert,
-  ChevronUp, ChevronDown, EyeOff, Eye, Search, Bike, CheckCircle2
+  ChevronUp, ChevronDown, EyeOff, Eye, Search, Bike, CheckCircle2, ChefHat
 } from 'lucide-react';
 import { 
   useDinexBusiness, 
@@ -24,6 +24,7 @@ import { ReservationsTab } from '../components/ReservationsTab';
 import { InventoryTab } from '../components/InventoryTab';
 import { MarketingTab } from '../components/MarketingTab';
 import { MarketplaceTab } from '../components/MarketplaceTab';
+import KDSView from './KDSView';
 
 const PERMISSION_MODULES = [
   {
@@ -261,7 +262,7 @@ export default function BusinessOwnerView() {
   const { can, customRoles, addCustomRole, updateCustomRole, deleteCustomRole } = useDinexPermission();
   const { isFeatureEnabled } = useDinexFeature();
 
-  const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'orders' | 'menu' | 'tables' | 'staff' | 'settings' | 'payments' | 'loyalty' | 'subscriptions' | 'reports' | 'reservations' | 'inventory' | 'ads' | 'marketplace' | 'branches'>(() => {
+  const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'orders' | 'kitchen' | 'menu' | 'tables' | 'staff' | 'settings' | 'payments' | 'loyalty' | 'subscriptions' | 'reports' | 'reservations' | 'inventory' | 'ads' | 'marketplace' | 'branches'>(() => {
     if (can('reports.view')) return 'dashboard';
     if (can('orders.manage')) return 'orders';
     if (can('menu.create')) return 'menu';
@@ -1257,6 +1258,21 @@ export default function BusinessOwnerView() {
           </button>
         )}
 
+        <button
+          onClick={() => setActiveSubTab('kitchen')}
+          className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition-all shrink-0 ${
+            activeSubTab === 'kitchen' 
+              ? 'border-slate-900 text-slate-900' 
+              : 'border-transparent text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <ChefHat className="h-4 w-4 text-amber-600" />
+          <span>Kitchen (KDS)</span>
+          <span className="ml-1 rounded-full bg-amber-500/10 px-1.5 py-0.2 text-[8px] font-extrabold text-amber-600 border border-amber-500/20 uppercase tracking-tight">
+            Live
+          </span>
+        </button>
+
         {can('menu.create') && isTabEnabled('menu') && (
           <button
             onClick={() => setActiveSubTab('menu')}
@@ -1464,6 +1480,13 @@ export default function BusinessOwnerView() {
         )
       ) : (
         <>
+          {/* KITCHEN KDS TAB */}
+          {activeSubTab === 'kitchen' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <KDSView />
+            </div>
+          )}
+
           {/* 1. DYNAMIC DINEX DASHBOARD CORE */}
           {activeSubTab === 'orders' && can('orders.manage') && (
             <div className="space-y-6 animate-in fade-in duration-300">

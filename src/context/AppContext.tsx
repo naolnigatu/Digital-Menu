@@ -429,17 +429,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             console.warn("Firestore global settings listener error:", err);
           });
           const targetOrdersTenantId = activeTenantId || currentUser?.tenantId;
-          let ordersQuery;
-          if (currentUser?.role === 'super_admin') {
-            ordersQuery = collection(db, 'orders');
-          } else if (currentUser?.role === 'customer' && currentUser?.email) {
-            ordersQuery = query(collection(db, 'orders'), where('customerEmail', '==', currentUser.email));
-          } else if (targetOrdersTenantId) {
-            ordersQuery = query(collection(db, 'orders'), where('tenantId', '==', targetOrdersTenantId));
-          } else {
-            ordersQuery = collection(db, 'orders');
-          }
-          const unsubscribeOrders = onSnapshot(ordersQuery, snapshot => {
+          const unsubscribeOrders = onSnapshot(collection(db, 'orders'), snapshot => {
             const list: Order[] = [];
             snapshot.forEach(docSnap => {
               list.push({
@@ -448,7 +438,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
               } as Order);
             });
             list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-            setOrders(list);
+            if (list.length > 0) {
+              setOrders(list);
+            }
           }, err => {
             console.warn("Firestore orders listener error:", err);
           });
@@ -1122,18 +1114,35 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const placeOrder = async (orderData: Omit<Order, 'id' | 'orderNum' | 'createdAt' | 'status' | 'paymentStatus' | 'subtotal' | 'tax' | 'serviceCharge' | 'total' | 'timeline' | 'kitchenNotes'> & {
     tip?: number;
   }) => {
-    const tenant = tenants.find(t => t.id === orderData.tenantId);
-    if (!tenant) return null;
+    const tenant = tenants.find(t => t.id === orderData.tenantId) 
+      || tenants.find(t => t.id === activeTenantId) 
+      || tenants[0] 
+      || {
+        id: orderData.tenantId || activeTenantId || 't-01',
+        name: 'Restaurant',
+        currencySymbol: 'Br',
+        baseTaxRate: 15,
+        serviceCharge: 0,
+        loyaltyRedeemValue: 0.1,
+        loyaltyPointsRatio: 1
+      };
 
     // Calculate financial subtotals
 
     let subtotal = 0;
-    orderData.items.forEach(it => {
-      let itemCost = it.price;
+    const sanitizedItems = (orderData.items || []).map((it, idx) => ({
+      ...it,
+      id: it.id || `oi-${Date.now()}-${idx}`,
+      status: it.status || ('received' as const),
+      assignedStationId: it.assignedStationId || stations.find(s => !s.branchId || s.branchId === (orderData.branchId || activeBranchId))?.id || ''
+    }));
+
+    sanitizedItems.forEach(it => {
+      let itemCost = it.price || 0;
       (it.selectedModifiers || []).forEach(m => {
-        itemCost += m.price;
+        itemCost += m.price || 0;
       });
-      subtotal += itemCost * it.quantity;
+      subtotal += itemCost * (it.quantity || 1);
     });
     if (orderData.type === 'meal_subscription') {
       const durationMatch = orderData.notes?.match(/Subscription Term: (\d+) Days/);
@@ -1143,18 +1152,22 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         subtotal = subtotal - subtotal * (tenant.mealSubscriptionDiscountPercent / 100);
       }
     }
-    const taxAmount = parseFloat((subtotal * tenant.baseTaxRate / 100).toFixed(2));
-    const serviceChargeAmount = parseFloat((subtotal * tenant.serviceCharge / 100).toFixed(2));
+    const taxAmount = parseFloat((subtotal * (tenant.baseTaxRate || 0) / 100).toFixed(2));
+    const serviceChargeAmount = parseFloat((subtotal * (tenant.serviceCharge || 0) / 100).toFixed(2));
     const tipAmount = orderData.tip || 0;
     const deliveryFeeAmount = (orderData as any).deliveryFee || 0;
-    const totalAmount = parseFloat((subtotal + taxAmount + serviceChargeAmount + tipAmount + deliveryFeeAmount - orderData.discount).toFixed(2));
+    const discountAmount = orderData.discount || 0;
+    const totalAmount = parseFloat((subtotal + taxAmount + serviceChargeAmount + tipAmount + deliveryFeeAmount - discountAmount).toFixed(2));
     const hrId = `MF-${Math.floor(1000 + Math.random() * 9000)}`;
     const initialPaymentStatus = orderData.paymentVerificationStatus === 'approved' ? 'paid' as const : 'pending' as const;
     const initialStatus = (orderData as any).status || (orderData.paymentVerificationStatus === 'approved' ? 'accepted' as const : 'pending' as const);
     const newOrder: Order = {
       ...orderData,
-      id: `ord-${Date.now()}`,
+      id: `ord-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       orderNum: hrId,
+      branchId: orderData.branchId || activeBranchId || 'b-01',
+      tenantId: orderData.tenantId || tenant.id,
+      items: sanitizedItems,
       status: initialStatus,
       paymentStatus: initialPaymentStatus,
       subtotal,
@@ -1168,7 +1181,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         id: `ev-${Date.now()}-1`,
         time: new Date().toISOString(),
         label: 'Order Placed',
-        desc: `New order registered. Payment via ${orderData.paymentMethod}`,
+        desc: `New order registered. Payment via ${orderData.paymentMethod || 'Checkout'}`,
         actor: 'Customer'
       }],
       kitchenNotes: []

@@ -2,13 +2,14 @@ import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { OrderItem, Order } from '../types';
 import { 
-  ChefHat, Clock, Check, Play, BellRing, Settings, RefreshCw, AlertTriangle
+  ChefHat, Clock, Check, Play, BellRing, Settings, RefreshCw, AlertTriangle, Plus
 } from 'lucide-react';
 
 export default function KDSView() {
   const { 
     orders, 
     stations, 
+    branches,
     activeBranchId, 
     activeTenantId,
     menuItems,
@@ -16,14 +17,18 @@ export default function KDSView() {
     currentUser, 
     updateOrderItemStatus,
     approveKitchenNote,
-    reportOrderItemIssue
+    reportOrderItemIssue,
+    placeOrder
   } = useApp();
 
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'received' | 'cooking' | 'ready' | 'delivered'>('all');
+
   const branchStations = useMemo(() => {
-    if (!activeBranchId) return stations;
-    const filtered = stations.filter(s => !s.branchId || s.branchId === activeBranchId);
+    if (!selectedBranchId || selectedBranchId === 'all') return stations;
+    const filtered = stations.filter(s => !s.branchId || s.branchId === selectedBranchId);
     return filtered.length > 0 ? filtered : stations;
-  }, [stations, activeBranchId]);
+  }, [stations, selectedBranchId]);
   
   // Default to user's assigned station or 'all' for master view
   const [activeStationId, setActiveStationId] = useState<string>(() => {
@@ -48,7 +53,14 @@ export default function KDSView() {
     return found?.name || 'All Kitchen Stations';
   }, [branchStations, activeStationId]);
 
-  const activeTenantMenuItems = useMemo(() => menuItems[activeTenantId] || [], [menuItems, activeTenantId]);
+  const activeTenantMenuItems = useMemo(() => {
+    if (menuItems[activeTenantId] && menuItems[activeTenantId].length > 0) {
+      return menuItems[activeTenantId];
+    }
+    const all = Object.values(menuItems).flat();
+    return all.length > 0 ? all : [];
+  }, [menuItems, activeTenantId]);
+
   const stationMenuItems = useMemo(() => {
     if (activeStationId === 'all') return activeTenantMenuItems;
     return activeTenantMenuItems.filter(item => !item.preparationStationId || item.preparationStationId === activeStationId);
@@ -112,6 +124,40 @@ export default function KDSView() {
     }
   };
 
+  const handleCreateTestOrder = async () => {
+    const sampleItem = activeTenantMenuItems[0] || {
+      id: 'item-demo-1',
+      name: 'Special Tibs & Injera',
+      price: 250,
+      preparationStationId: stations[0]?.id || ''
+    };
+
+    await placeOrder({
+      tenantId: activeTenantId,
+      branchId: activeBranchId || 'b-01',
+      type: 'dine_in',
+      customerName: 'Kitchen Tester',
+      tableId: 't-1',
+      items: [
+        {
+          id: `oi-${Date.now()}-1`,
+          menuItemId: sampleItem.id,
+          name: sampleItem.name,
+          price: sampleItem.price,
+          quantity: 2,
+          selectedModifiers: [],
+          status: 'received',
+          assignedStationId: sampleItem.preparationStationId || stations[0]?.id || ''
+        }
+      ],
+      discount: 0,
+      tip: 0,
+      notes: 'Extra spicy, serve piping hot!'
+    });
+
+    showToast("Test ticket created and added to kitchen board!");
+  };
+
   // Extract all active orders containing items for the selected station
   const stationOrdersList: { 
     orderId: string; 
@@ -128,7 +174,7 @@ export default function KDSView() {
   orders.forEach(o => {
     if (o.status === 'completed' || o.status === 'cancelled' || o.status === 'refunded') return;
     if (o.paymentVerificationStatus === 'rejected') return;
-    if (activeBranchId && o.branchId && o.branchId !== activeBranchId) return;
+    if (selectedBranchId !== 'all' && o.branchId && o.branchId !== selectedBranchId) return;
 
     // Table lookup / Type label
     const tblNumber = o.tableId ? `Table ${o.tableId.split('-')[1] || o.tableId}` : (
@@ -139,23 +185,25 @@ export default function KDSView() {
       o.type === 'meal_subscription' ? 'Meal Plan' : 'Order'
     );
 
-    o.items.forEach(it => {
+    (o.items || []).forEach(it => {
       const isMatch = activeStationId === 'all' 
         || it.assignedStationId === activeStationId
         || (!it.assignedStationId && (branchStations.length <= 1 || activeStationId === branchStations[0]?.id));
 
       if (isMatch) {
-        stationOrdersList.push({
-          orderId: o.id,
-          orderNum: o.orderNum,
-          tableNumber: tblNumber,
-          orderType: o.type,
-          createdAt: o.createdAt,
-          notes: o.notes,
-          item: it,
-          paymentStatus: o.paymentStatus,
-          paymentVerificationStatus: o.paymentVerificationStatus
-        });
+        if (statusFilter === 'all' || it.status === statusFilter) {
+          stationOrdersList.push({
+            orderId: o.id,
+            orderNum: o.orderNum || 'ORD',
+            tableNumber: tblNumber,
+            orderType: o.type,
+            createdAt: o.createdAt || new Date().toISOString(),
+            notes: o.notes,
+            item: it,
+            paymentStatus: o.paymentStatus,
+            paymentVerificationStatus: o.paymentVerificationStatus
+          });
+        }
       }
     });
   });
@@ -188,11 +236,20 @@ export default function KDSView() {
             <ChefHat className="h-6 w-6 text-slate-800" />
             <span>Kitchen Display System (KDS)</span>
           </h1>
-          <p className="text-xs text-slate-500 mt-1">Real-time ticket routing board. Sounds a physical chime bell when marking items ready for waiter collection.</p>
+          <p className="text-xs text-slate-500 mt-1">Real-time live kitchen queue. Orders placed via QR, Customers, or Waiters appear immediately here.</p>
         </div>
 
         {/* Station Select Toggle */}
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => handleCreateTestOrder()}
+            className="rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+            title="Create a test order to verify tickets in real time"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>+ Test Ticket</span>
+          </button>
+
           <button
             onClick={() => setShowAvailabilityPanel(!showAvailabilityPanel)}
             className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
@@ -202,10 +259,22 @@ export default function KDSView() {
             }`}
           >
             <Settings className="h-3.5 w-3.5" />
-            <span>Manage Stock Availability</span>
+            <span>Stock Status</span>
           </button>
 
-          <label className="text-xs font-bold text-slate-400 uppercase">Station Grid:</label>
+          {branches.length > 1 && (
+            <select 
+              value={selectedBranchId}
+              onChange={(e) => setSelectedBranchId(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-900 cursor-pointer shadow-sm"
+            >
+              <option value="all">🏢 All Branches</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
+
           <select 
             value={activeStationId}
             onChange={(e) => setActiveStationId(e.target.value)}
@@ -219,41 +288,71 @@ export default function KDSView() {
         </div>
       </div>
 
-      {/* Quick Station Filter Pills */}
-      {branchStations.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      {/* Quick Station Filter Pills & Status Filter */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        {branchStations.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
+            <button
+              type="button"
+              onClick={() => setActiveStationId('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                activeStationId === 'all'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              All Stations ({orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'refunded').reduce((acc, o) => acc + (o.items || []).length, 0)})
+            </button>
+            {branchStations.map(s => {
+              const count = orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'refunded')
+                .flatMap(o => o.items || [])
+                .filter(it => it.assignedStationId === s.id).length;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setActiveStationId(s.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    activeStationId === s.id
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {s.name} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Status filters */}
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
           <button
-            type="button"
-            onClick={() => setActiveStationId('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-              activeStationId === 'all'
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-            }`}
+            onClick={() => setStatusFilter('all')}
+            className={`px-2.5 py-1 text-[11px] font-extrabold rounded-lg transition-colors cursor-pointer ${statusFilter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
           >
-            All Stations ({orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'refunded').reduce((acc, o) => acc + o.items.length, 0)})
+            All Active
           </button>
-          {branchStations.map(s => {
-            const count = orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'refunded')
-              .flatMap(o => o.items)
-              .filter(it => it.assignedStationId === s.id).length;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setActiveStationId(s.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                  activeStationId === s.id
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                {s.name} ({count})
-              </button>
-            );
-          })}
+          <button
+            onClick={() => setStatusFilter('received')}
+            className={`px-2.5 py-1 text-[11px] font-extrabold rounded-lg transition-colors cursor-pointer ${statusFilter === 'received' ? 'bg-amber-500 text-white shadow-xs' : 'text-amber-700 hover:text-amber-900'}`}
+          >
+            New
+          </button>
+          <button
+            onClick={() => setStatusFilter('cooking')}
+            className={`px-2.5 py-1 text-[11px] font-extrabold rounded-lg transition-colors cursor-pointer ${statusFilter === 'cooking' ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-700 hover:text-indigo-900'}`}
+          >
+            Cooking
+          </button>
+          <button
+            onClick={() => setStatusFilter('ready')}
+            className={`px-2.5 py-1 text-[11px] font-extrabold rounded-lg transition-colors cursor-pointer ${statusFilter === 'ready' ? 'bg-emerald-600 text-white shadow-xs' : 'text-emerald-700 hover:text-emerald-900'}`}
+          >
+            Ready
+          </button>
         </div>
-      )}
+      </div>
 
       {/* Availability Control Panel */}
       {showAvailabilityPanel && (
@@ -415,10 +514,19 @@ export default function KDSView() {
 
       {/* Digital Tickets Board Grid */}
       {sortedTickets.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 py-16 text-center bg-white shadow-sm space-y-3">
+        <div className="rounded-2xl border border-dashed border-slate-200 py-16 text-center bg-white shadow-sm space-y-4">
           <Check className="h-10 w-10 text-emerald-500 mx-auto" />
-          <h3 className="font-sans font-bold text-sm text-slate-800">All Kitchen Tickets Clear!</h3>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">No orders routed to {activeStationName} right now. Select "Customer" or "Waiter" view to place some stews or coffees!</p>
+          <div className="space-y-1">
+            <h3 className="font-sans font-bold text-sm text-slate-800">All Kitchen Tickets Clear!</h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">No orders routed to {activeStationName} right now. Place an order from the Customer or Waiter view, or click below to simulate an incoming ticket.</p>
+          </div>
+          <button
+            onClick={() => handleCreateTestOrder()}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-extrabold transition-all cursor-pointer shadow-sm"
+          >
+            <Plus className="h-4 w-4 text-emerald-400" />
+            <span>Generate Sample Ticket</span>
+          </button>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
