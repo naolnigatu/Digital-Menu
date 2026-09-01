@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Function to check if user is super admin
+    // Check if user is super admin
     function isSuperAdmin() {
       let docRef = /databases/$(database)/documents/users/$(request.auth.uid);
       return request.auth != null && (
@@ -11,22 +11,30 @@ service cloud.firestore {
       );
     }
 
-    // Function to get user's tenantId
-    function getUserTenantId() {
-      let docRef = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(docRef) ? get(docRef).data.get('tenantId', null) : null;
-    }
-    
-    function getStaffTenantId() {
-      let docRef = /databases/$(database)/documents/staff/$(request.auth.uid);
-      return exists(docRef) ? get(docRef).data.get('tenantId', null) : null;
+    // Check if user is owner of a business
+    function isBusinessOwner(tenantId) {
+      let bizRef = /databases/$(database)/documents/businesses/$(tenantId);
+      let tenantRef = /databases/$(database)/documents/tenants/$(tenantId);
+      return request.auth != null && (
+        (exists(bizRef) && (get(bizRef).data.get('ownerUid', '') == request.auth.uid || get(bizRef).data.get('ownerEmail', '') == request.auth.token.email)) ||
+        (exists(tenantRef) && (get(tenantRef).data.get('ownerUid', '') == request.auth.uid || get(tenantRef).data.get('ownerEmail', '') == request.auth.token.email))
+      );
     }
 
+    // Check if staff belongs to tenant
+    function isStaffOf(tenantId) {
+      let staffRef = /databases/$(database)/documents/staff/$(request.auth.uid);
+      return request.auth != null && exists(staffRef) && get(staffRef).data.get('tenantId', '') == tenantId;
+    }
+
+    // General tenant access (Owner, Staff, or SuperAdmin)
     function hasTenantAccess(tenantId) {
-      return tenantId == null || (
-        isSuperAdmin() 
-        || (request.auth != null && getUserTenantId() == tenantId) 
-        || (request.auth != null && getStaffTenantId() == tenantId)
+      return request.auth != null && tenantId != null && (
+        isSuperAdmin() || 
+        isBusinessOwner(tenantId) || 
+        isStaffOf(tenantId) ||
+        tenantId == ('tenant-' + request.auth.uid) ||
+        tenantId == request.auth.uid
       );
     }
 
@@ -35,139 +43,236 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, write: if true;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && (
+        isSuperAdmin() || 
+        request.auth.uid == userId || 
+        (resource != null && (resource.data.get('email', '') == request.auth.token.email || resource.data.get('uid', '') == request.auth.uid)) || 
+        (request.resource != null && (request.resource.data.get('email', '') == request.auth.token.email || request.resource.data.get('uid', '') == request.auth.uid))
+      );
     }
 
     match /staff/{staffId} {
-      allow read, write: if request.auth != null;
+      // Staff can read their own profile, or admins/owners/staff can read staff in their tenant
+      allow read: if request.auth != null && (
+        isSuperAdmin() || request.auth.uid == staffId || hasTenantAccess(resource.data.tenantId)
+      );
+      // Allow self-registration during owner/staff onboarding, or creation by manager/owner/super_admin
+      allow create: if request.auth != null && (
+        isSuperAdmin() || 
+        request.auth.uid == staffId || 
+        request.auth.uid == request.resource.data.get('uid', '') || 
+        hasTenantAccess(request.resource.data.tenantId)
+      );
+      allow update: if request.auth != null && (
+        isSuperAdmin() || 
+        request.auth.uid == staffId ||
+        (hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId))
+      );
+      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.tenantId));
     }
 
     match /tenants/{tenantId} {
       allow read: if true; 
-      allow create: if request.auth != null;
+      allow create: if request.auth != null && (
+        isSuperAdmin() ||
+        request.resource.data.get('ownerUid', '') == request.auth.uid ||
+        request.resource.data.get('ownerEmail', '') == request.auth.token.email ||
+        tenantId == ('tenant-' + request.auth.uid)
+      );
       allow update, delete: if request.auth != null && (
-        isSuperAdmin()
-        || resource.data.get('ownerEmail', '') == request.auth.token.email
-        || resource.data.get('ownerUid', '') == request.auth.uid
-        || hasTenantAccess(tenantId)
+        isSuperAdmin() || 
+        resource.data.get('ownerUid', '') == request.auth.uid || 
+        resource.data.get('ownerEmail', '') == request.auth.token.email
       );
     }
 
     match /businesses/{tenantId} {
       allow read: if true; 
-      allow create: if request.auth != null;
+      allow create: if request.auth != null && (
+        isSuperAdmin() ||
+        request.resource.data.get('ownerUid', '') == request.auth.uid ||
+        request.resource.data.get('ownerEmail', '') == request.auth.token.email ||
+        tenantId == ('tenant-' + request.auth.uid)
+      );
       allow update, delete: if request.auth != null && (
-        isSuperAdmin()
-        || resource.data.get('ownerEmail', '') == request.auth.token.email
-        || resource.data.get('ownerUid', '') == request.auth.uid
-        || hasTenantAccess(tenantId)
+        isSuperAdmin() || 
+        resource.data.get('ownerUid', '') == request.auth.uid || 
+        resource.data.get('ownerEmail', '') == request.auth.token.email
       );
     }
 
     match /branches/{branchId} {
       allow read: if true; 
-      allow write: if request.auth != null;
+      allow create: if request.auth != null && (
+        isSuperAdmin() || 
+        hasTenantAccess(request.resource.data.tenantId) ||
+        request.resource.data.get('ownerUid', '') == request.auth.uid ||
+        request.resource.data.get('tenantId', '') == ('tenant-' + request.auth.uid)
+      );
+      allow update: if request.auth != null && (
+        isSuperAdmin() ||
+        (hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId))
+      );
+      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.tenantId));
+    }
+
+    match /memberships/{docId} {
+      allow read: if request.auth != null && (request.auth.uid == resource.data.get('userId', '') || hasTenantAccess(resource.data.tenantId));
+      allow create: if request.auth != null && (
+        isSuperAdmin() ||
+        request.auth.uid == request.resource.data.get('userId', '') || 
+        hasTenantAccess(request.resource.data.tenantId)
+      );
+      allow update: if request.auth != null && (
+        isSuperAdmin() ||
+        request.auth.uid == resource.data.get('userId', '') ||
+        (hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId))
+      );
+      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.tenantId));
+    }
+
+    match /roles/{docId} {
+      allow read: if request.auth != null && (request.auth.uid == resource.data.get('userId', '') || hasTenantAccess(resource.data.tenantId));
+      allow create: if request.auth != null && (
+        isSuperAdmin() ||
+        request.auth.uid == request.resource.data.get('userId', '') || 
+        hasTenantAccess(request.resource.data.tenantId)
+      );
+      allow update: if request.auth != null && (
+        isSuperAdmin() ||
+        (hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId))
+      );
+      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.tenantId));
+    }
+
+    match /permissions/{docId} {
+      allow read: if request.auth != null && (request.auth.uid == resource.data.get('userId', '') || hasTenantAccess(resource.data.tenantId));
+      allow create: if request.auth != null && (
+        isSuperAdmin() ||
+        request.auth.uid == request.resource.data.get('userId', '') || 
+        hasTenantAccess(request.resource.data.tenantId)
+      );
+      allow update: if request.auth != null && (
+        isSuperAdmin() ||
+        (hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId))
+      );
+      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.tenantId));
     }
 
     match /categories/{docId} {
       allow read: if true; 
-      allow write: if request.auth != null;
+      allow create: if request.auth != null && (isSuperAdmin() || hasTenantAccess(request.resource.data.tenantId));
+      allow update: if request.auth != null && (isSuperAdmin() || (hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId)));
+      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.tenantId));
     }
 
     match /menu_items/{docId} {
       allow read: if true; 
-      allow write: if request.auth != null;
+      allow create: if request.auth != null && (isSuperAdmin() || hasTenantAccess(request.resource.data.tenantId));
+      allow update: if request.auth != null && (isSuperAdmin() || (hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId)));
+      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.tenantId));
     }
 
     match /ads/{docId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow create: if request.auth != null && (isSuperAdmin() || hasTenantAccess(request.resource.data.tenantId));
+      allow update: if request.auth != null && (isSuperAdmin() || (hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId)));
+      allow delete: if request.auth != null && (isSuperAdmin() || hasTenantAccess(resource.data.tenantId));
     }
     
     match /system_settings/{docId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isSuperAdmin();
     }
     
     match /landing_page_settings/{docId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isSuperAdmin();
     }
     
     match /pricing_plans/{docId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isSuperAdmin();
     }
 
     match /orders/{docId} {
-      allow read, write: if true;
+      allow get: if true;
+      allow list: if hasTenantAccess(resource.data.tenantId) 
+                  || (request.auth != null && resource.data.customerEmail == request.auth.token.email)
+                  || (request.auth != null && resource.data.customerUid == request.auth.uid);
+      allow create: if request.resource.data.tenantId != null;
+      allow update: if hasTenantAccess(resource.data.tenantId)
+                    || (request.auth != null && resource.data.customerEmail == request.auth.token.email)
+                    || (request.auth != null && resource.data.customerUid == request.auth.uid);
+      allow delete: if hasTenantAccess(resource.data.tenantId);
     }
 
     match /reservations/{docId} {
-      allow read, write: if true;
+      allow get: if true;
+      allow list: if hasTenantAccess(resource.data.tenantId)
+                  || (request.auth != null && resource.data.customerEmail == request.auth.token.email);
+      allow create: if request.resource.data.tenantId != null;
+      allow update, delete: if hasTenantAccess(resource.data.tenantId)
+                            || (request.auth != null && resource.data.customerEmail == request.auth.token.email);
     }
 
     match /ingredients/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow read, write: if hasTenantAccess(resource.data.tenantId) || hasTenantAccess(request.resource.data.tenantId);
     }
 
     match /stock_movements/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow read, write: if hasTenantAccess(resource.data.tenantId) || hasTenantAccess(request.resource.data.tenantId);
     }
 
     match /notifications/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow read, write: if hasTenantAccess(resource.data.tenantId) || hasTenantAccess(request.resource.data.tenantId);
     }
 
     match /tables/{docId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow create: if hasTenantAccess(request.resource.data.tenantId);
+      allow update: if hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId);
+      allow delete: if hasTenantAccess(resource.data.tenantId);
     }
 
     match /stations/{docId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow create: if hasTenantAccess(request.resource.data.tenantId);
+      allow update: if hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId);
+      allow delete: if hasTenantAccess(resource.data.tenantId);
     }
 
     match /meal_subscription_plans/{docId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow create: if hasTenantAccess(request.resource.data.tenantId);
+      allow update: if hasTenantAccess(resource.data.tenantId) && hasTenantAccess(request.resource.data.tenantId);
+      allow delete: if hasTenantAccess(resource.data.tenantId);
     }
 
     match /customer_subscriptions/{docId} {
-      allow read, write: if true;
+      allow get: if true;
+      allow list: if hasTenantAccess(resource.data.tenantId)
+                  || (request.auth != null && resource.data.customerEmail == request.auth.token.email);
+      allow create: if request.resource.data.tenantId != null;
+      allow update, delete: if hasTenantAccess(resource.data.tenantId)
+                            || (request.auth != null && resource.data.customerEmail == request.auth.token.email);
     }
 
     match /installed_extensions/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow read, write: if hasTenantAccess(resource.data.tenantId) || hasTenantAccess(request.resource.data.tenantId);
     }
     
     match /marketplace_extensions/{docId} {
       allow read: if true;
-      allow write: if request.auth != null;
-    }
-    
-    match /roles/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-    
-    match /permissions/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-    
-    match /memberships/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isSuperAdmin();
     }
     
     match /counters/{docId} {
-      allow read, write: if true; 
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if true; 
+      allow delete: if isSuperAdmin();
     }
   }
 }

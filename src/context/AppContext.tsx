@@ -92,7 +92,19 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             onSnapshot,
             doc: firestoreDoc
           } = await import('firebase/firestore');
-          const targetTenantId = currentUser?.tenantId || activeTenantId;
+          const targetTenantId = activeTenantId || currentUser?.tenantId;
+          const isGuest = !currentUser || currentUser?.role === 'customer';
+          const emptyQuery = query(collection(db, 'categories'), where('id', '==', 'NONE_GUEST'));
+          const emptyQueryOrders = query(collection(db, 'orders'), where('id', '==', 'NONE_GUEST'));
+          const emptyQueryUsers = query(collection(db, 'users'), where('id', '==', 'NONE_GUEST'));
+          const emptyQueryStaff = query(collection(db, 'staff'), where('id', '==', 'NONE_GUEST'));
+          const emptyQueryReservations = query(collection(db, 'reservations'), where('id', '==', 'NONE_GUEST'));
+          const emptyQueryIngredients = query(collection(db, 'ingredients'), where('id', '==', 'NONE_GUEST'));
+          const emptyQueryStock = query(collection(db, 'stock_movements'), where('id', '==', 'NONE_GUEST'));
+          const emptyQueryTables = query(collection(db, 'tables'), where('id', '==', 'NONE_GUEST'));
+          const emptyQueryStations = query(collection(db, 'stations'), where('id', '==', 'NONE_GUEST'));
+          const emptyQueryNotifications = query(collection(db, 'notifications'), where('id', '==', 'NONE_GUEST'));
+          const emptyQueryExtensions = query(collection(db, 'installed_extensions'), where('id', '==', 'NONE_GUEST'));
 
           let tenantsQuery;
           if (currentUser?.role === 'super_admin') {
@@ -173,9 +185,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             });
           }, err => console.warn("Businesses listener error:", err));
 
-          const categoriesQuery = (currentUser?.role === 'super_admin' || currentUser?.role === 'customer' || !currentUser)
-            ? collection(db, 'categories')
-            : query(collection(db, 'categories'), where('tenantId', '==', targetTenantId));
+          const categoriesQuery = currentUser?.role === 'super_admin' ? collection(db, 'categories') : (targetTenantId ? query(collection(db, 'categories'), where('tenantId', '==', targetTenantId)) : emptyQuery);
 
           const unsubscribeCategories = onSnapshot(categoriesQuery, snapshot => {
             const grouped: Record<string, Category[]> = {};
@@ -195,9 +205,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             }));
           }, err => console.warn("Categories listener error:", err));
 
-          const menuItemsQuery = (currentUser?.role === 'super_admin' || currentUser?.role === 'customer' || !currentUser)
-            ? collection(db, 'menu_items')
-            : query(collection(db, 'menu_items'), where('tenantId', '==', targetTenantId));
+          const menuItemsQuery = currentUser?.role === 'super_admin' ? collection(db, 'menu_items') : (targetTenantId ? query(collection(db, 'menu_items'), where('tenantId', '==', targetTenantId)) : emptyQuery);
 
           const unsubscribeMenuItems = onSnapshot(menuItemsQuery, snapshot => {
             const grouped: Record<string, MenuItem[]> = {};
@@ -214,9 +222,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             }));
           }, err => console.warn("MenuItems listener error:", err));
 
-          const staffQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
-            ? collection(db, 'staff')
-            : query(collection(db, 'staff'), where('tenantId', '==', targetTenantId));
+          const staffQuery = currentUser?.role === 'super_admin' ? collection(db, 'staff') : (isGuest ? emptyQueryStaff : (targetTenantId ? query(collection(db, 'staff'), where('tenantId', '==', targetTenantId)) : emptyQueryStaff));
 
           const unsubscribeStaff = onSnapshot(staffQuery, snapshot => {
             const list: Staff[] = [];
@@ -239,9 +245,16 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             }
           }, err => console.warn("Staff listener error:", err));
 
-          const usersQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
-            ? collection(db, 'users')
-            : query(collection(db, 'users'), where('tenantId', '==', targetTenantId));
+          let usersQuery;
+          if (currentUser?.role === 'super_admin') {
+            usersQuery = collection(db, 'users');
+          } else if (currentUser?.role === 'customer' && currentUser?.email) {
+            usersQuery = query(collection(db, 'users'), where('email', '==', currentUser.email));
+          } else if (!isGuest && targetTenantId) {
+            usersQuery = query(collection(db, 'users'), where('tenantId', '==', targetTenantId));
+          } else {
+            usersQuery = emptyQueryUsers;
+          }
 
           const unsubscribeUsers = onSnapshot(usersQuery, snapshot => {
             const staffList: Staff[] = [];
@@ -281,9 +294,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             }
           }, err => console.warn("Users listener error:", err));
 
-          const branchesQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
-            ? collection(db, 'branches')
-            : query(collection(db, 'branches'), where('tenantId', '==', targetTenantId));
+          const branchesQuery = currentUser?.role === 'super_admin' ? collection(db, 'branches') : (targetTenantId ? query(collection(db, 'branches'), where('tenantId', '==', targetTenantId)) : emptyQuery);
 
           const unsubscribeBranches = onSnapshot(branchesQuery, snapshot => {
             const list: Branch[] = [];
@@ -305,9 +316,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             }
           }, err => console.warn("Branches listener error:", err));
 
-          const tablesQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
-            ? collection(db, 'tables')
-            : query(collection(db, 'tables'), where('tenantId', '==', targetTenantId));
+          const tablesQuery = currentUser?.role === 'super_admin' ? collection(db, 'tables') : (targetTenantId ? query(collection(db, 'tables'), where('tenantId', '==', targetTenantId)) : emptyQueryTables);
 
           const unsubscribeTables = onSnapshot(tablesQuery, snapshot => {
             const list: Table[] = [];
@@ -320,9 +329,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             setTables(list);
           }, err => console.warn("Tables listener error:", err));
 
-          const stationsQuery = (currentUser?.role === 'super_admin' || !targetTenantId)
-            ? collection(db, 'stations')
-            : query(collection(db, 'stations'), where('tenantId', '==', targetTenantId));
+          const stationsQuery = currentUser?.role === 'super_admin' ? collection(db, 'stations') : (targetTenantId ? query(collection(db, 'stations'), where('tenantId', '==', targetTenantId)) : emptyQueryStations);
 
           const unsubscribeStations = onSnapshot(stationsQuery, snapshot => {
             const list: PreparationStation[] = [];
@@ -421,12 +428,17 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           }, err => {
             console.warn("Firestore global settings listener error:", err);
           });
-          const targetOrdersTenantId = currentUser?.tenantId || activeTenantId;
-          const ordersQuery = (currentUser?.role === 'super_admin' || !currentUser)
-            ? collection(db, 'orders')
-            : (currentUser?.role === 'customer' 
-                ? query(collection(db, 'orders'), where('customerEmail', '==', currentUser.email)) 
-                : query(collection(db, 'orders'), where('tenantId', '==', targetOrdersTenantId)));
+          const targetOrdersTenantId = activeTenantId || currentUser?.tenantId;
+          let ordersQuery;
+          if (currentUser?.role === 'super_admin') {
+            ordersQuery = collection(db, 'orders');
+          } else if (currentUser?.role === 'customer' && currentUser?.email) {
+            ordersQuery = query(collection(db, 'orders'), where('customerEmail', '==', currentUser.email));
+          } else if (currentUser && targetOrdersTenantId) {
+            ordersQuery = query(collection(db, 'orders'), where('tenantId', '==', targetOrdersTenantId));
+          } else {
+            ordersQuery = emptyQueryOrders;
+          }
           const unsubscribeOrders = onSnapshot(ordersQuery, snapshot => {
             const list: Order[] = [];
             snapshot.forEach(docSnap => {
@@ -1349,7 +1361,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       const email = targetOrder.customerEmail;
       
         const current = customerProfiles[email] || {
-          id: `cust-${Date.now()}`,
+          id: currentUser?.uid || `cust-${Date.now()}`,
           email,
           name: targetOrder.customerName || email.split('@')[0],
           phone: targetOrder.customerPhone || '',
@@ -1613,13 +1625,14 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       ...memberData,
       id,
       uid: uid || id,
+      tenantId: (currentUser?.role === 'super_admin' || currentUser?.role === 'owner') ? activeTenantId : currentUser?.tenantId,
+      branchId: (currentUser?.role === 'manager' || currentUser?.role === 'cashier') ? currentUser.branchId : memberData.branchId,
       active: true,
       status: 'active',
       mustChangePassword: true,
       createdAt: new Date().toISOString(),
       createdBy: currentUser ? currentUser.id : 'system'
     };
-    
     // Create exactly one Firestore document in the staff collection, not users
     try {
       await syncToFirestore('staff', id, newStaff);
@@ -1832,10 +1845,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const tenantId = `t-${Date.now()}`;
     const branchId = `b-${Date.now()}`;
     const ownerId = `s-${Date.now()}`;
+    const ownerUid = currentUser?.uid || currentUser?.id || ownerId;
     const newTenant: Tenant & { tenantId?: string; ownerUid?: string } = {
       id: tenantId,
       tenantId,
-      ownerUid: currentUser?.id,
+      ownerUid: ownerUid,
       name: data.name,
       slug: data.slug || (data.name || '').toLowerCase().replace(/\s+/g, '-'),
       logoUrl: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80',
@@ -1852,15 +1866,17 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       loyaltyMinRedeemPoints: 10,
       loyaltyRedeemValue: 1
     };
-    const newBranch: Branch = {
+    const newBranch: Branch & { ownerUid?: string } = {
       id: branchId,
       tenantId,
+      ownerUid: ownerUid,
       name: 'Main Branch',
       address: 'Addis Ababa, Ethiopia',
       phone: '+251 911 000 000'
     };
     const newStaff: Staff = {
       id: ownerId,
+      uid: ownerUid,
       name: data.ownerName,
       email: (data.ownerEmail || '').toLowerCase().trim(),
       role: 'owner',
@@ -2120,6 +2136,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       const branchDoc = {
         id: branchId,
         tenantId,
+        ownerUid: userUid,
         name: 'Main Branch',
         isMain: true,
         createdAt
@@ -2127,6 +2144,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       const staffDoc = {
         id: userUid,
         uid: userUid,
+        ownerUid: userUid,
         tenantId,
         branchId,
         name: name || cleanEmail.split('@')[0],
@@ -2257,6 +2275,24 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       throw e;
     }
   };
+  
+  const fetchOrderById = async (orderId: string): Promise<Order | null> => {
+    try {
+      const { getDB } = await import('../lib/firebase');
+      const db = getDB();
+      if (!db) return null;
+      const { doc, getDoc } = await import('firebase/firestore');
+      const snap = await getDoc(doc(db, 'orders', orderId));
+      if (snap.exists()) {
+        return { id: snap.id, ...snap.data() } as Order;
+      }
+      return null;
+    } catch (err) {
+      console.warn("fetchOrderById error:", err);
+      return null;
+    }
+  };
+
   const deleteFromFirestore = async (collectionName: string, docId: string) => {
     try {
       const {
@@ -2402,7 +2438,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   };
   const updateCustomerProfile = (email: string, profileData: Partial<CustomerProfile>) => {
     const current = customerProfiles[email] || {
-      id: `cust-${Date.now()}`,
+      id: currentUser?.uid || `cust-${Date.now()}`,
       email,
       name: profileData.name || email.split('@')[0],
       phone: profileData.phone || '',
@@ -2423,7 +2459,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   };
   const addFavoriteItem = (email: string, menuItemId: string) => {
     const current = customerProfiles[email] || {
-      id: `cust-${Date.now()}`,
+      id: currentUser?.uid || `cust-${Date.now()}`,
       email,
       name: email.split('@')[0],
       phone: '',
@@ -2457,7 +2493,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   };
   const addSavedAddress = (email: string, name: string, address: string) => {
     const current = customerProfiles[email] || {
-      id: `cust-${Date.now()}`,
+      id: currentUser?.uid || `cust-${Date.now()}`,
       email,
       name: email.split('@')[0],
       phone: '',
@@ -2838,6 +2874,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     updateGlobalSettings,
     landingPageConfig,
     updateLandingPageConfig,
+    fetchOrderById,
     syncToFirestore,
     deleteFromFirestore
   }}>

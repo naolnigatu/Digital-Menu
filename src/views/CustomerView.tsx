@@ -1,3 +1,4 @@
+import { signInWithGoogle } from '../lib/firebase';
 import React, { useState, useMemo, useEffect } from 'react';
 import { sanitizeName, validatePhone, sanitizePhoneInput } from '../utils/validation';
 import { useApp } from '../context/AppContext';
@@ -44,7 +45,8 @@ export default function CustomerView() {
     loyaltyConfigs,
     updateOrderStatus,
     acceptDeliveryFee,
-    addTip
+    addTip,
+    fetchOrderById
   } = useApp();
 
   const { activeSettings } = useDinexSettings();
@@ -146,6 +148,15 @@ export default function CustomerView() {
   const [customerEmailForDashboard, setCustomerEmailForDashboard] = useState(() => {
     return localStorage.getItem('mf_customer_logged_email') || '';
   });
+  useEffect(() => {
+    if (currentUser?.email) {
+      setCustomerEmailForDashboard(currentUser.email);
+      localStorage.setItem('mf_customer_logged_email', currentUser.email);
+    } else if (!currentUser && customerEmailForDashboard) {
+      // Only wipe if they explicitly logged out from firebase auth, but for now we can leave it to avoid breaking guest flows, 
+      // since firestore rules protect actual data
+    }
+  }, [currentUser]);
   const [loginEmailInput, setLoginEmailInput] = useState('');
   const [loginNameInput, setLoginNameInput] = useState('');
 
@@ -245,6 +256,14 @@ export default function CustomerView() {
       return [];
     }
   });
+  const [deviceOrders, setDeviceOrders] = useState<Order[]>([]);
+  useEffect(() => {
+    if (myOrderIds.length > 0 && fetchOrderById) {
+      Promise.all(myOrderIds.map(id => fetchOrderById(id))).then(res => {
+        setDeviceOrders(res.filter(Boolean) as Order[]);
+      });
+    }
+  }, [myOrderIds, fetchOrderById]);
 
   const saveOrderId = (id: string) => {
     setMyOrderIds(prev => {
@@ -802,18 +821,22 @@ const currentItemPrice = useMemo(() => {
     setRating(5);
   };
 
-  const handleCustomerLoginSubmit = (e: React.FormEvent) => {
+  const handleCustomerLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginEmailInput.trim()) return;
-    const email = (loginEmailInput || '').toLowerCase().trim();
-    const name = loginNameInput.trim() || email.split('@')[0];
-    
-    localStorage.setItem('mf_customer_logged_email', email);
-    setCustomerEmailForDashboard(email);
-    updateCustomerProfile(email, { name, tenantId: activeTenantId });
-    
-    setIsEmailLoginModalOpen(false);
-    setIsDashboardOpen(true);
+    try {
+      const user = await signInWithGoogle();
+      if (user && user.email) {
+        localStorage.setItem('mf_customer_logged_email', user.email);
+        setCustomerEmailForDashboard(user.email);
+        const name = user.displayName || user.email.split('@')[0];
+        updateCustomerProfile(user.email, { name, tenantId: activeTenantId });
+        setIsEmailLoginModalOpen(false);
+        setIsDashboardOpen(true);
+      }
+    } catch (err) {
+      console.error('Google Sign In Error:', err);
+      showToast('Failed to sign in. Please try again.', 'error');
+    }
   };
 
 
@@ -1546,16 +1569,16 @@ const currentItemPrice = useMemo(() => {
                     <p className="text-[10px] text-rose-600 font-bold bg-rose-50 p-1.5 rounded">{trackError}</p>
                   )}
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       const query = trackSearchQuery.trim();
                       if (!query) {
-                        setTrackError("Please enter a phone number or order ID.");
+                        setTrackError("Please enter an Order ID.");
                         return;
                       }
                       
                       const cleanQuery = query.toLowerCase();
                       const sanitizedQueryPhone = sanitizePhoneInput(query);
-                      const foundOrder = orders.find(o => 
+                      let foundOrder = orders.find(o => 
                         (o.id || '').toLowerCase() === cleanQuery ||
                         (o.id || '').toLowerCase().includes(cleanQuery) ||
                         (o.orderNum || '').toLowerCase() === cleanQuery ||
@@ -1564,11 +1587,16 @@ const currentItemPrice = useMemo(() => {
                         (o.customerEmail && o.customerEmail.toLowerCase() === cleanQuery)
                       );
 
+                      if (!foundOrder && fetchOrderById) {
+                         // Try fetching directly by ID if it wasn't found in local context (happens for guests)
+                         foundOrder = await fetchOrderById(query) || undefined;
+                      }
+
                       if (foundOrder) {
                         setActiveCustomerOrder(foundOrder);
                         setIsTrackModalOpen(false);
                       } else {
-                        setTrackError("No orders found matching your query.");
+                        setTrackError("No orders found matching your query (must be exact Order ID).");
                       }
                     }}
                     className="w-full rounded-lg bg-indigo-600 text-white font-bold py-2 text-xs hover:bg-indigo-500 transition-colors"
@@ -1580,8 +1608,7 @@ const currentItemPrice = useMemo(() => {
                     <div className="pt-4 mt-2 border-t border-slate-100">
                       <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Recent Device Orders</p>
                       <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
-                        {orders
-                          .filter(o => myOrderIds.includes(o.id))
+                        {(orders.length > 0 ? orders.filter(o => myOrderIds.includes(o.id)) : deviceOrders)
                           .sort((a, b) => b.createdAt - a.createdAt)
                           .map(o => (
                             <button
@@ -2422,56 +2449,37 @@ const currentItemPrice = useMemo(() => {
       {/* EMAIL SIGN IN / REGISTER MODAL */}
       {isEmailLoginModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
-          <form onSubmit={handleCustomerLoginSubmit} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-100 space-y-4 animate-in zoom-in-95">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-slate-100 space-y-4 animate-in zoom-in-95">
             <div className="text-center space-y-1">
               <span className="text-2xl">✨</span>
               <h3 className="font-sans font-bold text-base text-slate-900">Sign In to Dinex Patrons</h3>
               <p className="text-xs text-slate-400">Unlock custom reward status levels, meal subscriptions, and favorite dishes.</p>
             </div>
 
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="login-email" className="block text-[10px] font-bold text-gray-400 uppercase">Email Address</label>
-                <input
-                  id="login-email"
-                  type="email"
-                  required
-                  
-                  value={loginEmailInput}
-                  onChange={(e) => setLoginEmailInput(e.target.value)}
-                  className="w-full px-3.5 py-2 mt-1 rounded-lg border border-gray-200 text-xs font-semibold text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-600"
-                />
-              </div>
+            <div className="space-y-3 pt-4">
+              <button
+                type="button"
+                onClick={handleCustomerLoginSubmit}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-gray-200 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Continue with Google
+              </button>
 
-              <div>
-                <label htmlFor="login-name" className="block text-[10px] font-bold text-gray-400 uppercase">Your Name (Optional)</label>
-                <input
-                  id="login-name"
-                  type="text"
-                  
-                  value={loginNameInput}
-                  onChange={(e) => setLoginNameInput(e.target.value)}
-                  className="w-full px-3.5 py-2 mt-1 rounded-lg border border-gray-200 text-xs font-semibold text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-600"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsEmailLoginModalOpen(false)}
-                  className="flex-1 py-2 rounded-lg border border-gray-200 text-xs font-bold text-gray-500 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
-                >
-                  Sign In / Register
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsEmailLoginModalOpen(false)}
+                className="w-full py-2.5 rounded-lg border border-transparent text-xs font-bold text-gray-500 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
             </div>
-          </form>
+          </div>
         </div>
       )}
 

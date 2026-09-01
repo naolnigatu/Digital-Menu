@@ -99,6 +99,7 @@ export default function KDSView() {
   orders.forEach(o => {
     if (o.status === 'completed' || o.status === 'cancelled') return;
     if (o.paymentVerificationStatus === 'pending' || o.paymentVerificationStatus === 'rejected') return;
+    if (o.branchId !== activeBranchId) return;
 
     o.items.forEach(it => {
       if (it.assignedStationId === activeStationId) {
